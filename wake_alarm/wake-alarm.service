@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekend Wake Alarm
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python -m python_pkg.wake_alarm._alarm --production
+WorkingDirectory=%h/testsAndMisc
+Restart=no
+
+[Install]
+WantedBy=graphical-session.target
