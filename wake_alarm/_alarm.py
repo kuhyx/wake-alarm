@@ -48,6 +48,31 @@ def _is_alarm_day() -> bool:
     return datetime.now(tz=timezone.utc).weekday() in ALARM_DAYS
 
 
+def _wake_display() -> None:
+    """Force the display on and disable screensaver during alarm."""
+    xset = shutil.which("xset")
+    if xset is None:
+        return
+    for cmd in (
+        [xset, "dpms", "force", "on"],
+        [xset, "s", "off"],
+    ):
+        subprocess.run(cmd, check=False, capture_output=True, timeout=5)
+
+
+def _restore_display() -> None:
+    """Re-enable screensaver after the alarm ends."""
+    xset = shutil.which("xset")
+    if xset is None:
+        return
+    subprocess.run(
+        [xset, "s", "on"],
+        check=False,
+        capture_output=True,
+        timeout=5,
+    )
+
+
 def _beep_soft() -> None:
     """Play a soft system beep via terminal bell."""
     sys.stdout.write("\a")
@@ -119,6 +144,7 @@ class WakeAlarm:
         self._stop_beep = threading.Event()
         self._beep_thread: threading.Thread | None = None
         self._alarm_start: float = time.monotonic()
+        self._active = True
 
         self.root = tk.Tk()
         self.root.title("Wake Alarm" + (" [DEMO]" if demo_mode else ""))
@@ -213,6 +239,7 @@ class WakeAlarm:
 
     def _dismiss_alarm(self, *, earned_skip: bool) -> None:
         """Dismiss the alarm and save state."""
+        self._active = False
         self.dismissed = True
         self._stop_beep.set()
         now_iso = datetime.now(tz=timezone.utc).isoformat()
@@ -241,11 +268,12 @@ class WakeAlarm:
     def _close(self) -> None:
         """Close the alarm window."""
         self._stop_beep.set()
+        _restore_display()
         self.root.destroy()
 
     def _schedule_code_refresh(self) -> None:
         """Refresh the dismiss code periodically."""
-        if self.dismissed:
+        if not self._active:
             return
         self._current_code = _generate_code()
         self._code_label.configure(text=self._current_code)
@@ -260,8 +288,9 @@ class WakeAlarm:
 
     def _on_dismiss_window_expired(self) -> None:
         """Called when the dismiss window expires without valid dismissal."""
-        if self.dismissed:
+        if not self._active:
             return
+        self._active = False
         self._stop_beep.set()
         save_wake_state(dismissed_at=None, skip_workout=False)
         _logger.info("Dismiss window expired — no workout skip.")
@@ -281,6 +310,7 @@ class WakeAlarm:
 
     def _close_and_schedule_fallback(self) -> None:
         """Close the window and schedule the 1 PM fallback alarm."""
+        _restore_display()
         self.root.destroy()
 
     def _update_timer(self) -> None:
@@ -349,6 +379,7 @@ def main() -> None:
         return
 
     demo_mode = "--demo" in sys.argv
+    _wake_display()
     alarm = WakeAlarm(demo_mode=demo_mode)
     alarm.run()
 

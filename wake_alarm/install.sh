@@ -24,20 +24,29 @@ RTCWAKE_BIN="/usr/sbin/rtcwake"
 
 echo "=== Weekend Wake Alarm Installer ==="
 
+# 0. Install system dependencies
+echo "[0/5] Checking system dependencies..."
+if ! command -v speaker-test &>/dev/null; then
+    echo "  Installing alsa-utils (required for speaker-test)..."
+    sudo pacman -S --noconfirm alsa-utils
+else
+    echo "  alsa-utils already installed"
+fi
+
 # 1. Install systemd user service
-echo "[1/4] Installing systemd user service..."
+echo "[1/5] Installing systemd user service..."
 mkdir -p "$SYSTEMD_USER_DIR"
 cp "$SERVICE_FILE" "$SYSTEMD_USER_DIR/wake-alarm.service"
 systemctl --user daemon-reload
 echo "  Installed to $SYSTEMD_USER_DIR/wake-alarm.service"
 
 # 2. Enable service
-echo "[2/4] Enabling wake-alarm.service..."
+echo "[2/5] Enabling wake-alarm.service..."
 systemctl --user enable wake-alarm.service
 echo "  Service enabled (will start on next boot)"
 
 # 3. Install systemd-sleep hook (restarts alarm after hibernate resume)
-echo "[3/4] Installing systemd-sleep hook..."
+echo "[3/5] Installing systemd-sleep hook..."
 sudo cp "$SLEEP_HOOK_SRC" "$SLEEP_HOOK_DST"
 sudo chmod 0755 "$SLEEP_HOOK_DST"
 echo "  Installed to $SLEEP_HOOK_DST"
@@ -61,7 +70,6 @@ sudo chmod 0755 "$SHUTDOWN_WRAPPER_DST"
 echo "  Installed to $SHUTDOWN_WRAPPER_DST"
 echo "  'shutdown now' will now hibernate (not poweroff) on alarm nights."
 
-echo ""
 echo "=== Installation complete ==="
 echo "The wake alarm will activate on boot for alarm days (Mon, Fri, Sat, Sun)."
 echo "After hibernate resume the sleep hook will restart the alarm service."
