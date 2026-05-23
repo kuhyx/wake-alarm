@@ -48,6 +48,20 @@ def _block_real_tk() -> Generator[MagicMock]:
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def _block_extra_devices() -> Generator[MagicMock]:
+    """Prevent real subprocess.Popen calls for extra ALSA devices."""
+    with (
+        patch("python_pkg.wake_alarm._alarm._play_on_extra_devices") as mock,
+        patch("python_pkg.wake_alarm._alarm._max_fans", return_value=None),
+        patch("python_pkg.wake_alarm._alarm._restore_fans"),
+        patch("python_pkg.wake_alarm._alarm._set_max_brightness"),
+        patch("python_pkg.wake_alarm._alarm.turn_on_plug"),
+        patch("python_pkg.wake_alarm._alarm.turn_off_plug"),
+    ):
+        yield mock
+
+
 @pytest.fixture
 def mock_tk_module() -> Generator[MagicMock]:
     """Provide explicit access to the mocked tk module."""
@@ -224,13 +238,13 @@ class TestCodeRefreshAndTimer:
         assert alarm._current_code == old_code
         alarm._stop_beep.set()
 
-    def test_update_timer_noop_when_dismissed(
+    def test_update_timer_noop_when_not_active(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Timer update is a no-op after dismissal."""
+        """Timer update is a no-op when alarm is inactive."""
         alarm = WakeAlarm(demo_mode=True)
-        alarm.dismissed = True
+        alarm._active = False
         alarm._update_timer()  # Should not raise
         alarm._stop_beep.set()
 
@@ -266,6 +280,18 @@ class TestCloseAndFallback:
         assert alarm._stop_beep.is_set()
         alarm.root.destroy.assert_called()
 
+    def test_close_restores_fans(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """_close calls _restore_fans with the saved fan state."""
+        alarm = WakeAlarm(demo_mode=True)
+        saved_state = ("/sys/class/hwmon/hwmon6", "5", "165")
+        alarm._fan_state = saved_state
+        with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
+            alarm._close()
+        mock_restore.assert_called_once_with(saved_state)
+
     def test_close_and_schedule_fallback(
         self,
         mock_tk_module: MagicMock,
@@ -274,6 +300,76 @@ class TestCloseAndFallback:
         alarm = WakeAlarm(demo_mode=True)
         alarm._close_and_schedule_fallback()
         alarm.root.destroy.assert_called()
+        alarm._stop_beep.set()
+
+    def test_close_and_schedule_fallback_restores_fans(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """_close_and_schedule_fallback calls _restore_fans with the saved state."""
+        alarm = WakeAlarm(demo_mode=True)
+        saved_state = ("/sys/class/hwmon/hwmon6", "5", "165")
+        alarm._fan_state = saved_state
+        with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
+            alarm._close_and_schedule_fallback()
+        mock_restore.assert_called_once_with(saved_state)
+        alarm._stop_beep.set()
+
+
+class TestScreenFlash:
+    """Tests for _start_screen_flash and _flash_step."""
+
+    def test_flash_step_shows_dark_on_flash_off(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """When _flash_on=False, the background is set to dark colour."""
+        alarm = WakeAlarm(demo_mode=True)
+        mock_root = mock_tk_module.Tk.return_value
+        mock_root.configure.reset_mock()
+        mock_root.after.reset_mock()
+
+        alarm._flash_on = False
+        alarm._flash_step()
+
+        mock_root.configure.assert_called_once_with(bg="#1a1a1a")
+        assert alarm._flash_on is True
+        mock_root.after.assert_called_with(750, alarm._flash_step)
+        alarm._stop_beep.set()
+
+    def test_flash_step_shows_red_on_flash_on(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """When _flash_on=True, the background is set to red."""
+        alarm = WakeAlarm(demo_mode=True)
+        mock_root = mock_tk_module.Tk.return_value
+        mock_root.configure.reset_mock()
+        mock_root.after.reset_mock()
+
+        alarm._flash_on = True
+        alarm._flash_step()
+
+        mock_root.configure.assert_called_once_with(bg="#ff0000")
+        assert alarm._flash_on is False
+        mock_root.after.assert_called_with(750, alarm._flash_step)
+        alarm._stop_beep.set()
+
+    def test_flash_step_stops_when_inactive(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """When alarm is no longer active, _flash_step returns without scheduling."""
+        alarm = WakeAlarm(demo_mode=True)
+        mock_root = mock_tk_module.Tk.return_value
+        alarm._active = False
+        mock_root.configure.reset_mock()
+        mock_root.after.reset_mock()
+
+        alarm._flash_step()
+
+        mock_root.configure.assert_not_called()
+        mock_root.after.assert_not_called()
         alarm._stop_beep.set()
 
 

@@ -37,3 +37,14 @@ WAKE_STATE_FILE: Path = Path(__file__).resolve().parent / "wake_state.json"
 
 # rtcwake binary path
 RTCWAKE_BIN: str = "/usr/sbin/rtcwake"
+
+# TP-Link Tapo P110 smart-plug config file (JSON).
+# Create with mode 0600 and these keys: host, email, password.
+# Example contents: a JSON object mapping host -> "192.168.x.x", email ->
+# "tapo@example.com" and password -> "your-password".
+# Missing/invalid file => smart-plug control is skipped silently.
+TAPO_CONFIG_FILE: Path = Path.home() / ".config" / "wake_alarm" / "tapo.json"
+
+# Timeout (seconds) for a single Tapo plug operation. Keep short so a
+# missing/unreachable plug never delays the alarm by more than this.
+TAPO_TIMEOUT_SECONDS: float = 5.0

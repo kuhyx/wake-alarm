@@ -6,7 +6,8 @@ After=graphical-session.target
 Type=simple
 ExecStart=/usr/bin/python -m python_pkg.wake_alarm._alarm --production
 WorkingDirectory=%h/testsAndMisc
-Restart=no
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=graphical-session.target
