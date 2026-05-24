@@ -53,9 +53,13 @@ def _block_extra_devices() -> Generator[MagicMock]:
     """Prevent real subprocess.Popen calls for extra ALSA devices."""
     with (
         patch("python_pkg.wake_alarm._alarm._play_on_extra_devices") as mock,
-        patch("python_pkg.wake_alarm._alarm._max_fans", return_value=None),
+        patch("python_pkg.wake_alarm._alarm._max_fans", return_value=False),
         patch("python_pkg.wake_alarm._alarm._restore_fans"),
         patch("python_pkg.wake_alarm._alarm._set_max_brightness"),
+        patch("python_pkg.wake_alarm._alarm._wake_display"),
+        patch("python_pkg.wake_alarm._alarm._warn_if_no_real_sink"),
+        patch("python_pkg.wake_alarm._alarm._max_sink_volume", return_value=None),
+        patch("python_pkg.wake_alarm._alarm._restore_sink_volume"),
         patch("python_pkg.wake_alarm._alarm.turn_on_plug"),
         patch("python_pkg.wake_alarm._alarm.turn_off_plug"),
     ):
@@ -82,10 +86,20 @@ class TestWakeAlarmInit:
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Demo mode creates a smaller window."""
+        """Demo mode still hijacks the full screen — only timers differ."""
         alarm = WakeAlarm(demo_mode=True)
         assert alarm.demo_mode is True
         assert alarm.dismissed is False
+        mock_root = mock_tk_module.Tk.return_value
+        # We deliberately drop overrideredirect (X11 focus bug); fullscreen+topmost
+        # are what take over the screen now.
+        mock_root.overrideredirect.assert_not_called()
+        fs_calls = [
+            c
+            for c in mock_root.attributes.call_args_list
+            if c.args and c.args[0] == "-fullscreen"
+        ]
+        assert fs_calls, "-fullscreen attribute must be set"
         alarm._stop_beep.set()  # Stop beep thread
 
     def test_production_mode_fullscreen(
@@ -96,7 +110,13 @@ class TestWakeAlarmInit:
         alarm = WakeAlarm(demo_mode=False)
         assert alarm.demo_mode is False
         mock_root = mock_tk_module.Tk.return_value
-        mock_root.overrideredirect.assert_called_once()
+        mock_root.overrideredirect.assert_not_called()
+        fs_calls = [
+            c
+            for c in mock_root.attributes.call_args_list
+            if c.args and c.args[0] == "-fullscreen"
+        ]
+        assert fs_calls, "-fullscreen attribute must be set"
         alarm._stop_beep.set()
 
 
@@ -181,10 +201,14 @@ class TestMain:
 
     def test_exits_when_not_alarm_day(self) -> None:
         """main() returns early when not an alarm day."""
-        with patch(
-            "python_pkg.wake_alarm._alarm._should_run_alarm",
-            return_value=False,
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm._should_run_alarm",
+                return_value=False,
+            ),
+            patch("python_pkg.wake_alarm._alarm.sys") as mock_sys,
         ):
+            mock_sys.argv = ["alarm"]
             main()  # Should just return without error
 
     def test_creates_alarm_when_should_run(
@@ -192,6 +216,7 @@ class TestMain:
         mock_tk_module: MagicMock,
     ) -> None:
         """main() creates a WakeAlarm when conditions are met."""
+        del mock_tk_module
         with (
             patch(
                 "python_pkg.wake_alarm._alarm._should_run_alarm",
@@ -203,8 +228,28 @@ class TestMain:
             patch.object(WakeAlarm, "run") as mock_run,
             patch.object(WakeAlarm, "__init__", return_value=None),
         ):
-            mock_sys.argv = []
+            mock_sys.argv = ["alarm"]
             main()
+            mock_run.assert_called_once()
+
+    def test_trigger_now_bypasses_gate(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """--trigger-now bypasses _should_run_alarm."""
+        del mock_tk_module
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm._should_run_alarm",
+                return_value=False,
+            ) as mock_gate,
+            patch("python_pkg.wake_alarm._alarm.sys") as mock_sys,
+            patch.object(WakeAlarm, "run") as mock_run,
+            patch.object(WakeAlarm, "__init__", return_value=None),
+        ):
+            mock_sys.argv = ["alarm", "--trigger-now"]
+            main()
+            mock_gate.assert_not_called()
             mock_run.assert_called_once()
 
 
@@ -286,11 +331,10 @@ class TestCloseAndFallback:
     ) -> None:
         """_close calls _restore_fans with the saved fan state."""
         alarm = WakeAlarm(demo_mode=True)
-        saved_state = ("/sys/class/hwmon/hwmon6", "5", "165")
-        alarm._fan_state = saved_state
+        alarm._fan_state = True
         with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
             alarm._close()
-        mock_restore.assert_called_once_with(saved_state)
+        mock_restore.assert_called_once_with(active=True)
 
     def test_close_and_schedule_fallback(
         self,
@@ -308,11 +352,10 @@ class TestCloseAndFallback:
     ) -> None:
         """_close_and_schedule_fallback calls _restore_fans with the saved state."""
         alarm = WakeAlarm(demo_mode=True)
-        saved_state = ("/sys/class/hwmon/hwmon6", "5", "165")
-        alarm._fan_state = saved_state
+        alarm._fan_state = True
         with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
             alarm._close_and_schedule_fallback()
-        mock_restore.assert_called_once_with(saved_state)
+        mock_restore.assert_called_once_with(active=True)
         alarm._stop_beep.set()
 
 

@@ -11,23 +11,31 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
 
 from python_pkg.wake_alarm._alarm import (
     _beep_loud,
     _beep_medium,
+    _beep_pcspkr,
     _beep_soft,
+    _ensure_tone_wav,
     _find_fan_hwmon,
     _generate_code,
     _is_alarm_day,
     _max_fans,
+    _max_sink_volume,
+    _parse_args,
     _play_on_extra_devices,
+    _play_tone,
     _restore_display,
     _restore_fans,
+    _restore_sink_volume,
     _set_max_brightness,
     _should_run_alarm,
     _speaker_test_path,
+    _try_player,
     _wake_display,
+    _warn_if_no_real_sink,
 )
 from python_pkg.wake_alarm._constants import (
     DISMISS_CODE_LENGTH,
@@ -195,122 +203,17 @@ class TestBeepFunctions:
             mock_sys.stdout.write.assert_called_once_with("\a")
             mock_sys.stdout.flush.assert_called_once()
 
-    def test_beep_medium_calls_speaker_test(self) -> None:
-        """_beep_medium runs speaker-test subprocess."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._speaker_test_path",
-                return_value="/usr/bin/speaker-test",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-            ) as mock_run,
-        ):
+    def test_beep_medium_delegates_to_play_tone(self) -> None:
+        """_beep_medium just delegates to _play_tone."""
+        with patch("python_pkg.wake_alarm._alarm._play_tone") as mock_play:
             _beep_medium(frequency=800)
-            mock_run.assert_called_once()
-            args = mock_run.call_args[0][0]
-            assert "/usr/bin/speaker-test" in args
-            assert "800" in args
+            mock_play.assert_called_once_with(800)
 
-    def test_beep_medium_falls_back_on_error(self) -> None:
-        """_beep_medium falls back to soft beep on OSError."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._speaker_test_path",
-                return_value="/usr/bin/speaker-test",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=OSError("no speaker-test"),
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm._beep_soft",
-            ) as mock_soft,
-        ):
-            _beep_medium()
-            mock_soft.assert_called_once()
-
-    def test_beep_medium_falls_back_on_timeout(self) -> None:
-        """_beep_medium falls back on TimeoutExpired."""
-        from subprocess import TimeoutExpired
-
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._speaker_test_path",
-                return_value="/usr/bin/speaker-test",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=TimeoutExpired("cmd", 3),
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm._beep_soft",
-            ) as mock_soft,
-        ):
-            _beep_medium()
-            mock_soft.assert_called_once()
-
-    def test_beep_medium_falls_back_on_missing_binary(self) -> None:
-        """_beep_medium falls back when speaker-test binary not found."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._speaker_test_path",
-                side_effect=FileNotFoundError("not found"),
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm._beep_soft",
-            ) as mock_soft,
-        ):
-            _beep_medium()
-            mock_soft.assert_called_once()
-
-    def test_beep_loud_calls_speaker_test(self) -> None:
-        """_beep_loud runs speaker-test subprocess."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._speaker_test_path",
-                return_value="/usr/bin/speaker-test",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-            ) as mock_run,
-        ):
+    def test_beep_loud_delegates_to_play_tone(self) -> None:
+        """_beep_loud just delegates to _play_tone."""
+        with patch("python_pkg.wake_alarm._alarm._play_tone") as mock_play:
             _beep_loud(frequency=1200)
-            mock_run.assert_called_once()
-            args = mock_run.call_args[0][0]
-            assert "1200" in args
-
-    def test_beep_loud_falls_back_on_error(self) -> None:
-        """_beep_loud falls back to soft beep on OSError."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._speaker_test_path",
-                return_value="/usr/bin/speaker-test",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=OSError("fail"),
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm._beep_soft",
-            ) as mock_soft,
-        ):
-            _beep_loud()
-            mock_soft.assert_called_once()
-
-    def test_beep_loud_falls_back_on_missing_binary(self) -> None:
-        """_beep_loud falls back when speaker-test binary not found."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._speaker_test_path",
-                side_effect=FileNotFoundError("not found"),
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm._beep_soft",
-            ) as mock_soft,
-        ):
-            _beep_loud()
-            mock_soft.assert_called_once()
+            mock_play.assert_called_once_with(1200)
 
 
 class TestShouldRunAlarm:
@@ -367,6 +270,21 @@ class TestDisplayHelpers:
         ):
             _wake_display()
         mock_run.assert_not_called()
+
+    def test_wake_display_runs_xset_commands(self) -> None:
+        """_wake_display runs xset dpms force on + xset s off."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/xset",
+            ),
+            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
+        ):
+            _wake_display()
+        assert mock_run.call_count == 2
+        call_args = [call[0][0] for call in mock_run.call_args_list]
+        assert ["/usr/bin/xset", "dpms", "force", "on"] in call_args
+        assert ["/usr/bin/xset", "s", "off"] in call_args
 
     def test_restore_display_skips_when_xset_missing(self) -> None:
         """_restore_display does nothing when xset is not on PATH."""
@@ -468,23 +386,13 @@ class TestFindFanHwmon:
 class TestMaxFans:
     """Tests for _max_fans."""
 
-    def test_returns_none_when_no_hwmon(self) -> None:
-        """No fan controller → returns None immediately."""
+    def test_returns_false_when_no_hwmon(self) -> None:
+        """No fan controller → returns False immediately."""
         with patch("python_pkg.wake_alarm._alarm._find_fan_hwmon", return_value=None):
-            assert _max_fans() is None
+            assert _max_fans() is False
 
-    def test_returns_none_on_oserror_reading_pwm(self, tmp_path: pathlib.Path) -> None:
-        """Missing pwm files → returns None."""
-        hwmon_dir = str(tmp_path)
-        with patch(
-            "python_pkg.wake_alarm._alarm._find_fan_hwmon", return_value=hwmon_dir
-        ):
-            assert _max_fans() is None
-
-    def test_returns_none_on_script_oserror(self, tmp_path: pathlib.Path) -> None:
-        """OSError running fan script → returns None."""
-        (tmp_path / "pwm1_enable").write_text("5\n")
-        (tmp_path / "pwm1").write_text("165\n")
+    def test_returns_false_on_script_oserror(self, tmp_path: pathlib.Path) -> None:
+        """OSError running fan script → returns False."""
         with (
             patch(
                 "python_pkg.wake_alarm._alarm._find_fan_hwmon",
@@ -495,12 +403,10 @@ class TestMaxFans:
                 side_effect=OSError("not found"),
             ),
         ):
-            assert _max_fans() is None
+            assert _max_fans() is False
 
-    def test_returns_none_on_script_timeout(self, tmp_path: pathlib.Path) -> None:
-        """TimeoutExpired running fan script → returns None."""
-        (tmp_path / "pwm1_enable").write_text("5\n")
-        (tmp_path / "pwm1").write_text("165\n")
+    def test_returns_false_on_script_timeout(self, tmp_path: pathlib.Path) -> None:
+        """TimeoutExpired running fan script → returns False."""
         with (
             patch(
                 "python_pkg.wake_alarm._alarm._find_fan_hwmon",
@@ -511,12 +417,10 @@ class TestMaxFans:
                 side_effect=subprocess.TimeoutExpired("fan", 5),
             ),
         ):
-            assert _max_fans() is None
+            assert _max_fans() is False
 
-    def test_returns_none_on_nonzero_returncode(self, tmp_path: pathlib.Path) -> None:
-        """Fan script exits non-zero → returns None."""
-        (tmp_path / "pwm1_enable").write_text("5\n")
-        (tmp_path / "pwm1").write_text("165\n")
+    def test_returns_false_on_nonzero_returncode(self, tmp_path: pathlib.Path) -> None:
+        """Fan script exits non-zero → returns False."""
         mock_result = MagicMock()
         mock_result.returncode = 1
         with (
@@ -525,15 +429,14 @@ class TestMaxFans:
                 return_value=str(tmp_path),
             ),
             patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run", return_value=mock_result
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                return_value=mock_result,
             ),
         ):
-            assert _max_fans() is None
+            assert _max_fans() is False
 
-    def test_returns_state_on_success(self, tmp_path: pathlib.Path) -> None:
-        """Successful run → returns (hwmon, old_enable, old_pwm)."""
-        (tmp_path / "pwm1_enable").write_text("5\n")
-        (tmp_path / "pwm1").write_text("165\n")
+    def test_returns_true_on_success(self, tmp_path: pathlib.Path) -> None:
+        """Successful run → returns True (state is saved by the helper)."""
         mock_result = MagicMock()
         mock_result.returncode = 0
         with (
@@ -542,32 +445,30 @@ class TestMaxFans:
                 return_value=str(tmp_path),
             ),
             patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run", return_value=mock_result
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                return_value=mock_result,
             ),
         ):
-            result = _max_fans()
-        assert result == (str(tmp_path), "5", "165")
+            assert _max_fans() is True
 
 
 class TestRestoreFans:
     """Tests for _restore_fans."""
 
-    def test_noop_when_state_is_none(self) -> None:
-        """None state → subprocess.run is never called."""
+    def test_noop_when_inactive(self) -> None:
+        """False state → subprocess.run is never called."""
         with patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run:
-            _restore_fans(None)
+            _restore_fans(active=False)
             mock_run.assert_not_called()
 
-    def test_calls_fan_script_with_saved_values(self) -> None:
-        """Saved state → fan script called with restore + old values."""
+    def test_calls_fan_script_restore(self) -> None:
+        """Active state → fan script called with restore (no args)."""
         with patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
-            _restore_fans(("/sys/class/hwmon/hwmon6", "5", "165"))
+            _restore_fans(active=True)
             mock_run.assert_called_once()
             args = mock_run.call_args[0][0]
             assert "restore" in args
-            assert "5" in args
-            assert "165" in args
 
     def test_ignores_oserror_on_restore(self) -> None:
         """OSError from fan script is silently suppressed."""
@@ -575,7 +476,7 @@ class TestRestoreFans:
             "python_pkg.wake_alarm._alarm.subprocess.run",
             side_effect=OSError("no script"),
         ):
-            _restore_fans(("/sys/class/hwmon/hwmon6", "5", "165"))  # must not raise
+            _restore_fans(active=True)  # must not raise
 
     def test_ignores_timeout_on_restore(self) -> None:
         """TimeoutExpired from fan script is silently suppressed."""
@@ -583,7 +484,7 @@ class TestRestoreFans:
             "python_pkg.wake_alarm._alarm.subprocess.run",
             side_effect=subprocess.TimeoutExpired("fan", 5),
         ):
-            _restore_fans(("/sys/class/hwmon/hwmon6", "5", "165"))  # must not raise
+            _restore_fans(active=True)  # must not raise
 
 
 class TestSetMaxBrightness:
@@ -694,3 +595,549 @@ class TestSetMaxBrightness:
             ),
         ):
             _set_max_brightness()  # must not raise
+
+
+class TestEnsureToneWav:
+    """Tests for _ensure_tone_wav (sine WAV generator + cache)."""
+
+    def test_generates_and_caches(self, tmp_path: pathlib.Path) -> None:
+        """First call generates the WAV; second call returns the cached path."""
+        from python_pkg.wake_alarm import _alarm as alarm_mod
+
+        alarm_mod._TONE_CACHE.clear()
+        with patch(
+            "python_pkg.wake_alarm._alarm.tempfile.gettempdir",
+            return_value=str(tmp_path),
+        ):
+            path1 = _ensure_tone_wav(440)
+            assert path1.exists()
+            size = path1.stat().st_size
+            assert size > 0
+            # Second call must hit the cache (no regeneration).
+            with patch("python_pkg.wake_alarm._alarm.wave.open") as mock_open:
+                path2 = _ensure_tone_wav(440)
+                mock_open.assert_not_called()
+            assert path2 == path1
+        alarm_mod._TONE_CACHE.clear()
+
+    def test_regenerates_when_cached_file_missing(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """If the cached file was deleted, regenerate it."""
+        from python_pkg.wake_alarm._alarm import _TONE_CACHE
+
+        _TONE_CACHE.clear()
+        with patch(
+            "python_pkg.wake_alarm._alarm.tempfile.gettempdir",
+            return_value=str(tmp_path),
+        ):
+            path1 = _ensure_tone_wav(880)
+            path1.unlink()
+            path2 = _ensure_tone_wav(880)
+            assert path2.exists()
+        _TONE_CACHE.clear()
+
+
+class TestTryPlayer:
+    """Tests for _try_player."""
+
+    def test_returns_false_when_binary_missing(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """Missing binary returns False without raising."""
+        wav = tmp_path / "x.wav"
+        wav.write_bytes(b"\x00")
+        with patch(
+            "python_pkg.wake_alarm._alarm.shutil.which",
+            return_value=None,
+        ):
+            assert _try_player("paplay", wav) is False
+
+    def test_returns_true_on_success(self, tmp_path: pathlib.Path) -> None:
+        """Zero exit code returns True."""
+        wav = tmp_path / "x.wav"
+        wav.write_bytes(b"\x00")
+        result = MagicMock()
+        result.returncode = 0
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/paplay",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                return_value=result,
+            ),
+        ):
+            assert _try_player("paplay", wav) is True
+
+    def test_returns_false_on_nonzero_exit(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """Non-zero exit code returns False and logs."""
+        wav = tmp_path / "x.wav"
+        wav.write_bytes(b"\x00")
+        result = MagicMock()
+        result.returncode = 1
+        result.stderr = b"boom"
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/paplay",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                return_value=result,
+            ),
+        ):
+            assert _try_player("paplay", wav) is False
+
+    def test_returns_false_on_timeout(self, tmp_path: pathlib.Path) -> None:
+        """TimeoutExpired returns False and logs."""
+        wav = tmp_path / "x.wav"
+        wav.write_bytes(b"\x00")
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/paplay",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=subprocess.TimeoutExpired("paplay", 6),
+            ),
+        ):
+            assert _try_player("paplay", wav) is False
+
+    def test_returns_false_on_oserror(self, tmp_path: pathlib.Path) -> None:
+        """OSError returns False and logs."""
+        wav = tmp_path / "x.wav"
+        wav.write_bytes(b"\x00")
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/paplay",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=OSError("nope"),
+            ),
+        ):
+            assert _try_player("paplay", wav) is False
+
+
+class TestBeepPcspkr:
+    """Tests for _beep_pcspkr (evdev PC speaker)."""
+
+    def test_writes_tone_then_zero_to_device(self) -> None:
+        """Successful path writes start-frequency then stop event."""
+
+        mock_dev = MagicMock()
+        mock_open_ctx = MagicMock()
+        mock_open_ctx.__enter__.return_value = mock_dev
+        mock_open_ctx.__exit__.return_value = False
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.Path.open",
+                return_value=mock_open_ctx,
+            ),
+            patch("python_pkg.wake_alarm._alarm.time.sleep"),
+        ):
+            _beep_pcspkr(1000, 0.05)
+        # First write carries the frequency, second write carries 0 (stop).
+        assert mock_dev.write.call_count == 2
+
+    def test_oserror_is_swallowed(self) -> None:
+        """OSError opening the device must not raise."""
+
+        with patch(
+            "python_pkg.wake_alarm._alarm.Path.open",
+            side_effect=OSError("no device"),
+        ):
+            _beep_pcspkr(1000, 0.05)  # must not raise
+
+
+class TestPlayTone:
+    """Tests for _play_tone."""
+
+    @pytest.fixture(autouse=True)
+    def _silence_pcspkr(self) -> Iterator[None]:
+        """Stop tests from hitting the real /dev/input PC speaker device."""
+        with patch("python_pkg.wake_alarm._alarm._beep_pcspkr"):
+            yield
+
+    def test_paplay_success_short_circuits(self, tmp_path: pathlib.Path) -> None:
+        """If paplay succeeds, no further players are tried."""
+        wav = tmp_path / "tone.wav"
+        wav.write_bytes(b"\x00")
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm._ensure_tone_wav",
+                return_value=wav,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._try_player",
+                return_value=True,
+            ) as mock_try,
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+            ) as mock_run,
+        ):
+            _play_tone(440)
+            mock_try.assert_called_once_with("paplay", wav)
+            mock_run.assert_not_called()
+
+    def test_falls_back_to_aplay_then_speaker_test(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """paplay+aplay fail → speaker-test is tried."""
+        wav = tmp_path / "tone.wav"
+        wav.write_bytes(b"\x00")
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm._ensure_tone_wav",
+                return_value=wav,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._try_player",
+                return_value=False,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._speaker_test_path",
+                return_value="/usr/bin/speaker-test",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+            ) as mock_run,
+        ):
+            _play_tone(1000)
+            mock_run.assert_called_once()
+            args = mock_run.call_args[0][0]
+            assert "/usr/bin/speaker-test" in args
+            assert "1000" in args
+
+    def test_soft_beep_when_speaker_test_missing(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """All players fail → soft beep."""
+        wav = tmp_path / "tone.wav"
+        wav.write_bytes(b"\x00")
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm._ensure_tone_wav",
+                return_value=wav,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._try_player",
+                return_value=False,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._speaker_test_path",
+                side_effect=FileNotFoundError("missing"),
+            ),
+            patch("python_pkg.wake_alarm._alarm._beep_soft") as mock_soft,
+        ):
+            _play_tone(800)
+            mock_soft.assert_called_once()
+
+    def test_soft_beep_when_speaker_test_times_out(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """speaker-test TimeoutExpired → soft beep."""
+        wav = tmp_path / "tone.wav"
+        wav.write_bytes(b"\x00")
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm._ensure_tone_wav",
+                return_value=wav,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._try_player",
+                return_value=False,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._speaker_test_path",
+                return_value="/usr/bin/speaker-test",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=subprocess.TimeoutExpired("speaker-test", 6),
+            ),
+            patch("python_pkg.wake_alarm._alarm._beep_soft") as mock_soft,
+        ):
+            _play_tone(800)
+            mock_soft.assert_called_once()
+
+    def test_soft_beep_when_wav_generation_fails(self) -> None:
+        """OSError generating WAV → soft beep."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm._ensure_tone_wav",
+                side_effect=OSError("disk full"),
+            ),
+            patch("python_pkg.wake_alarm._alarm._beep_soft") as mock_soft,
+        ):
+            _play_tone(440)
+            mock_soft.assert_called_once()
+
+
+class TestWarnIfNoRealSink:
+    """Tests for _warn_if_no_real_sink."""
+
+    def test_logs_when_pactl_missing(self) -> None:
+        """No pactl on PATH → warns and returns."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value=None,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+            ) as mock_run,
+        ):
+            _warn_if_no_real_sink()
+            mock_run.assert_not_called()
+
+    def test_warns_when_only_auto_null(self) -> None:
+        """Only auto_null sink → warning is emitted."""
+        result = MagicMock()
+        result.stdout = b"4319\tauto_null\tPipeWire\tfloat32le 2ch 48000Hz\tIDLE\n"
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                return_value=result,
+            ),
+            patch("python_pkg.wake_alarm._alarm._logger") as mock_log,
+        ):
+            _warn_if_no_real_sink()
+            mock_log.warning.assert_called()
+
+    def test_info_when_real_sink_present(self) -> None:
+        """A non-auto_null sink → info log, no warning."""
+        result = MagicMock()
+        result.stdout = b"1\talsa_output.pci-0000_01_00.1.hdmi-stereo\tPipeWire\t-\t-\n"
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                return_value=result,
+            ),
+            patch("python_pkg.wake_alarm._alarm._logger") as mock_log,
+        ):
+            _warn_if_no_real_sink()
+            mock_log.info.assert_called()
+            mock_log.warning.assert_not_called()
+
+    def test_handles_pactl_failure(self) -> None:
+        """OSError/TimeoutExpired running pactl → warning, no raise."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=subprocess.TimeoutExpired("pactl", 5),
+            ),
+        ):
+            _warn_if_no_real_sink()  # must not raise
+
+
+class TestMaxSinkVolume:
+    """Tests for _max_sink_volume and _restore_sink_volume."""
+
+    def test_returns_none_when_pactl_missing(self) -> None:
+        """No pactl on PATH → returns None, logs warning."""
+        with patch("python_pkg.wake_alarm._alarm.shutil.which", return_value=None):
+            assert _max_sink_volume() is None
+
+    def test_returns_none_when_default_sink_empty(self) -> None:
+        """Empty get-default-sink output → returns None."""
+        sink_proc = MagicMock(stdout=b"")
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                return_value=sink_proc,
+            ),
+        ):
+            assert _max_sink_volume() is None
+
+    def test_query_failure_returns_none(self) -> None:
+        """OSError during query → returns None, no raise."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=OSError("boom"),
+            ),
+        ):
+            assert _max_sink_volume() is None
+
+    def test_set_failure_returns_none(self) -> None:
+        """OSError during set-sink-volume → returns None."""
+        sink_proc = MagicMock(stdout=b"my_sink\n")
+        vol_proc = MagicMock(stdout=b"Volume: front-left: 20641 / 31% / -30.10 dB")
+        mute_proc = MagicMock(stdout=b"Mute: no\n")
+
+        def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+            if "get-default-sink" in cmd:
+                return sink_proc
+            if "get-sink-volume" in cmd:
+                return vol_proc
+            if "get-sink-mute" in cmd:
+                return mute_proc
+            raise subprocess.TimeoutExpired(cmd, 3)
+
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=fake_run,
+            ),
+        ):
+            assert _max_sink_volume() is None
+
+    def test_happy_path_returns_state(self) -> None:
+        """Successful query+set returns the captured state tuple."""
+        sink_proc = MagicMock(stdout=b"my_sink\n")
+        vol_proc = MagicMock(stdout=b"Volume: front-left: 20641 / 31% / -30.10 dB")
+        mute_proc = MagicMock(stdout=b"Mute: yes\n")
+        ok = MagicMock(stdout=b"", returncode=0)
+
+        def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+            if "get-default-sink" in cmd:
+                return sink_proc
+            if "get-sink-volume" in cmd:
+                return vol_proc
+            if "get-sink-mute" in cmd:
+                return mute_proc
+            return ok
+
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=fake_run,
+            ),
+        ):
+            state = _max_sink_volume()
+        assert state == ("my_sink", "31%", True)
+
+    def test_happy_path_no_percent_token(self) -> None:
+        """Missing % token → falls back to 100%, not None."""
+        sink_proc = MagicMock(stdout=b"s\n")
+        vol_proc = MagicMock(stdout=b"weird output")
+        mute_proc = MagicMock(stdout=b"Mute: no\n")
+        ok = MagicMock(stdout=b"", returncode=0)
+
+        def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+            if "get-default-sink" in cmd:
+                return sink_proc
+            if "get-sink-volume" in cmd:
+                return vol_proc
+            if "get-sink-mute" in cmd:
+                return mute_proc
+            return ok
+
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=fake_run,
+            ),
+        ):
+            state = _max_sink_volume()
+        assert state == ("s", "100%", False)
+
+
+class TestRestoreSinkVolume:
+    """Tests for _restore_sink_volume."""
+
+    def test_none_state_is_noop(self) -> None:
+        """None state → does nothing, no pactl call."""
+        with patch("python_pkg.wake_alarm._alarm.shutil.which") as mock_which:
+            _restore_sink_volume(None)
+            mock_which.assert_not_called()
+
+    def test_no_pactl_returns_silently(self) -> None:
+        """State present but pactl missing → no raise, no call."""
+        with (
+            patch("python_pkg.wake_alarm._alarm.shutil.which", return_value=None),
+            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
+        ):
+            _restore_sink_volume(("sink", "42%", False))
+            mock_run.assert_not_called()
+
+    def test_restores_volume_and_mute(self) -> None:
+        """Calls set-sink-volume and set-sink-mute with captured values."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
+        ):
+            _restore_sink_volume(("sink", "42%", True))
+        cmds = [call.args[0] for call in mock_run.call_args_list]
+        assert ["/usr/bin/pactl", "set-sink-volume", "sink", "42%"] in cmds
+        assert ["/usr/bin/pactl", "set-sink-mute", "sink", "1"] in cmds
+
+    def test_oserror_during_restore_is_swallowed(self) -> None:
+        """OSError during restore → no raise."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm.subprocess.run",
+                side_effect=OSError("boom"),
+            ),
+        ):
+            _restore_sink_volume(("sink", "50%", False))  # must not raise
+
+
+class TestParseArgs:
+    """Tests for _parse_args."""
+
+    def test_default_flags_are_false(self) -> None:
+        """No CLI args means every flag is False."""
+        ns = _parse_args([])
+        assert ns.demo is False
+        assert ns.trigger_now is False
+        assert ns.production is False
+
+    def test_flags_parse(self) -> None:
+        """Each flag flips to True when passed."""
+        ns = _parse_args(["--production", "--demo", "--trigger-now"])
+        assert ns.production is True
+        assert ns.demo is True
+        assert ns.trigger_now is True

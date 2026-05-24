@@ -8,18 +8,23 @@ workout-free day via HMAC-signed wake state.
 
 from __future__ import annotations
 
+import argparse
 from datetime import datetime, timezone
 import logging
+import math
 import os
 from pathlib import Path
 import secrets
 import shutil
 import string
+import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import tkinter as tk
+import wave
 
 from python_pkg.wake_alarm._constants import (
     ALARM_DAYS,
@@ -93,6 +98,165 @@ def _speaker_test_path() -> str:
     return path
 
 
+_TONE_CACHE: dict[int, Path] = {}
+_TONE_TIMEOUT_SECONDS: float = 6.0
+_TONE_DURATION_SECONDS: float = 1.5
+_TONE_FRAMERATE: int = 48000
+_TONE_AMPLITUDE: int = 32760  # near s16 max for the loudest sine we can emit
+
+# Number of back-to-back PC-speaker beeps per _play_tone call.
+# pcspkr volume is hardware-fixed, so we lean on repetition + duration to be
+# loud enough to actually wake the user.
+_PCSPKR_REPEATS: int = 3
+_PCSPKR_GAP_SECONDS: float = 0.12
+
+# Motherboard PC speaker exposed by the pcspkr kernel module.
+# Writing EV_SND/SND_TONE input_event structs makes it beep — bypasses
+# PipeWire/ALSA entirely, so it stays audible even when no real sink exists.
+_PCSPKR_DEVICE: str = "/dev/input/by-path/platform-pcspkr-event-spkr"
+_PCSPKR_EV_SND: int = 0x12
+_PCSPKR_SND_TONE: int = 0x02
+# struct input_event: timeval (long sec, long usec), u16 type, u16 code, s32 val
+_PCSPKR_EVENT_FMT: str = "llHHi"
+
+
+def _beep_pcspkr(frequency: int, duration_seconds: float) -> None:
+    """Beep the motherboard PC speaker via evdev (audible without any sink).
+
+    Silently no-ops when the device is missing or unwritable so the call is
+    always safe from the alarm hot path.
+    """
+    try:
+        # buffering=0 so the write hits the device immediately.
+        with Path(_PCSPKR_DEVICE).open("wb", buffering=0) as dev:
+            dev.write(
+                struct.pack(
+                    _PCSPKR_EVENT_FMT,
+                    0,
+                    0,
+                    _PCSPKR_EV_SND,
+                    _PCSPKR_SND_TONE,
+                    int(frequency),
+                ),
+            )
+            time.sleep(duration_seconds)
+            dev.write(
+                struct.pack(
+                    _PCSPKR_EVENT_FMT,
+                    0,
+                    0,
+                    _PCSPKR_EV_SND,
+                    _PCSPKR_SND_TONE,
+                    0,
+                ),
+            )
+    except OSError:
+        _logger.warning(
+            "PC speaker beep at %d Hz failed (device %s)",
+            frequency,
+            _PCSPKR_DEVICE,
+            exc_info=True,
+        )
+
+
+def _ensure_tone_wav(frequency: int) -> Path:
+    """Generate (and cache) a mono 48 kHz sine WAV at *frequency* Hz."""
+    cached = _TONE_CACHE.get(frequency)
+    if cached is not None and cached.exists():
+        return cached
+    path = Path(tempfile.gettempdir()) / f"wake_alarm_tone_{frequency}.wav"
+    n_frames = int(_TONE_FRAMERATE * _TONE_DURATION_SECONDS)
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(_TONE_FRAMERATE)
+        frames = bytearray()
+        for i in range(n_frames):
+            sample = int(
+                _TONE_AMPLITUDE
+                * math.sin(2 * math.pi * frequency * i / _TONE_FRAMERATE),
+            )
+            frames.extend(struct.pack("<h", sample))
+        wav.writeframesraw(bytes(frames))
+    _TONE_CACHE[frequency] = path
+    return path
+
+
+def _try_player(binary: str, wav: Path) -> bool:
+    """Run *binary* on *wav* with a generous timeout. Return True on success."""
+    path = shutil.which(binary)
+    if path is None:
+        return False
+    try:
+        result = subprocess.run(
+            [path, str(wav)],
+            capture_output=True,
+            timeout=_TONE_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _logger.warning("%s failed playing %s", binary, wav.name, exc_info=True)
+        return False
+    if result.returncode != 0:
+        _logger.warning(
+            "%s exited %d for %s: %s",
+            binary,
+            result.returncode,
+            wav.name,
+            result.stderr.decode(errors="replace").strip()[:200],
+        )
+        return False
+    return True
+
+
+def _play_tone(frequency: int) -> None:
+    """Play a sine tone via paplay/aplay/speaker-test, fall back to soft beep.
+
+    Always also beeps the motherboard PC speaker (multiple times) so the
+    alarm stays loud and audible even when PipeWire only has the auto_null
+    sink.
+    """
+    for i in range(_PCSPKR_REPEATS):
+        _beep_pcspkr(frequency, _TONE_DURATION_SECONDS)
+        if i < _PCSPKR_REPEATS - 1:
+            time.sleep(_PCSPKR_GAP_SECONDS)
+    try:
+        wav = _ensure_tone_wav(frequency)
+    except OSError:
+        _logger.warning(
+            "Could not generate tone WAV at %d Hz; using soft beep",
+            frequency,
+            exc_info=True,
+        )
+        _beep_soft()
+        return
+    for binary in ("paplay", "aplay"):
+        if _try_player(binary, wav):
+            return
+    try:
+        subprocess.run(
+            [
+                _speaker_test_path(),
+                "-t",
+                "sine",
+                "-f",
+                str(frequency),
+                "-l",
+                "1",
+            ],
+            capture_output=True,
+            timeout=_TONE_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        _logger.warning(
+            "All tone players failed at %d Hz; falling back to soft beep",
+            frequency,
+            exc_info=True,
+        )
+        _beep_soft()
+
+
 # Extra PipeWire sinks to always play alarm audio on (alongside the default).
 # alsa_output...hdmi-stereo = GA102 → G27Q (has built-in speaker, always on).
 _EXTRA_PIPEWIRE_SINKS: tuple[str, ...] = ("alsa_output.pci-0000_01_00.1.hdmi-stereo",)
@@ -159,29 +323,18 @@ def _find_fan_hwmon() -> str | None:
     return None
 
 
-def _max_fans() -> tuple[str, str, str] | None:
-    """Ramp all NCT fans to 100% speed for maximum audible noise.
+def _max_fans() -> bool:
+    """Ramp every NCT pwm channel to 100% speed via the helper script.
 
-    Saves the current pwm1 values so they can be restored after the alarm.
-    Safe: higher fan speed only lowers temperatures, never damages hardware.
+    The helper records prior state under /run/wake-alarm-fans.state so
+    _restore_fans() can put things back without arguments. Safe: higher fan
+    speed only lowers temperatures, never damages hardware.
 
     Returns:
-        (hwmon_dir, old_enable, old_pwm) tuple to pass to _restore_fans(),
-        or None when fan control is unavailable.
+        True when the ramp script ran successfully, False otherwise.
     """
-    hwmon = _find_fan_hwmon()
-    if hwmon is None:
-        return None
-    try:
-        old_enable = (Path(hwmon) / "pwm1_enable").read_text().strip()
-        old_pwm = (Path(hwmon) / "pwm1").read_text().strip()
-    except OSError:
-        _logger.warning(
-            "Could not read pwm1/pwm1_enable in %s; skipping fan ramp",
-            hwmon,
-            exc_info=True,
-        )
-        return None
+    if _find_fan_hwmon() is None:
+        return False
     try:
         result = subprocess.run(
             [_SUDO_BIN, "-n", _FAN_SCRIPT, "max"],
@@ -195,7 +348,7 @@ def _max_fans() -> tuple[str, str, str] | None:
             _FAN_SCRIPT,
             exc_info=True,
         )
-        return None
+        return False
     if result.returncode != 0:
         _logger.warning(
             "Fan script %s exited %d: %s",
@@ -203,18 +356,17 @@ def _max_fans() -> tuple[str, str, str] | None:
             result.returncode,
             result.stderr.decode(errors="replace").strip(),
         )
-        return None
-    return (hwmon, old_enable, old_pwm)
+        return False
+    return True
 
 
-def _restore_fans(state: tuple[str, str, str] | None) -> None:
-    """Restore fan speed to the values saved by _max_fans()."""
-    if state is None:
+def _restore_fans(*, active: bool) -> None:
+    """Restore fan speed if _max_fans() previously succeeded."""
+    if not active:
         return
-    _hwmon, old_enable, old_pwm = state
     try:
         subprocess.run(
-            [_SUDO_BIN, "-n", _FAN_SCRIPT, "restore", old_enable, old_pwm],
+            [_SUDO_BIN, "-n", _FAN_SCRIPT, "restore"],
             check=False,
             capture_output=True,
             timeout=5,
@@ -263,53 +415,13 @@ def _set_max_brightness() -> None:
 
 
 def _beep_medium(frequency: int = 1000) -> None:
-    """Play a medium beep via speaker-test (sine wave, short)."""
-    try:
-        subprocess.run(
-            [
-                _speaker_test_path(),
-                "-t",
-                "sine",
-                "-f",
-                str(frequency),
-                "-l",
-                "1",
-            ],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning(
-            "_beep_medium subprocess failed; falling back to soft beep",
-            exc_info=True,
-        )
-        _beep_soft()
+    """Play a medium beep (sine tone via paplay/aplay/speaker-test)."""
+    _play_tone(frequency)
 
 
 def _beep_loud(frequency: int = 1000) -> None:
-    """Play a loud sine tone via speaker-test."""
-    try:
-        subprocess.run(
-            [
-                _speaker_test_path(),
-                "-t",
-                "sine",
-                "-f",
-                str(frequency),
-                "-l",
-                "1",
-            ],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning(
-            "_beep_loud subprocess failed; falling back to soft beep",
-            exc_info=True,
-        )
-        _beep_soft()
+    """Play a loud sine tone via paplay/aplay/speaker-test."""
+    _play_tone(frequency)
 
 
 class WakeAlarm:
@@ -332,23 +444,29 @@ class WakeAlarm:
         self.root.title("Wake Alarm" + (" [DEMO]" if demo_mode else ""))
         self.root.configure(bg="#1a1a1a")
 
-        if demo_mode:
-            self.root.geometry("800x600")
-        else:
-            screen_w = self.root.winfo_screenwidth()
-            screen_h = self.root.winfo_screenheight()
-            fullscreen = True
-            self.root.overrideredirect(boolean=fullscreen)
-            self.root.geometry(f"{screen_w}x{screen_h}+0+0")
-            self.root.attributes("-fullscreen", fullscreen)
-            self.root.attributes("-topmost", fullscreen)
+        # Always hijack the full screen — demo_mode only controls timers.
+        # NOTE: we intentionally do NOT call overrideredirect(True): on X11 it
+        # removes WM management and the Entry widget can't receive keyboard
+        # focus, so the user can't type the dismiss code. -fullscreen +
+        # -topmost is enough to take over the screen while staying typeable.
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        fullscreen = True
+        self.root.geometry(f"{screen_w}x{screen_h}+0+0")
+        self.root.attributes("-fullscreen", fullscreen)
+        self.root.attributes("-topmost", fullscreen)
+
+        self.root.lift()
+        self.root.focus_force()
+        self.root.update_idletasks()
 
         self._current_code = _generate_code()
         self._build_ui()
         self._schedule_code_refresh()
         self._schedule_dismiss_window_close()
         self._start_beep_thread()
-        self._fan_state: tuple[str, str, str] | None = _max_fans()
+        self._fan_state: bool = _max_fans()
+        self._sink_volume_state: tuple[str, str, bool] | None = _max_sink_volume()
         self._flash_on: bool = False
         self._start_screen_flash()
 
@@ -453,7 +571,8 @@ class WakeAlarm:
     def _close(self) -> None:
         """Close the alarm window."""
         self._stop_beep.set()
-        _restore_fans(self._fan_state)
+        _restore_fans(active=self._fan_state)
+        _restore_sink_volume(self._sink_volume_state)
         _restore_display()
         turn_off_plug()
         self.root.destroy()
@@ -497,7 +616,8 @@ class WakeAlarm:
 
     def _close_and_schedule_fallback(self) -> None:
         """Close the window and schedule the 1 PM fallback alarm."""
-        _restore_fans(self._fan_state)
+        _restore_fans(active=self._fan_state)
+        _restore_sink_volume(self._sink_volume_state)
         _restore_display()
         turn_off_plug()
         self.root.destroy()
@@ -572,6 +692,153 @@ def _should_run_alarm() -> bool:
     return True
 
 
+def _pactl_path() -> str | None:
+    """Return the absolute path to pactl, or None when not installed."""
+    return shutil.which("pactl")
+
+
+def _max_sink_volume() -> tuple[str, str, bool] | None:
+    """Unmute the default sink, raise it to 100%, return state for restore.
+
+    Returns ``(sink_name, original_volume_pct, original_mute)`` or ``None``
+    when pactl is unavailable / the call fails. The alarm is loud only if the
+    user's actual sink (e.g. a Bluetooth speaker) is also turned up, so this
+    is the single biggest lever we have.
+    """
+    pactl = _pactl_path()
+    if pactl is None:
+        _logger.warning("pactl not on PATH; cannot raise sink volume")
+        return None
+    try:
+        sink_proc = subprocess.run(
+            [pactl, "get-default-sink"],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+        sink = sink_proc.stdout.decode(errors="replace").strip()
+        if not sink:
+            return None
+        vol_proc = subprocess.run(
+            [pactl, "get-sink-volume", sink],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+        mute_proc = subprocess.run(
+            [pactl, "get-sink-mute", sink],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _logger.warning("pactl volume query failed", exc_info=True)
+        return None
+    # "Volume: front-left: 20641 / 31% / ..." — grab the first percent token.
+    vol_text = vol_proc.stdout.decode(errors="replace")
+    pct = "100%"
+    for tok in vol_text.replace(",", " ").split():
+        if tok.endswith("%"):
+            pct = tok
+            break
+    muted = b"yes" in mute_proc.stdout
+    try:
+        subprocess.run(
+            [pactl, "set-sink-mute", sink, "0"],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+        subprocess.run(
+            [pactl, "set-sink-volume", sink, "100%"],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _logger.warning("pactl volume set failed", exc_info=True)
+        return None
+    _logger.info("Raised sink %s volume %s\u2192100%%", sink, pct)
+    return (sink, pct, muted)
+
+
+def _restore_sink_volume(state: tuple[str, str, bool] | None) -> None:
+    """Restore the sink volume + mute captured by :func:`_max_sink_volume`."""
+    if state is None:
+        return
+    sink, pct, muted = state
+    pactl = _pactl_path()
+    if pactl is None:
+        return
+    try:
+        subprocess.run(
+            [pactl, "set-sink-volume", sink, pct],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+        subprocess.run(
+            [pactl, "set-sink-mute", sink, "1" if muted else "0"],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _logger.warning("pactl volume restore failed", exc_info=True)
+
+
+def _warn_if_no_real_sink() -> None:
+    """Log a loud warning if PipeWire only has the auto_null sink."""
+    pactl = _pactl_path()
+    if pactl is None:
+        _logger.warning("pactl not on PATH; cannot verify audio sinks")
+        return
+    try:
+        result = subprocess.run(
+            [pactl, "list", "short", "sinks"],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _logger.warning("pactl list sinks failed", exc_info=True)
+        return
+    sinks_text = result.stdout.decode(errors="replace").strip()
+    sink_names = [
+        line.split("\t")[1] for line in sinks_text.splitlines() if "\t" in line
+    ]
+    real_sinks = [s for s in sink_names if s != "auto_null"]
+    if not real_sinks:
+        _logger.warning(
+            "ONLY auto_null PipeWire sink available \u2014 alarm will be SILENT. "
+            "Sinks: %s",
+            sink_names or "<none>",
+        )
+    else:
+        _logger.info("Audio sinks available: %s", sink_names)
+
+
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    """Parse CLI arguments for the alarm daemon."""
+    parser = argparse.ArgumentParser(description="Wake alarm daemon.")
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help="Production mode (default; kept for systemd compatibility).",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run with a smaller window and shorter timers.",
+    )
+    parser.add_argument(
+        "--trigger-now",
+        action="store_true",
+        help="Bypass the day/dismiss gate and fire the alarm immediately.",
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> None:
     """Entry point for the wake alarm daemon."""
     logging.basicConfig(
@@ -579,14 +846,22 @@ def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    if not _should_run_alarm():
+    args = _parse_args(sys.argv[1:])
+
+    if not args.trigger_now and not _should_run_alarm():
         return
 
-    demo_mode = "--demo" in sys.argv
+    _logger.warning(
+        "ALARM TRIGGERED at %s (demo=%s, trigger_now=%s)",
+        datetime.now(tz=timezone.utc).isoformat(timespec="seconds"),
+        args.demo,
+        args.trigger_now,
+    )
+    _warn_if_no_real_sink()
     _wake_display()
     _set_max_brightness()
     turn_on_plug()
-    alarm = WakeAlarm(demo_mode=demo_mode)
+    alarm = WakeAlarm(demo_mode=args.demo)
     alarm.run()
 
 

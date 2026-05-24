@@ -1,14 +1,18 @@
 #!/bin/bash
-# Control CPU/case fan speed for the wake alarm.
+# Control ALL NCT pwm fan channels for the wake alarm.
 #
 # Usage:
-#   wake-alarm-fans.sh max                       — ramp all NCT fans to 100%
-#   wake-alarm-fans.sh restore <enable> <pwm>    — restore saved values
+#   wake-alarm-fans.sh max       — ramp every pwm[1-9] channel to 100%
+#   wake-alarm-fans.sh restore   — restore the state captured by the last `max`
 #
 # Must be run as root (installed in /etc/sudoers.d/wake-alarm via install.sh).
 # Safe: fans are designed to run at max speed indefinitely.
+#
+# State is stored at $STATE_FILE so `restore` doesn't need any arguments.
 
 set -euo pipefail
+
+STATE_FILE="/run/wake-alarm-fans.state"
 
 # Locate the hwmon directory for any NCT Super I/O fan controller.
 HWMON=""
@@ -28,25 +32,32 @@ if [[ -z "$HWMON" ]]; then
     exit 0
 fi
 
-PWM_PATH="$HWMON/pwm1"
-ENABLE_PATH="$HWMON/pwm1_enable"
-
 case "${1:-}" in
     max)
-        echo 1   > "$ENABLE_PATH"   # Switch to manual mode
-        echo 255 > "$PWM_PATH"      # 255/255 = 100% speed
+        : > "$STATE_FILE"
+        for pwm in "$HWMON"/pwm[0-9]; do
+            [[ -w "$pwm" ]] || continue
+            enable="${pwm}_enable"
+            [[ -w "$enable" ]] || continue
+            old_pwm=$(cat "$pwm")
+            old_enable=$(cat "$enable")
+            printf '%s %s %s\n' "$pwm" "$old_enable" "$old_pwm" >> "$STATE_FILE"
+            echo 1   > "$enable"   # Switch to manual mode.
+            echo 255 > "$pwm"      # 255/255 = 100% speed.
+        done
         ;;
     restore)
-        if [[ $# -ne 3 ]]; then
-            echo "Usage: $0 restore <old_enable> <old_pwm>" >&2
-            exit 1
-        fi
-        # Restore pwm value first, then restore the control mode.
-        echo "${3}" > "$PWM_PATH"
-        echo "${2}" > "$ENABLE_PATH"
+        [[ -f "$STATE_FILE" ]] || exit 0
+        while read -r pwm old_enable old_pwm; do
+            [[ -w "$pwm" && -w "${pwm}_enable" ]] || continue
+            # Restore pwm value first, then restore the control mode.
+            echo "$old_pwm"    > "$pwm"
+            echo "$old_enable" > "${pwm}_enable"
+        done < "$STATE_FILE"
+        rm -f "$STATE_FILE"
         ;;
     *)
-        echo "Usage: $0 max | $0 restore <old_enable> <old_pwm>" >&2
+        echo "Usage: $0 max | $0 restore" >&2
         exit 1
         ;;
 esac
