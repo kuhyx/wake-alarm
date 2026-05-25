@@ -4,6 +4,13 @@ After=graphical-session.target
 
 [Service]
 Type=simple
+# DISPLAY/PYTHONPATH mirror workout-locker.service: without DISPLAY the alarm
+# crashes on cold boot with "no display name and no $DISPLAY" (Tk can't open
+# the X server) before systemd retries. The short sleep lets the X session
+# export DISPLAY into the user environment first.
+Environment=DISPLAY=:0
+Environment=PYTHONPATH=%h/testsAndMisc
+ExecStartPre=/bin/sleep 1
 ExecStart=/usr/bin/python -m python_pkg.wake_alarm._alarm --production
 WorkingDirectory=%h/testsAndMisc
 Restart=on-failure

@@ -27,6 +27,11 @@ import tkinter as tk
 import wave
 
 from python_pkg.wake_alarm._constants import (
+    ALARM_AUDIO_CARD,
+    ALARM_AUDIO_PROFILE,
+    ALARM_AUDIO_SINK,
+    ALARM_AUDIO_SINK_POLL_SECONDS,
+    ALARM_AUDIO_SINK_WAIT_SECONDS,
     ALARM_DAYS,
     DISMISS_CODE_LENGTH,
     DISMISS_CODE_REFRESH_SECONDS,
@@ -461,12 +466,13 @@ class WakeAlarm:
         self.root.update_idletasks()
 
         self._current_code = _generate_code()
+        self._skip_earnable: bool = True
         self._build_ui()
         self._schedule_code_refresh()
-        self._schedule_dismiss_window_close()
+        self._schedule_skip_window_close()
         self._start_beep_thread()
         self._fan_state: bool = _max_fans()
-        self._sink_volume_state: tuple[str, str, bool] | None = _max_sink_volume()
+        self._audio_restore: str | None = _activate_alarm_audio()
         self._flash_on: bool = False
         self._start_screen_flash()
 
@@ -535,7 +541,7 @@ class WakeAlarm:
         """Handle code submission."""
         entered = self._entry.get().strip()
         if entered == self._current_code:
-            self._dismiss_alarm(earned_skip=True)
+            self._dismiss_alarm(earned_skip=self._skip_earnable)
         else:
             self._status_label.configure(text="Wrong code! Try again.")
             self._entry.delete(0, tk.END)
@@ -572,7 +578,7 @@ class WakeAlarm:
         """Close the alarm window."""
         self._stop_beep.set()
         _restore_fans(active=self._fan_state)
-        _restore_sink_volume(self._sink_volume_state)
+        _restore_alarm_audio(self._audio_restore)
         _restore_display()
         turn_off_plug()
         self.root.destroy()
@@ -587,55 +593,45 @@ class WakeAlarm:
         ms = DISMISS_CODE_REFRESH_SECONDS * 1000 if not self.demo_mode else 10_000
         self.root.after(ms, self._schedule_code_refresh)
 
-    def _schedule_dismiss_window_close(self) -> None:
-        """Close dismiss window after the allowed time."""
+    def _schedule_skip_window_close(self) -> None:
+        """Mark the workout-skip reward as expired after the allowed time."""
         ms = DISMISS_WINDOW_MINUTES * 60 * 1000 if not self.demo_mode else 30_000
-        self.root.after(ms, self._on_dismiss_window_expired)
+        self.root.after(ms, self._on_skip_window_expired)
 
-    def _on_dismiss_window_expired(self) -> None:
-        """Called when the dismiss window expires without valid dismissal."""
+    def _on_skip_window_expired(self) -> None:
+        """Skip window closed: keep the alarm running, deny the workout skip.
+
+        The alarm intentionally does NOT stop here - it keeps beeping and
+        flashing until the user actually types the code. Only the workout-skip
+        reward expires; dismissing now silences the alarm without earning a skip.
+        """
         if not self._active:
             return
-        self._active = False
-        self._stop_beep.set()
-        save_wake_state(dismissed_at=None, skip_workout=False)
-        _logger.info("Dismiss window expired — no workout skip.")
-
-        for widget in self._container.winfo_children():
-            widget.destroy()
-
-        tk.Label(
-            self._container,
-            text="Too late! No workout skip today.",
-            font=("Arial", 36, "bold"),
-            fg="#ff4444",
-            bg="#1a1a1a",
-        ).pack(pady=30)
-
-        self.root.after(5000, self._close_and_schedule_fallback)
-
-    def _close_and_schedule_fallback(self) -> None:
-        """Close the window and schedule the 1 PM fallback alarm."""
-        _restore_fans(active=self._fan_state)
-        _restore_sink_volume(self._sink_volume_state)
-        _restore_display()
-        turn_off_plug()
-        self.root.destroy()
+        self._skip_earnable = False
+        self._info_label.configure(
+            text="Skip window closed - type the code to stop the alarm",
+        )
+        self._status_label.configure(text="No workout skip today.")
+        _logger.info("Skip window expired - alarm continues until dismissed.")
 
     def _update_timer(self) -> None:
-        """Update the remaining time display."""
+        """Show the skip-window countdown, then a keep-going silence prompt."""
         if not self._active:
             return
         elapsed = time.monotonic() - self._alarm_start
         window = DISMISS_WINDOW_MINUTES * 60 if not self.demo_mode else 30
         remaining = max(0, window - elapsed)
-        minutes = int(remaining) // 60
-        seconds = int(remaining) % 60
-        self._timer_label.configure(
-            text=f"Time remaining: {minutes:02d}:{seconds:02d}",
-        )
-        if remaining > 0:
-            self.root.after(1000, self._update_timer)
+        if self._skip_earnable and remaining > 0:
+            minutes = int(remaining) // 60
+            seconds = int(remaining) % 60
+            self._timer_label.configure(
+                text=f"Skip window: {minutes:02d}:{seconds:02d}",
+            )
+        else:
+            self._timer_label.configure(
+                text="No skip available - type the code to stop the alarm",
+            )
+        self.root.after(1000, self._update_timer)
 
     def _start_beep_thread(self) -> None:
         """Start the background beep escalation thread."""
@@ -697,94 +693,99 @@ def _pactl_path() -> str | None:
     return shutil.which("pactl")
 
 
-def _max_sink_volume() -> tuple[str, str, bool] | None:
-    """Unmute the default sink, raise it to 100%, return state for restore.
-
-    Returns ``(sink_name, original_volume_pct, original_mute)`` or ``None``
-    when pactl is unavailable / the call fails. The alarm is loud only if the
-    user's actual sink (e.g. a Bluetooth speaker) is also turned up, so this
-    is the single biggest lever we have.
-    """
-    pactl = _pactl_path()
-    if pactl is None:
-        _logger.warning("pactl not on PATH; cannot raise sink volume")
-        return None
+def _alarm_sink_present(pactl: str) -> bool:
+    """Return True when the dedicated alarm HDMI sink exists in PipeWire."""
     try:
-        sink_proc = subprocess.run(
+        result = subprocess.run(
+            [pactl, "list", "short", "sinks"],
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _logger.warning("pactl list sinks failed", exc_info=True)
+        return False
+    return ALARM_AUDIO_SINK in result.stdout.decode(errors="replace")
+
+
+def _current_default_sink(pactl: str) -> str | None:
+    """Return the current default sink name, or None on failure / empty."""
+    try:
+        result = subprocess.run(
             [pactl, "get-default-sink"],
             capture_output=True,
             timeout=3,
             check=False,
         )
-        sink = sink_proc.stdout.decode(errors="replace").strip()
-        if not sink:
-            return None
-        vol_proc = subprocess.run(
-            [pactl, "get-sink-volume", sink],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-        mute_proc = subprocess.run(
-            [pactl, "get-sink-mute", sink],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
     except (OSError, subprocess.TimeoutExpired):
-        _logger.warning("pactl volume query failed", exc_info=True)
+        _logger.warning("pactl get-default-sink failed", exc_info=True)
         return None
-    # "Volume: front-left: 20641 / 31% / ..." — grab the first percent token.
-    vol_text = vol_proc.stdout.decode(errors="replace")
-    pct = "100%"
-    for tok in vol_text.replace(",", " ").split():
-        if tok.endswith("%"):
-            pct = tok
+    name = result.stdout.decode(errors="replace").strip()
+    return name or None
+
+
+def _activate_alarm_audio() -> str | None:
+    """Force the monitor's HDMI output on and route the alarm to it.
+
+    At wake time the Bluetooth speaker is disconnected and PipeWire only has the
+    ``auto_null`` sink, so the alarm is silent. This forces the HDMI card
+    profile on, waits for its sink to appear, makes it the default sink, and
+    raises it to full volume - empirically the only output audible on this
+    machine at wake time (the G27Q monitor's built-in speaker).
+
+    Returns:
+        The previous default sink name (to restore on close), or ``None`` when
+        the alarm audio sink could not be activated.
+    """
+    pactl = _pactl_path()
+    if pactl is None:
+        _logger.warning("pactl not on PATH; cannot activate alarm audio")
+        return None
+    subprocess.run(
+        [pactl, "set-card-profile", ALARM_AUDIO_CARD, ALARM_AUDIO_PROFILE],
+        capture_output=True,
+        timeout=3,
+        check=False,
+    )
+    attempts = max(
+        1,
+        int(ALARM_AUDIO_SINK_WAIT_SECONDS / ALARM_AUDIO_SINK_POLL_SECONDS),
+    )
+    for _ in range(attempts):
+        if _alarm_sink_present(pactl):
             break
-    muted = b"yes" in mute_proc.stdout
-    try:
-        subprocess.run(
-            [pactl, "set-sink-mute", sink, "0"],
-            capture_output=True,
-            timeout=3,
-            check=False,
+        time.sleep(ALARM_AUDIO_SINK_POLL_SECONDS)
+    else:
+        _logger.warning(
+            "Alarm audio sink %s did not appear after %.0fs; alarm may be silent",
+            ALARM_AUDIO_SINK,
+            ALARM_AUDIO_SINK_WAIT_SECONDS,
         )
-        subprocess.run(
-            [pactl, "set-sink-volume", sink, "100%"],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning("pactl volume set failed", exc_info=True)
         return None
-    _logger.info("Raised sink %s volume %s\u2192100%%", sink, pct)
-    return (sink, pct, muted)
+    old_default = _current_default_sink(pactl)
+    for cmd in (
+        [pactl, "set-default-sink", ALARM_AUDIO_SINK],
+        [pactl, "set-sink-mute", ALARM_AUDIO_SINK, "0"],
+        [pactl, "set-sink-volume", ALARM_AUDIO_SINK, "100%"],
+    ):
+        subprocess.run(cmd, capture_output=True, timeout=3, check=False)
+    _logger.warning("Alarm audio routed to %s at 100%%", ALARM_AUDIO_SINK)
+    return old_default
 
 
-def _restore_sink_volume(state: tuple[str, str, bool] | None) -> None:
-    """Restore the sink volume + mute captured by :func:`_max_sink_volume`."""
-    if state is None:
+def _restore_alarm_audio(old_default: str | None) -> None:
+    """Restore the default sink captured by :func:`_activate_alarm_audio`."""
+    if old_default is None:
         return
-    sink, pct, muted = state
     pactl = _pactl_path()
     if pactl is None:
         return
-    try:
-        subprocess.run(
-            [pactl, "set-sink-volume", sink, pct],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-        subprocess.run(
-            [pactl, "set-sink-mute", sink, "1" if muted else "0"],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning("pactl volume restore failed", exc_info=True)
+    subprocess.run(
+        [pactl, "set-default-sink", old_default],
+        capture_output=True,
+        timeout=3,
+        check=False,
+    )
 
 
 def _warn_if_no_real_sink() -> None:

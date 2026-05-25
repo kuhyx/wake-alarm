@@ -14,22 +14,24 @@ if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
 from python_pkg.wake_alarm._alarm import (
+    _activate_alarm_audio,
+    _alarm_sink_present,
     _beep_loud,
     _beep_medium,
     _beep_pcspkr,
     _beep_soft,
+    _current_default_sink,
     _ensure_tone_wav,
     _find_fan_hwmon,
     _generate_code,
     _is_alarm_day,
     _max_fans,
-    _max_sink_volume,
     _parse_args,
     _play_on_extra_devices,
     _play_tone,
+    _restore_alarm_audio,
     _restore_display,
     _restore_fans,
-    _restore_sink_volume,
     _set_max_brightness,
     _should_run_alarm,
     _speaker_test_path,
@@ -955,149 +957,173 @@ class TestWarnIfNoRealSink:
             _warn_if_no_real_sink()  # must not raise
 
 
-class TestMaxSinkVolume:
-    """Tests for _max_sink_volume and _restore_sink_volume."""
+class TestAlarmSinkPresent:
+    """Tests for _alarm_sink_present."""
+
+    def test_true_when_sink_listed(self) -> None:
+        """Returns True when the alarm sink name appears in pactl output."""
+        from python_pkg.wake_alarm._constants import ALARM_AUDIO_SINK
+
+        proc = MagicMock(stdout=ALARM_AUDIO_SINK.encode() + b"\tPipeWire\n")
+        with patch(
+            "python_pkg.wake_alarm._alarm.subprocess.run",
+            return_value=proc,
+        ):
+            assert _alarm_sink_present("/usr/bin/pactl") is True
+
+    def test_false_when_sink_absent(self) -> None:
+        """Returns False when the alarm sink is not in pactl output."""
+        proc = MagicMock(stdout=b"auto_null\tPipeWire\n")
+        with patch(
+            "python_pkg.wake_alarm._alarm.subprocess.run",
+            return_value=proc,
+        ):
+            assert _alarm_sink_present("/usr/bin/pactl") is False
+
+    def test_false_on_subprocess_error(self) -> None:
+        """OSError while listing sinks → False, no raise."""
+        with patch(
+            "python_pkg.wake_alarm._alarm.subprocess.run",
+            side_effect=OSError("boom"),
+        ):
+            assert _alarm_sink_present("/usr/bin/pactl") is False
+
+
+class TestCurrentDefaultSink:
+    """Tests for _current_default_sink."""
+
+    def test_returns_sink_name(self) -> None:
+        """Returns the trimmed default sink name."""
+        proc = MagicMock(stdout=b"jbl_sink\n")
+        with patch(
+            "python_pkg.wake_alarm._alarm.subprocess.run",
+            return_value=proc,
+        ):
+            assert _current_default_sink("/usr/bin/pactl") == "jbl_sink"
+
+    def test_returns_none_when_empty(self) -> None:
+        """Empty output → None."""
+        proc = MagicMock(stdout=b"\n")
+        with patch(
+            "python_pkg.wake_alarm._alarm.subprocess.run",
+            return_value=proc,
+        ):
+            assert _current_default_sink("/usr/bin/pactl") is None
+
+    def test_returns_none_on_error(self) -> None:
+        """TimeoutExpired → None, no raise."""
+        with patch(
+            "python_pkg.wake_alarm._alarm.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("pactl", 3),
+        ):
+            assert _current_default_sink("/usr/bin/pactl") is None
+
+
+class TestActivateAlarmAudio:
+    """Tests for _activate_alarm_audio."""
 
     def test_returns_none_when_pactl_missing(self) -> None:
-        """No pactl on PATH → returns None, logs warning."""
-        with patch("python_pkg.wake_alarm._alarm.shutil.which", return_value=None):
-            assert _max_sink_volume() is None
-
-    def test_returns_none_when_default_sink_empty(self) -> None:
-        """Empty get-default-sink output → returns None."""
-        sink_proc = MagicMock(stdout=b"")
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value="/usr/bin/pactl",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                return_value=sink_proc,
-            ),
-        ):
-            assert _max_sink_volume() is None
-
-    def test_query_failure_returns_none(self) -> None:
-        """OSError during query → returns None, no raise."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value="/usr/bin/pactl",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=OSError("boom"),
-            ),
-        ):
-            assert _max_sink_volume() is None
-
-    def test_set_failure_returns_none(self) -> None:
-        """OSError during set-sink-volume → returns None."""
-        sink_proc = MagicMock(stdout=b"my_sink\n")
-        vol_proc = MagicMock(stdout=b"Volume: front-left: 20641 / 31% / -30.10 dB")
-        mute_proc = MagicMock(stdout=b"Mute: no\n")
-
-        def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
-            if "get-default-sink" in cmd:
-                return sink_proc
-            if "get-sink-volume" in cmd:
-                return vol_proc
-            if "get-sink-mute" in cmd:
-                return mute_proc
-            raise subprocess.TimeoutExpired(cmd, 3)
-
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value="/usr/bin/pactl",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=fake_run,
-            ),
-        ):
-            assert _max_sink_volume() is None
-
-    def test_happy_path_returns_state(self) -> None:
-        """Successful query+set returns the captured state tuple."""
-        sink_proc = MagicMock(stdout=b"my_sink\n")
-        vol_proc = MagicMock(stdout=b"Volume: front-left: 20641 / 31% / -30.10 dB")
-        mute_proc = MagicMock(stdout=b"Mute: yes\n")
-        ok = MagicMock(stdout=b"", returncode=0)
-
-        def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
-            if "get-default-sink" in cmd:
-                return sink_proc
-            if "get-sink-volume" in cmd:
-                return vol_proc
-            if "get-sink-mute" in cmd:
-                return mute_proc
-            return ok
-
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value="/usr/bin/pactl",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=fake_run,
-            ),
-        ):
-            state = _max_sink_volume()
-        assert state == ("my_sink", "31%", True)
-
-    def test_happy_path_no_percent_token(self) -> None:
-        """Missing % token → falls back to 100%, not None."""
-        sink_proc = MagicMock(stdout=b"s\n")
-        vol_proc = MagicMock(stdout=b"weird output")
-        mute_proc = MagicMock(stdout=b"Mute: no\n")
-        ok = MagicMock(stdout=b"", returncode=0)
-
-        def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
-            if "get-default-sink" in cmd:
-                return sink_proc
-            if "get-sink-volume" in cmd:
-                return vol_proc
-            if "get-sink-mute" in cmd:
-                return mute_proc
-            return ok
-
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value="/usr/bin/pactl",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=fake_run,
-            ),
-        ):
-            state = _max_sink_volume()
-        assert state == ("s", "100%", False)
-
-
-class TestRestoreSinkVolume:
-    """Tests for _restore_sink_volume."""
-
-    def test_none_state_is_noop(self) -> None:
-        """None state → does nothing, no pactl call."""
-        with patch("python_pkg.wake_alarm._alarm.shutil.which") as mock_which:
-            _restore_sink_volume(None)
-            mock_which.assert_not_called()
-
-    def test_no_pactl_returns_silently(self) -> None:
-        """State present but pactl missing → no raise, no call."""
+        """No pactl on PATH → returns None without touching audio."""
         with (
             patch("python_pkg.wake_alarm._alarm.shutil.which", return_value=None),
             patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
         ):
-            _restore_sink_volume(("sink", "42%", False))
+            assert _activate_alarm_audio() is None
             mock_run.assert_not_called()
 
-    def test_restores_volume_and_mute(self) -> None:
-        """Calls set-sink-volume and set-sink-mute with captured values."""
+    def test_activates_and_returns_old_default(self) -> None:
+        """Sink present → routes audio there and returns prior default sink."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._alarm_sink_present",
+                return_value=True,
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._current_default_sink",
+                return_value="jbl_sink",
+            ),
+            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
+        ):
+            result = _activate_alarm_audio()
+        assert result == "jbl_sink"
+        cmds = [call.args[0] for call in mock_run.call_args_list]
+        from python_pkg.wake_alarm._constants import (
+            ALARM_AUDIO_CARD,
+            ALARM_AUDIO_PROFILE,
+            ALARM_AUDIO_SINK,
+        )
+
+        assert [
+            "/usr/bin/pactl",
+            "set-card-profile",
+            ALARM_AUDIO_CARD,
+            ALARM_AUDIO_PROFILE,
+        ] in cmds
+        assert ["/usr/bin/pactl", "set-default-sink", ALARM_AUDIO_SINK] in cmds
+
+    def test_returns_none_when_sink_never_appears(self) -> None:
+        """Sink never shows up → returns None after polling (no raise)."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._alarm_sink_present",
+                return_value=False,
+            ),
+            patch("python_pkg.wake_alarm._alarm.time.sleep") as mock_sleep,
+            patch("python_pkg.wake_alarm._alarm.subprocess.run"),
+        ):
+            assert _activate_alarm_audio() is None
+            mock_sleep.assert_called()
+
+    def test_waits_then_succeeds(self) -> None:
+        """Sink absent then present → sleeps once, then routes audio."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm.shutil.which",
+                return_value="/usr/bin/pactl",
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._alarm_sink_present",
+                side_effect=[False, True],
+            ),
+            patch(
+                "python_pkg.wake_alarm._alarm._current_default_sink",
+                return_value="old",
+            ),
+            patch("python_pkg.wake_alarm._alarm.time.sleep") as mock_sleep,
+            patch("python_pkg.wake_alarm._alarm.subprocess.run"),
+        ):
+            assert _activate_alarm_audio() == "old"
+            mock_sleep.assert_called_once()
+
+
+class TestRestoreAlarmAudio:
+    """Tests for _restore_alarm_audio."""
+
+    def test_none_is_noop(self) -> None:
+        """None default → does nothing, no pactl lookup."""
+        with patch("python_pkg.wake_alarm._alarm.shutil.which") as mock_which:
+            _restore_alarm_audio(None)
+            mock_which.assert_not_called()
+
+    def test_no_pactl_returns_silently(self) -> None:
+        """Default present but pactl missing → no raise, no run."""
+        with (
+            patch("python_pkg.wake_alarm._alarm.shutil.which", return_value=None),
+            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
+        ):
+            _restore_alarm_audio("jbl_sink")
+            mock_run.assert_not_called()
+
+    def test_restores_default_sink(self) -> None:
+        """Calls set-default-sink with the captured prior default."""
         with (
             patch(
                 "python_pkg.wake_alarm._alarm.shutil.which",
@@ -1105,24 +1131,9 @@ class TestRestoreSinkVolume:
             ),
             patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
         ):
-            _restore_sink_volume(("sink", "42%", True))
+            _restore_alarm_audio("jbl_sink")
         cmds = [call.args[0] for call in mock_run.call_args_list]
-        assert ["/usr/bin/pactl", "set-sink-volume", "sink", "42%"] in cmds
-        assert ["/usr/bin/pactl", "set-sink-mute", "sink", "1"] in cmds
-
-    def test_oserror_during_restore_is_swallowed(self) -> None:
-        """OSError during restore → no raise."""
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value="/usr/bin/pactl",
-            ),
-            patch(
-                "python_pkg.wake_alarm._alarm.subprocess.run",
-                side_effect=OSError("boom"),
-            ),
-        ):
-            _restore_sink_volume(("sink", "50%", False))  # must not raise
+        assert ["/usr/bin/pactl", "set-default-sink", "jbl_sink"] in cmds
 
 
 class TestParseArgs:

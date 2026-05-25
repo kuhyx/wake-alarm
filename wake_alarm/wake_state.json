@@ -1,6 +1,6 @@
 {
-  "date": "2026-05-23",
-  "dismissed_at": null,
-  "skip_workout": false,
-  "hmac": "17ae4173304d5f4b7c2376df2326162ae3bc4dfcf3a38ccb6f0647c81f61b5fa"
+  "date": "2026-05-25",
+  "dismissed_at": "2026-05-25T10:33:09.098156+00:00",
+  "skip_workout": true,
+  "hmac": "49ae99880405c6e3f0b4948b07d398980e223a91d33dc7d0c7f0f9254463fa92"
 }

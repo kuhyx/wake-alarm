@@ -38,6 +38,20 @@ WAKE_STATE_FILE: Path = Path(__file__).resolve().parent / "wake_state.json"
 # rtcwake binary path
 RTCWAKE_BIN: str = "/usr/sbin/rtcwake"
 
+# Alarm audio output (machine-specific, empirically verified 2026-05-25).
+# At wake time the Bluetooth speaker is disconnected and PipeWire only has the
+# auto_null sink, so the alarm is silent unless we activate a real output. The
+# only audible always-present output on this machine is the G27Q monitor's
+# built-in speaker on the NVidia GPU's HDMI audio. WirePlumber leaves the card
+# profile "off", so the alarm must force the profile on and wait for the sink.
+ALARM_AUDIO_CARD: str = "alsa_card.pci-0000_01_00.1"
+ALARM_AUDIO_PROFILE: str = "output:hdmi-stereo"
+ALARM_AUDIO_SINK: str = "alsa_output.pci-0000_01_00.1.hdmi-stereo"
+# Seconds to wait for the HDMI sink to appear after forcing the profile on.
+ALARM_AUDIO_SINK_WAIT_SECONDS: float = 6.0
+# Poll interval while waiting for the sink.
+ALARM_AUDIO_SINK_POLL_SECONDS: float = 0.5
+
 # TP-Link Tapo P110 smart-plug config file (JSON).
 # Create with mode 0600 and these keys: host, email, password.
 # Example contents: a JSON object mapping host -> "192.168.x.x", email ->

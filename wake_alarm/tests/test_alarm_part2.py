@@ -58,8 +58,8 @@ def _block_extra_devices() -> Generator[MagicMock]:
         patch("python_pkg.wake_alarm._alarm._set_max_brightness"),
         patch("python_pkg.wake_alarm._alarm._wake_display"),
         patch("python_pkg.wake_alarm._alarm._warn_if_no_real_sink"),
-        patch("python_pkg.wake_alarm._alarm._max_sink_volume", return_value=None),
-        patch("python_pkg.wake_alarm._alarm._restore_sink_volume"),
+        patch("python_pkg.wake_alarm._alarm._activate_alarm_audio", return_value=None),
+        patch("python_pkg.wake_alarm._alarm._restore_alarm_audio"),
         patch("python_pkg.wake_alarm._alarm.turn_on_plug"),
         patch("python_pkg.wake_alarm._alarm.turn_off_plug"),
     ):
@@ -160,39 +160,61 @@ class TestWakeAlarmDismiss:
         assert alarm.dismissed is False
         alarm._stop_beep.set()
 
-    def test_dismiss_window_expired(
+    def test_skip_window_expired_keeps_alarm_running(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Window expiry saves state with no skip."""
+        """Skip-window expiry denies the skip but does NOT stop the alarm."""
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
 
         with patch(
             "python_pkg.wake_alarm._alarm.save_wake_state",
         ) as mock_save:
-            alarm._on_dismiss_window_expired()
+            alarm._on_skip_window_expired()
 
+        # Alarm stays active and audible; only the skip reward is gone.
+        assert alarm._skip_earnable is False
+        assert alarm._active is True
         assert alarm.dismissed is False
-        mock_save.assert_called_once_with(
-            dismissed_at=None,
-            skip_workout=False,
-        )
+        assert not alarm._stop_beep.is_set()
+        mock_save.assert_not_called()
+        alarm._info_label.configure.assert_called()
         alarm._stop_beep.set()
 
-    def test_dismiss_window_expired_noop_if_not_active(
+    def test_skip_window_expired_noop_if_not_active(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
         """Expiry is a no-op if alarm is no longer active."""
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
         alarm._active = False
+
+        alarm._on_skip_window_expired()
+
+        # skip_earnable stays at its initial True (method returned early).
+        assert alarm._skip_earnable is True
+        alarm._stop_beep.set()
+
+    def test_dismiss_after_skip_window_earns_no_skip(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """Typing the code after the skip window stops the alarm w/o a skip."""
+        alarm = WakeAlarm(demo_mode=True)
+        alarm._skip_earnable = False
+        code = alarm._current_code
+        mock_entry = mock_tk_module.Entry.return_value
+        mock_entry.get.return_value = code
 
         with patch(
             "python_pkg.wake_alarm._alarm.save_wake_state",
         ) as mock_save:
-            alarm._on_dismiss_window_expired()
+            alarm._on_submit()
 
-        mock_save.assert_not_called()
+        assert alarm.dismissed is True
+        assert mock_save.call_args[1]["skip_workout"] is False
         alarm._stop_beep.set()
 
 
@@ -312,14 +334,15 @@ class TestBeepLoop:
         alarm._stop_beep.set()
 
 
-class TestCloseAndFallback:
-    """Tests for close and fallback scheduling."""
+class TestClose:
+    """Tests for the alarm close path."""
 
     def test_close_stops_beep_and_destroys(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
         """_close sets stop event and destroys root."""
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
         alarm._close()
         assert alarm._stop_beep.is_set()
@@ -330,32 +353,26 @@ class TestCloseAndFallback:
         mock_tk_module: MagicMock,
     ) -> None:
         """_close calls _restore_fans with the saved fan state."""
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
         alarm._fan_state = True
         with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
             alarm._close()
         mock_restore.assert_called_once_with(active=True)
 
-    def test_close_and_schedule_fallback(
+    def test_close_restores_audio(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """_close_and_schedule_fallback destroys root."""
+        """_close restores the default sink captured at activation."""
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
-        alarm._close_and_schedule_fallback()
-        alarm.root.destroy.assert_called()
-        alarm._stop_beep.set()
-
-    def test_close_and_schedule_fallback_restores_fans(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """_close_and_schedule_fallback calls _restore_fans with the saved state."""
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._fan_state = True
-        with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
-            alarm._close_and_schedule_fallback()
-        mock_restore.assert_called_once_with(active=True)
+        alarm._audio_restore = "jbl_sink"
+        with patch(
+            "python_pkg.wake_alarm._alarm._restore_alarm_audio",
+        ) as mock_restore:
+            alarm._close()
+        mock_restore.assert_called_once_with("jbl_sink")
         alarm._stop_beep.set()
 
 
@@ -442,25 +459,22 @@ class TestDismissWithoutSkip:
         alarm._stop_beep.set()
 
 
-class TestDismissWindowExpiredWidgets:
-    """Tests for widget cleanup during dismiss window expiry."""
+class TestSkipWindowExpiredMessage:
+    """Tests for the on-screen message when the skip window expires."""
 
-    def test_expired_creates_label(
+    def test_expired_updates_status_label(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Expiry creates a 'Too late' label and destroys children."""
+        """Expiry updates the status label instead of closing the alarm."""
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
-        mock_widget = MagicMock()
-        alarm._container.winfo_children.return_value = [mock_widget]
 
-        with patch(
-            "python_pkg.wake_alarm._alarm.save_wake_state",
-        ):
-            alarm._on_dismiss_window_expired()
+        alarm._on_skip_window_expired()
 
-        mock_widget.destroy.assert_called_once()
-        mock_tk_module.Label.assert_called()
+        alarm._status_label.configure.assert_called_with(
+            text="No workout skip today.",
+        )
         alarm._stop_beep.set()
 
 
@@ -544,28 +558,45 @@ class TestRunMethod:
 class TestUpdateTimerActive:
     """Tests for timer update when alarm is active."""
 
-    def test_update_timer_shows_remaining(
+    def test_update_timer_shows_skip_window(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Timer update shows remaining time when not dismissed."""
+        """While the skip is earnable, the timer shows the skip-window count."""
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
         alarm._update_timer()
-        alarm._timer_label.configure.assert_called()
+        text = alarm._timer_label.configure.call_args[1]["text"]
+        assert text.startswith("Skip window:")
         alarm._stop_beep.set()
 
-    def test_update_timer_stops_at_zero(
+    def test_update_timer_shows_prompt_after_window(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Timer stops scheduling when remaining time reaches zero."""
+        """After the window the timer shows the silence prompt and keeps going."""
         import time as time_mod
 
         alarm = WakeAlarm(demo_mode=True)
-        # Set alarm start far in the past so remaining = 0
+        # Far in the past so remaining == 0 -> the else branch.
         alarm._alarm_start = time_mod.monotonic() - 60 * 60
+        alarm.root.after.reset_mock()
         alarm._update_timer()
-        # root.after should NOT be called for re-scheduling
-        # (configure is still called to show 00:00)
-        alarm._timer_label.configure.assert_called()
+        text = alarm._timer_label.configure.call_args[1]["text"]
+        assert "type the code" in text
+        # The alarm keeps nagging: it always reschedules while active.
+        alarm.root.after.assert_called_once()
+        alarm._stop_beep.set()
+
+    def test_update_timer_noop_when_not_active(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """Timer update is a no-op once the alarm is no longer active."""
+        del mock_tk_module
+        alarm = WakeAlarm(demo_mode=True)
+        alarm._active = False
+        alarm._timer_label.configure.reset_mock()
+        alarm._update_timer()
+        alarm._timer_label.configure.assert_not_called()
         alarm._stop_beep.set()
