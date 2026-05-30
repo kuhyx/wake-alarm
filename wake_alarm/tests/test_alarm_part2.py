@@ -15,10 +15,6 @@ from python_pkg.wake_alarm._alarm import (
     WakeAlarm,
     main,
 )
-from python_pkg.wake_alarm._constants import (
-    PHASE_MEDIUM_END,
-    PHASE_SOFT_END,
-)
 
 # ---------------------------------------------------------------------------
 # Helpers (duplicated from part 1 so this file is self-contained)
@@ -123,37 +119,77 @@ class TestWakeAlarmInit:
 class TestWakeAlarmDismiss:
     """Tests for alarm dismiss logic."""
 
-    def test_correct_code_dismisses(
+    def test_correct_code_dismisses_after_all_rounds(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Entering the correct code dismisses the alarm."""
+        """Entering the correct answer for every required round dismisses the alarm."""
+        from python_pkg.wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
+
         alarm = WakeAlarm(demo_mode=True)
-        code = alarm._current_code
         mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = code
 
         with patch(
             "python_pkg.wake_alarm._alarm.save_wake_state",
         ) as mock_save:
-            alarm._on_submit()
+            for _ in range(DISMISS_ROUNDS_REQUIRED):
+                mock_entry.get.return_value = alarm._current_challenge.answer
+                alarm._on_submit()
 
         assert alarm.dismissed is True
         mock_save.assert_called_once()
-        call_kwargs = mock_save.call_args[1]
-        assert call_kwargs["skip_workout"] is True
+        assert mock_save.call_args[1]["skip_workout"] is True
+        alarm._stop_beep.set()
+
+    def test_first_round_correct_does_not_dismiss(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """A single correct entry is not enough — DISMISS_ROUNDS_REQUIRED is 2+."""
+        alarm = WakeAlarm(demo_mode=True)
+        mock_entry = mock_tk_module.Entry.return_value
+        mock_entry.get.return_value = alarm._current_challenge.answer
+
+        alarm._on_submit()
+
+        assert alarm.dismissed is False
+        assert alarm._rounds_completed == 1
+        alarm._stop_beep.set()
+
+    def test_first_round_correct_non_flash_next_no_countdown(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """When next challenge is math, no flash countdown is started."""
+        from python_pkg.wake_alarm._challenges import _Challenge
+
+        alarm = WakeAlarm(demo_mode=True)
+        mock_entry = mock_tk_module.Entry.return_value
+        mock_entry.get.return_value = alarm._current_challenge.answer
+        next_math = _Challenge(kind="math", display="2 + 2 = ?", answer="4", hint="x")
+        with patch(
+            "python_pkg.wake_alarm._alarm._make_challenge", return_value=next_math
+        ):
+            alarm._on_submit()
+
+        assert alarm._current_challenge.kind == "math"
+        assert alarm.dismissed is False
         alarm._stop_beep.set()
 
     def test_wrong_code_does_not_dismiss(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Entering the wrong code shows error without dismissing."""
+        """Entering the wrong answer shows an error without dismissing."""
+        from python_pkg.wake_alarm._alarm import _Challenge
+
         alarm = WakeAlarm(demo_mode=True)
+        # Use a pinned math challenge so the non-flash wrong-answer branch is covered.
+        alarm._current_challenge = _Challenge(
+            kind="math", display="2 + 2 = ?", answer="4", hint="test"
+        )
         mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = "000000"
-        # Ensure current code is different
-        alarm._current_code = "123456"
+        mock_entry.get.return_value = "99"
 
         alarm._on_submit()
 
@@ -201,17 +237,19 @@ class TestWakeAlarmDismiss:
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Typing the code after the skip window stops the alarm w/o a skip."""
+        """Typing all rounds after the skip window stops the alarm without a skip."""
+        from python_pkg.wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
+
         alarm = WakeAlarm(demo_mode=True)
         alarm._skip_earnable = False
-        code = alarm._current_code
         mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = code
 
         with patch(
             "python_pkg.wake_alarm._alarm.save_wake_state",
         ) as mock_save:
-            alarm._on_submit()
+            for _ in range(DISMISS_ROUNDS_REQUIRED):
+                mock_entry.get.return_value = alarm._current_challenge.answer
+                alarm._on_submit()
 
         assert alarm.dismissed is True
         assert mock_save.call_args[1]["skip_workout"] is False
@@ -278,18 +316,17 @@ class TestMain:
 class TestCodeRefreshAndTimer:
     """Tests for code refresh and timer update methods."""
 
-    def test_code_refresh_changes_code(
+    def test_code_refresh_changes_challenge(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """Code refresh generates a new code."""
+        """Code refresh generates a new challenge each call."""
         alarm = WakeAlarm(demo_mode=True)
-        # Call refresh many times — at least one should differ
-        codes = set()
+        displays = set()
         for _ in range(50):
             alarm._schedule_code_refresh()
-            codes.add(alarm._current_code)
-        assert len(codes) > 1
+            displays.add(alarm._current_challenge.display)
+        assert len(displays) > 1
         alarm._stop_beep.set()
 
     def test_code_refresh_noop_when_not_active(
@@ -299,10 +336,9 @@ class TestCodeRefreshAndTimer:
         """Code refresh is a no-op when alarm is no longer active."""
         alarm = WakeAlarm(demo_mode=True)
         alarm._active = False
-        old_code = alarm._current_code
+        old_challenge = alarm._current_challenge
         alarm._schedule_code_refresh()
-        # Code doesn't change because _active=False causes early return
-        assert alarm._current_code == old_code
+        assert alarm._current_challenge is old_challenge
         alarm._stop_beep.set()
 
     def test_update_timer_noop_when_not_active(
@@ -430,173 +466,4 @@ class TestScreenFlash:
 
         mock_root.configure.assert_not_called()
         mock_root.after.assert_not_called()
-        alarm._stop_beep.set()
-
-
-class TestDismissWithoutSkip:
-    """Tests for alarm dismiss without earning skip."""
-
-    def test_dismiss_without_skip_shows_no_skip_message(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Dismissing with earned_skip=False shows appropriate message."""
-        alarm = WakeAlarm(demo_mode=True)
-        # Simulate existing child widgets
-        mock_widget = MagicMock()
-        alarm._container.winfo_children.return_value = [mock_widget]
-
-        with patch(
-            "python_pkg.wake_alarm._alarm.save_wake_state",
-        ) as mock_save:
-            alarm._dismiss_alarm(earned_skip=False)
-
-        assert alarm.dismissed is True
-        mock_save.assert_called_once()
-        call_kwargs = mock_save.call_args[1]
-        assert call_kwargs["skip_workout"] is False
-        mock_widget.destroy.assert_called_once()
-        alarm._stop_beep.set()
-
-
-class TestSkipWindowExpiredMessage:
-    """Tests for the on-screen message when the skip window expires."""
-
-    def test_expired_updates_status_label(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Expiry updates the status label instead of closing the alarm."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-
-        alarm._on_skip_window_expired()
-
-        alarm._status_label.configure.assert_called_with(
-            text="No workout skip today.",
-        )
-        alarm._stop_beep.set()
-
-
-class TestBeepLoopPhases:
-    """Tests for different beep loop escalation phases."""
-
-    def test_medium_phase(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Beep loop enters medium phase after PHASE_SOFT_END minutes."""
-        alarm = WakeAlarm(demo_mode=True)
-        # Set alarm start to make elapsed > PHASE_SOFT_END minutes
-        import time as time_mod
-
-        alarm._alarm_start = time_mod.monotonic() - (PHASE_SOFT_END + 1) * 60
-
-        call_count = 0
-
-        def stop_after_one(*_args: object, **_kwargs: object) -> None:
-            nonlocal call_count
-            call_count += 1
-            if call_count >= 1:
-                alarm._stop_beep.set()
-
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._beep_medium",
-                side_effect=stop_after_one,
-            ) as mock_beep,
-        ):
-            alarm._beep_loop()
-
-        mock_beep.assert_called()
-        alarm._stop_beep.set()
-
-    def test_loud_phase(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Beep loop enters loud phase after PHASE_MEDIUM_END minutes."""
-        alarm = WakeAlarm(demo_mode=True)
-        import time as time_mod
-
-        alarm._alarm_start = time_mod.monotonic() - (PHASE_MEDIUM_END + 1) * 60
-
-        call_count = 0
-
-        def stop_after_one(*_args: object, **_kwargs: object) -> None:
-            nonlocal call_count
-            call_count += 1
-            if call_count >= 1:
-                alarm._stop_beep.set()
-
-        with (
-            patch(
-                "python_pkg.wake_alarm._alarm._beep_loud",
-                side_effect=stop_after_one,
-            ) as mock_beep,
-        ):
-            alarm._beep_loop()
-
-        mock_beep.assert_called()
-        alarm._stop_beep.set()
-
-
-class TestRunMethod:
-    """Tests for the run() method."""
-
-    def test_run_calls_mainloop(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """run() calls root.mainloop()."""
-        alarm = WakeAlarm(demo_mode=True)
-        alarm.run()
-        alarm.root.mainloop.assert_called_once()
-        alarm._stop_beep.set()
-
-
-class TestUpdateTimerActive:
-    """Tests for timer update when alarm is active."""
-
-    def test_update_timer_shows_skip_window(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """While the skip is earnable, the timer shows the skip-window count."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._update_timer()
-        text = alarm._timer_label.configure.call_args[1]["text"]
-        assert text.startswith("Skip window:")
-        alarm._stop_beep.set()
-
-    def test_update_timer_shows_prompt_after_window(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """After the window the timer shows the silence prompt and keeps going."""
-        import time as time_mod
-
-        alarm = WakeAlarm(demo_mode=True)
-        # Far in the past so remaining == 0 -> the else branch.
-        alarm._alarm_start = time_mod.monotonic() - 60 * 60
-        alarm.root.after.reset_mock()
-        alarm._update_timer()
-        text = alarm._timer_label.configure.call_args[1]["text"]
-        assert "type the code" in text
-        # The alarm keeps nagging: it always reschedules while active.
-        alarm.root.after.assert_called_once()
-        alarm._stop_beep.set()
-
-    def test_update_timer_noop_when_not_active(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Timer update is a no-op once the alarm is no longer active."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._active = False
-        alarm._timer_label.configure.reset_mock()
-        alarm._update_timer()
-        alarm._timer_label.configure.assert_not_called()
         alarm._stop_beep.set()

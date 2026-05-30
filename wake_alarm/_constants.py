@@ -28,7 +28,13 @@ MEDIUM_BEEP_INTERVAL: float = 5.0
 LOUD_TOGGLE_INTERVAL: float = 2.0
 
 # Dismiss challenge: length of the random code
-DISMISS_CODE_LENGTH: int = 6
+DISMISS_CODE_LENGTH: int = 8
+# Number of correct code entries required to dismiss the alarm.
+# Requiring more than one round forces the user to stay awake long enough
+# to actually read and type multiple independent codes.
+DISMISS_ROUNDS_REQUIRED: int = 2
+# Seconds the code is visible before being hidden in a flash challenge.
+DISMISS_FLASH_SECONDS: int = 4
 # How often the dismiss code refreshes (seconds)
 DISMISS_CODE_REFRESH_SECONDS: int = 30
 
