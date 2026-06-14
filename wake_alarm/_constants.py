@@ -54,9 +54,22 @@ ALARM_AUDIO_CARD: str = "alsa_card.pci-0000_01_00.1"
 ALARM_AUDIO_PROFILE: str = "output:hdmi-stereo"
 ALARM_AUDIO_SINK: str = "alsa_output.pci-0000_01_00.1.hdmi-stereo"
 # Seconds to wait for the HDMI sink to appear after forcing the profile on.
-ALARM_AUDIO_SINK_WAIT_SECONDS: float = 6.0
+# The G27Q takes up to ~15 s to power on from a hard-off state and enumerate
+# its HDMI audio; 6 s was too short when the monitor was physically off.
+ALARM_AUDIO_SINK_WAIT_SECONDS: float = 20.0
 # Poll interval while waiting for the sink.
 ALARM_AUDIO_SINK_POLL_SECONDS: float = 0.5
+# Seconds to pause after waking the display (xset dpms force on) before
+# attempting audio setup.  Gives the G27Q time to come out of power-off
+# and re-enumerate its HDMI audio sink under PipeWire.
+DISPLAY_WAKE_WAIT_SECONDS: float = 5.0
+
+# Path to the workout log written by the companion screen_locker package.
+# Dict keyed by YYYY-MM-DD date strings; presence of today's key means the
+# workout was already completed and the alarm should not fire.
+WORKOUT_LOG_FILE: Path = (
+    Path.home() / "screen-locker" / "screen_locker" / "workout_log.json"
+)
 
 # TP-Link Tapo P110 smart-plug config file (JSON).
 # Create with mode 0600 and these keys: host, email, password.

@@ -9,15 +9,16 @@ workout-free day via HMAC-signed wake state.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
-import shutil
-import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
 
+from python_pkg.shared.logging_setup import configure_logging
+from python_pkg.wake_alarm._alarm_display import _restore_display, _wake_display
 from python_pkg.wake_alarm._audio import (
     _activate_alarm_audio,
     _beep_loud,
@@ -40,6 +41,7 @@ from python_pkg.wake_alarm._constants import (
     DISMISS_FLASH_SECONDS,
     DISMISS_ROUNDS_REQUIRED,
     DISMISS_WINDOW_MINUTES,
+    DISPLAY_WAKE_WAIT_SECONDS,
     LOUD_TOGGLE_INTERVAL,
     MEDIUM_BEEP_INTERVAL,
     PHASE_MEDIUM_END,
@@ -50,6 +52,7 @@ from python_pkg.wake_alarm._smart_plug import turn_off_plug, turn_on_plug
 from python_pkg.wake_alarm._state import (
     save_wake_state,
     was_alarm_dismissed_today,
+    was_workout_logged_today,
 )
 
 _logger = logging.getLogger(__name__)
@@ -60,31 +63,37 @@ def _is_alarm_day() -> bool:
     return datetime.now(tz=timezone.utc).weekday() in ALARM_DAYS
 
 
-def _wake_display() -> None:
-    """Force the display on and disable screensaver during alarm."""
-    xset = shutil.which("xset")
-    if xset is None:
-        _logger.warning("xset not on PATH; skipping display wake")
-        return
-    for cmd in (
-        [xset, "dpms", "force", "on"],
-        [xset, "s", "off"],
-    ):
-        subprocess.run(cmd, check=False, capture_output=True, timeout=5)
+@dataclass
+class _AlarmView:
+    """The Tk widgets that make up the alarm's dismiss-challenge screen."""
+
+    container: tk.Frame
+    title_label: tk.Label
+    round_label: tk.Label
+    info_label: tk.Label
+    code_label: tk.Label
+    entry: tk.Entry
+    status_label: tk.Label
+    timer_label: tk.Label
 
 
-def _restore_display() -> None:
-    """Re-enable screensaver after the alarm ends."""
-    xset = shutil.which("xset")
-    if xset is None:
-        _logger.warning("xset not on PATH; skipping display restore")
-        return
-    subprocess.run(
-        [xset, "s", "on"],
-        check=False,
-        capture_output=True,
-        timeout=5,
-    )
+@dataclass
+class _AlarmProgress:
+    """Mutable dismiss-challenge progress state."""
+
+    current_challenge: _Challenge
+    skip_earnable: bool = True
+    rounds_completed: int = 0
+    flash_remaining: int = 0
+    flash_on: bool = False
+
+
+@dataclass
+class _AlarmHardware:
+    """Hardware state captured at alarm start, restored when it closes."""
+
+    fan_state: bool
+    audio_restore: str | None
 
 
 class WakeAlarm:
@@ -123,92 +132,103 @@ class WakeAlarm:
         self.root.focus_force()
         self.root.update_idletasks()
 
-        self._current_challenge: _Challenge = _make_challenge()
-        self._skip_earnable: bool = True
-        self._rounds_completed: int = 0
-        self._flash_remaining: int = 0
-        self._build_ui()
-        if self._current_challenge.kind == "flash":
+        self._progress = _AlarmProgress(current_challenge=_make_challenge())
+        self._view = self._build_ui()
+        self._update_timer()
+        if self._progress.current_challenge.kind == "flash":
             self._start_flash_countdown()
         self._schedule_code_refresh()
         self._schedule_skip_window_close()
         self._start_beep_thread()
-        self._fan_state: bool = _max_fans()
-        self._audio_restore: str | None = _activate_alarm_audio()
-        self._flash_on: bool = False
+        self._hardware = _AlarmHardware(
+            fan_state=_max_fans(),
+            audio_restore=_activate_alarm_audio(),
+        )
         self._start_screen_flash()
 
-    def _build_ui(self) -> None:
-        """Build the dismiss challenge UI."""
-        self._container = tk.Frame(self.root, bg="#1a1a1a")
-        self._container.place(relx=0.5, rely=0.5, anchor="center")
+    def _build_ui(self) -> _AlarmView:
+        """Build the dismiss-challenge UI and return its widgets as a view."""
+        challenge = self._progress.current_challenge
 
-        self._title_label = tk.Label(
-            self._container,
+        container = tk.Frame(self.root, bg="#1a1a1a")
+        container.place(relx=0.5, rely=0.5, anchor="center")
+
+        title_label = tk.Label(
+            container,
             text="WAKE UP!",
             font=("Arial", 48, "bold"),
             fg="#ff4444",
             bg="#1a1a1a",
         )
-        self._title_label.pack(pady=20)
+        title_label.pack(pady=20)
 
-        self._round_label = tk.Label(
-            self._container,
+        round_label = tk.Label(
+            container,
             text=f"Round 1 / {DISMISS_ROUNDS_REQUIRED}",
             font=("Arial", 24, "bold"),
             fg="#ffaa00",
             bg="#1a1a1a",
         )
-        self._round_label.pack(pady=5)
+        round_label.pack(pady=5)
 
-        self._info_label = tk.Label(
-            self._container,
-            text=self._current_challenge.hint,
+        info_label = tk.Label(
+            container,
+            text=challenge.hint,
             font=("Arial", 18),
             fg="white",
             bg="#1a1a1a",
         )
-        self._info_label.pack(pady=10)
+        info_label.pack(pady=10)
 
         # Math and sort use a smaller font because their display text is wider.
-        code_font_size = 48 if self._current_challenge.kind in ("math", "sort") else 72
-        self._code_label = tk.Label(
-            self._container,
-            text=self._current_challenge.display,
+        code_font_size = 48 if challenge.kind in ("math", "sort") else 72
+        code_label = tk.Label(
+            container,
+            text=challenge.display,
             font=("Courier", code_font_size, "bold"),
             fg="#00ff00",
             bg="#1a1a1a",
         )
-        self._code_label.pack(pady=30)
+        code_label.pack(pady=30)
 
-        self._entry = tk.Entry(
-            self._container,
+        entry = tk.Entry(
+            container,
             font=("Courier", 36),
             justify="center",
             width=12,
         )
-        self._entry.pack(pady=10)
-        self._entry.focus_set()
-        self._entry.bind("<Return>", self._on_submit)
+        entry.pack(pady=10)
+        entry.focus_set()
+        entry.bind("<Return>", self._on_submit)
 
-        self._status_label = tk.Label(
-            self._container,
+        status_label = tk.Label(
+            container,
             text="",
             font=("Arial", 18),
             fg="#ff4444",
             bg="#1a1a1a",
         )
-        self._status_label.pack(pady=10)
+        status_label.pack(pady=10)
 
-        self._timer_label = tk.Label(
-            self._container,
+        timer_label = tk.Label(
+            container,
             text="",
             font=("Arial", 14),
             fg="#aaaaaa",
             bg="#1a1a1a",
         )
-        self._timer_label.pack(pady=5)
-        self._update_timer()
+        timer_label.pack(pady=5)
+
+        return _AlarmView(
+            container=container,
+            title_label=title_label,
+            round_label=round_label,
+            info_label=info_label,
+            code_label=code_label,
+            entry=entry,
+            status_label=status_label,
+            timer_label=timer_label,
+        )
 
     def _on_submit(self, _event: object = None) -> None:
         """Handle challenge submission.
@@ -218,57 +238,57 @@ class WakeAlarm:
         correct round generates a new random challenge so the user must stay
         awake and re-engage each time.
         """
-        entered = self._entry.get().strip().upper()
-        if entered != self._current_challenge.answer:
-            self._status_label.configure(text="Wrong! Try again.")
-            self._entry.delete(0, tk.END)
-            if self._current_challenge.kind == "flash":
-                self._code_label.configure(
-                    text=self._current_challenge.display,
+        entered = self._view.entry.get().strip().upper()
+        if entered != self._progress.current_challenge.answer:
+            self._view.status_label.configure(text="Wrong! Try again.")
+            self._view.entry.delete(0, tk.END)
+            if self._progress.current_challenge.kind == "flash":
+                self._view.code_label.configure(
+                    text=self._progress.current_challenge.display,
                     fg="#00ff00",
                 )
                 self._start_flash_countdown()
             return
-        self._rounds_completed += 1
-        if self._rounds_completed >= DISMISS_ROUNDS_REQUIRED:
-            self._dismiss_alarm(earned_skip=self._skip_earnable)
+        self._progress.rounds_completed += 1
+        if self._progress.rounds_completed >= DISMISS_ROUNDS_REQUIRED:
+            self._dismiss_alarm(earned_skip=self._progress.skip_earnable)
             return
-        self._current_challenge = _make_challenge()
-        self._code_label.configure(
-            text=self._current_challenge.display,
+        self._progress.current_challenge = _make_challenge()
+        self._view.code_label.configure(
+            text=self._progress.current_challenge.display,
             fg="#00ff00",
         )
-        self._info_label.configure(text=self._current_challenge.hint)
-        self._entry.delete(0, tk.END)
-        next_round = self._rounds_completed + 1
-        self._round_label.configure(
+        self._view.info_label.configure(text=self._progress.current_challenge.hint)
+        self._view.entry.delete(0, tk.END)
+        next_round = self._progress.rounds_completed + 1
+        self._view.round_label.configure(
             text=f"Round {next_round} / {DISMISS_ROUNDS_REQUIRED}",
         )
-        self._status_label.configure(
-            text=f"Round {self._rounds_completed} done — keep going!",
+        self._view.status_label.configure(
+            text=f"Round {self._progress.rounds_completed} done — keep going!",
         )
-        if self._current_challenge.kind == "flash":
+        if self._progress.current_challenge.kind == "flash":
             self._start_flash_countdown()
 
     def _start_flash_countdown(self) -> None:
         """Begin the flash countdown: show code then hide it."""
-        self._flash_remaining = DISMISS_FLASH_SECONDS
+        self._progress.flash_remaining = DISMISS_FLASH_SECONDS
         self._flash_tick()
 
     def _flash_tick(self) -> None:
         """Decrement flash countdown; replace the displayed code with placeholders."""
         if not self._active:
             return
-        if self._flash_remaining > 0:
-            self._status_label.configure(
-                text=f"Memorise! Hiding in {self._flash_remaining}s…",
+        if self._progress.flash_remaining > 0:
+            self._view.status_label.configure(
+                text=f"Memorise! Hiding in {self._progress.flash_remaining}s…",
             )
-            self._flash_remaining -= 1
+            self._progress.flash_remaining -= 1
             self.root.after(1000, self._flash_tick)
         else:
-            hidden = "?" * len(self._current_challenge.display)
-            self._code_label.configure(text=hidden, fg="#555555")
-            self._status_label.configure(text="Now type the code from memory!")
+            hidden = "?" * len(self._progress.current_challenge.display)
+            self._view.code_label.configure(text=hidden, fg="#555555")
+            self._view.status_label.configure(text="Now type the code from memory!")
 
     def _dismiss_alarm(self, *, earned_skip: bool) -> None:
         """Dismiss the alarm and save state."""
@@ -278,7 +298,7 @@ class WakeAlarm:
         now_iso = datetime.now(tz=timezone.utc).isoformat()
         save_wake_state(dismissed_at=now_iso, skip_workout=earned_skip)
 
-        for widget in self._container.winfo_children():
+        for widget in self._view.container.winfo_children():
             widget.destroy()
 
         msg = (
@@ -289,7 +309,7 @@ class WakeAlarm:
         color = "#00ff00" if earned_skip else "#ffaa00"
 
         tk.Label(
-            self._container,
+            self._view.container,
             text=msg,
             font=("Arial", 36, "bold"),
             fg=color,
@@ -301,8 +321,8 @@ class WakeAlarm:
     def _close(self) -> None:
         """Close the alarm window."""
         self._stop_beep.set()
-        _restore_fans(active=self._fan_state)
-        _restore_alarm_audio(self._audio_restore)
+        _restore_fans(active=self._hardware.fan_state)
+        _restore_alarm_audio(self._hardware.audio_restore)
         _restore_display()
         turn_off_plug()
         self.root.destroy()
@@ -315,14 +335,14 @@ class WakeAlarm:
         """
         if not self._active:
             return
-        self._current_challenge = _make_challenge()
-        self._code_label.configure(
-            text=self._current_challenge.display,
+        self._progress.current_challenge = _make_challenge()
+        self._view.code_label.configure(
+            text=self._progress.current_challenge.display,
             fg="#00ff00",
         )
-        self._info_label.configure(text=self._current_challenge.hint)
-        self._entry.delete(0, tk.END)
-        if self._current_challenge.kind == "flash":
+        self._view.info_label.configure(text=self._progress.current_challenge.hint)
+        self._view.entry.delete(0, tk.END)
+        if self._progress.current_challenge.kind == "flash":
             self._start_flash_countdown()
         ms = DISMISS_CODE_REFRESH_SECONDS * 1000 if not self.demo_mode else 10_000
         self.root.after(ms, self._schedule_code_refresh)
@@ -341,11 +361,11 @@ class WakeAlarm:
         """
         if not self._active:
             return
-        self._skip_earnable = False
-        self._info_label.configure(
+        self._progress.skip_earnable = False
+        self._view.info_label.configure(
             text="Skip window closed - type the code to stop the alarm",
         )
-        self._status_label.configure(text="No workout skip today.")
+        self._view.status_label.configure(text="No workout skip today.")
         _logger.info("Skip window expired - alarm continues until dismissed.")
 
     def _update_timer(self) -> None:
@@ -355,14 +375,14 @@ class WakeAlarm:
         elapsed = time.monotonic() - self._alarm_start
         window = DISMISS_WINDOW_MINUTES * 60 if not self.demo_mode else 30
         remaining = max(0, window - elapsed)
-        if self._skip_earnable and remaining > 0:
+        if self._progress.skip_earnable and remaining > 0:
             minutes = int(remaining) // 60
             seconds = int(remaining) % 60
-            self._timer_label.configure(
+            self._view.timer_label.configure(
                 text=f"Skip window: {minutes:02d}:{seconds:02d}",
             )
         else:
-            self._timer_label.configure(
+            self._view.timer_label.configure(
                 text="No skip available - type the code to stop the alarm",
             )
         self.root.after(1000, self._update_timer)
@@ -383,8 +403,8 @@ class WakeAlarm:
         """Alternate background colour every 750 ms (below seizure-risk 3 Hz)."""
         if not self._active:
             return
-        self.root.configure(bg="#ff0000" if self._flash_on else "#1a1a1a")
-        self._flash_on = not self._flash_on
+        self.root.configure(bg="#ff0000" if self._progress.flash_on else "#1a1a1a")
+        self._progress.flash_on = not self._progress.flash_on
         self.root.after(750, self._flash_step)
 
     def _beep_loop(self) -> None:
@@ -419,6 +439,9 @@ def _should_run_alarm() -> bool:
     if was_alarm_dismissed_today():
         _logger.info("Alarm already dismissed today. Exiting.")
         return False
+    if was_workout_logged_today():
+        _logger.info("Workout already logged today. Skipping alarm.")
+        return False
     return True
 
 
@@ -445,10 +468,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main() -> None:
     """Entry point for the wake alarm daemon."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    configure_logging()
 
     args = _parse_args(sys.argv[1:])
 
@@ -463,6 +483,10 @@ def main() -> None:
     )
     _warn_if_no_real_sink()
     _wake_display()
+    # Wait for the G27Q to power on and enumerate its HDMI audio sink.
+    # Without this delay the sink often isn't visible yet when _activate_alarm_audio
+    # runs, making the alarm silent when the monitor was physically off at wake time.
+    time.sleep(DISPLAY_WAKE_WAIT_SECONDS)
     _set_max_brightness()
     turn_on_plug()
     alarm = WakeAlarm(demo_mode=args.demo)

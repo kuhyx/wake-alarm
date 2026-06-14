@@ -15,9 +15,7 @@ if TYPE_CHECKING:
 
 from python_pkg.wake_alarm._alarm import (
     _is_alarm_day,
-    _restore_display,
     _should_run_alarm,
-    _wake_display,
 )
 from python_pkg.wake_alarm._audio import (
     _beep_loud,
@@ -249,51 +247,30 @@ class TestShouldRunAlarm:
                 "python_pkg.wake_alarm._alarm.was_alarm_dismissed_today",
                 return_value=False,
             ),
+            patch(
+                "python_pkg.wake_alarm._alarm.was_workout_logged_today",
+                return_value=False,
+            ),
         ):
             assert _should_run_alarm() is True
 
-
-class TestDisplayHelpers:
-    """Tests for _wake_display and _restore_display when xset is absent."""
-
-    def test_wake_display_skips_when_xset_missing(self) -> None:
-        """_wake_display does nothing when xset is not on PATH."""
+    def test_returns_false_when_workout_already_logged(self) -> None:
+        """Return False when workout was already logged today."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value=None,
+                "python_pkg.wake_alarm._alarm._is_alarm_day",
+                return_value=True,
             ),
-            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
-        ):
-            _wake_display()
-        mock_run.assert_not_called()
-
-    def test_wake_display_runs_xset_commands(self) -> None:
-        """_wake_display runs xset dpms force on + xset s off."""
-        with (
             patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value="/usr/bin/xset",
+                "python_pkg.wake_alarm._alarm.was_alarm_dismissed_today",
+                return_value=False,
             ),
-            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
-        ):
-            _wake_display()
-        assert mock_run.call_count == 2
-        call_args = [call[0][0] for call in mock_run.call_args_list]
-        assert ["/usr/bin/xset", "dpms", "force", "on"] in call_args
-        assert ["/usr/bin/xset", "s", "off"] in call_args
-
-    def test_restore_display_skips_when_xset_missing(self) -> None:
-        """_restore_display does nothing when xset is not on PATH."""
-        with (
             patch(
-                "python_pkg.wake_alarm._alarm.shutil.which",
-                return_value=None,
+                "python_pkg.wake_alarm._alarm.was_workout_logged_today",
+                return_value=True,
             ),
-            patch("python_pkg.wake_alarm._alarm.subprocess.run") as mock_run,
         ):
-            _restore_display()
-        mock_run.assert_not_called()
+            assert _should_run_alarm() is False
 
 
 class TestPlayOnExtraDevices:

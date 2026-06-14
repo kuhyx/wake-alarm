@@ -10,7 +10,7 @@ from python_pkg.shared.log_integrity import (
     compute_entry_hmac,
     verify_entry_hmac,
 )
-from python_pkg.wake_alarm._constants import WAKE_STATE_FILE
+from python_pkg.wake_alarm._constants import WAKE_STATE_FILE, WORKOUT_LOG_FILE
 
 _logger = logging.getLogger(__name__)
 
@@ -103,3 +103,26 @@ def was_alarm_dismissed_today() -> bool:
     if state is None:
         return False
     return state.get("dismissed_at") is not None
+
+
+def was_workout_logged_today() -> bool:
+    """Check if the workout was already logged today via the screen locker.
+
+    Reads the companion screen_locker workout_log.json.  The file is a
+    dict keyed by YYYY-MM-DD date strings; presence of today's key means
+    the workout was completed and the alarm is no longer needed.
+
+    Returns:
+        True if today's workout entry exists, False on any error or absence.
+    """
+    if not WORKOUT_LOG_FILE.exists():
+        return False
+    try:
+        with WORKOUT_LOG_FILE.open() as f:
+            log = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        _logger.warning("Cannot read workout log file %s", WORKOUT_LOG_FILE)
+        return False
+    if not isinstance(log, dict):
+        return False
+    return _today_str() in log

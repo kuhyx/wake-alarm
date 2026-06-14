@@ -89,7 +89,7 @@ else
 fi
 
 # 7. Install python-kasa (AUR) for TP-Link Tapo P110 smart-plug control
-echo "[7/7] Installing python-kasa (AUR)..."
+echo "[7/8] Installing python-kasa (AUR)..."
 if python -c 'import kasa' 2>/dev/null; then
     echo "  python-kasa already installed"
 elif command -v yay &>/dev/null; then
@@ -100,6 +100,28 @@ fi
 if [[ ! -f "$HOME/.config/wake_alarm/tapo.json" ]]; then
     echo "  NOTE: ~/.config/wake_alarm/tapo.json not found — smart-plug control is disabled."
     echo "        Create it (mode 0600) with keys: host, email, password."
+fi
+
+# 8. Install ddcutil for DDC/CI monitor power control
+# ddcutil lets the alarm force the G27Q on via DDC/CI even when the monitor
+# was physically powered off (power button), bypassing DPMS limitations.
+echo "[8/8] Installing ddcutil (DDC/CI monitor power control)..."
+if command -v ddcutil &>/dev/null; then
+    echo "  ddcutil already installed"
+else
+    sudo pacman -S --noconfirm ddcutil
+    echo "  ddcutil installed"
+fi
+# ddcutil needs access to /dev/i2c-* — add user to i2c group if it exists.
+if getent group i2c &>/dev/null; then
+    if ! id -nG "$USER" | grep -qw i2c; then
+        sudo usermod -aG i2c "$USER"
+        echo "  Added $USER to i2c group (re-login required for group to take effect)"
+    else
+        echo "  $USER already in i2c group"
+    fi
+else
+    echo "  i2c group not found — ddcutil will run via sudo"
 fi
 
 echo "=== Installation complete ==="

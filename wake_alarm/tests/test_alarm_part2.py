@@ -133,7 +133,7 @@ class TestWakeAlarmDismiss:
             "python_pkg.wake_alarm._alarm.save_wake_state",
         ) as mock_save:
             for _ in range(DISMISS_ROUNDS_REQUIRED):
-                mock_entry.get.return_value = alarm._current_challenge.answer
+                mock_entry.get.return_value = alarm._progress.current_challenge.answer
                 alarm._on_submit()
 
         assert alarm.dismissed is True
@@ -148,12 +148,12 @@ class TestWakeAlarmDismiss:
         """A single correct entry is not enough — DISMISS_ROUNDS_REQUIRED is 2+."""
         alarm = WakeAlarm(demo_mode=True)
         mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = alarm._current_challenge.answer
+        mock_entry.get.return_value = alarm._progress.current_challenge.answer
 
         alarm._on_submit()
 
         assert alarm.dismissed is False
-        assert alarm._rounds_completed == 1
+        assert alarm._progress.rounds_completed == 1
         alarm._stop_beep.set()
 
     def test_first_round_correct_non_flash_next_no_countdown(
@@ -165,14 +165,14 @@ class TestWakeAlarmDismiss:
 
         alarm = WakeAlarm(demo_mode=True)
         mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = alarm._current_challenge.answer
+        mock_entry.get.return_value = alarm._progress.current_challenge.answer
         next_math = _Challenge(kind="math", display="2 + 2 = ?", answer="4", hint="x")
         with patch(
             "python_pkg.wake_alarm._alarm._make_challenge", return_value=next_math
         ):
             alarm._on_submit()
 
-        assert alarm._current_challenge.kind == "math"
+        assert alarm._progress.current_challenge.kind == "math"
         assert alarm.dismissed is False
         alarm._stop_beep.set()
 
@@ -185,7 +185,7 @@ class TestWakeAlarmDismiss:
 
         alarm = WakeAlarm(demo_mode=True)
         # Use a pinned math challenge so the non-flash wrong-answer branch is covered.
-        alarm._current_challenge = _Challenge(
+        alarm._progress.current_challenge = _Challenge(
             kind="math", display="2 + 2 = ?", answer="4", hint="test"
         )
         mock_entry = mock_tk_module.Entry.return_value
@@ -210,12 +210,12 @@ class TestWakeAlarmDismiss:
             alarm._on_skip_window_expired()
 
         # Alarm stays active and audible; only the skip reward is gone.
-        assert alarm._skip_earnable is False
+        assert alarm._progress.skip_earnable is False
         assert alarm._active is True
         assert alarm.dismissed is False
         assert not alarm._stop_beep.is_set()
         mock_save.assert_not_called()
-        alarm._info_label.configure.assert_called()
+        alarm._view.info_label.configure.assert_called()
         alarm._stop_beep.set()
 
     def test_skip_window_expired_noop_if_not_active(
@@ -230,7 +230,7 @@ class TestWakeAlarmDismiss:
         alarm._on_skip_window_expired()
 
         # skip_earnable stays at its initial True (method returned early).
-        assert alarm._skip_earnable is True
+        assert alarm._progress.skip_earnable is True
         alarm._stop_beep.set()
 
     def test_dismiss_after_skip_window_earns_no_skip(
@@ -241,14 +241,14 @@ class TestWakeAlarmDismiss:
         from python_pkg.wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
 
         alarm = WakeAlarm(demo_mode=True)
-        alarm._skip_earnable = False
+        alarm._progress.skip_earnable = False
         mock_entry = mock_tk_module.Entry.return_value
 
         with patch(
             "python_pkg.wake_alarm._alarm.save_wake_state",
         ) as mock_save:
             for _ in range(DISMISS_ROUNDS_REQUIRED):
-                mock_entry.get.return_value = alarm._current_challenge.answer
+                mock_entry.get.return_value = alarm._progress.current_challenge.answer
                 alarm._on_submit()
 
         assert alarm.dismissed is True
@@ -325,7 +325,7 @@ class TestCodeRefreshAndTimer:
         displays = set()
         for _ in range(50):
             alarm._schedule_code_refresh()
-            displays.add(alarm._current_challenge.display)
+            displays.add(alarm._progress.current_challenge.display)
         assert len(displays) > 1
         alarm._stop_beep.set()
 
@@ -336,9 +336,9 @@ class TestCodeRefreshAndTimer:
         """Code refresh is a no-op when alarm is no longer active."""
         alarm = WakeAlarm(demo_mode=True)
         alarm._active = False
-        old_challenge = alarm._current_challenge
+        old_challenge = alarm._progress.current_challenge
         alarm._schedule_code_refresh()
-        assert alarm._current_challenge is old_challenge
+        assert alarm._progress.current_challenge is old_challenge
         alarm._stop_beep.set()
 
     def test_update_timer_noop_when_not_active(
@@ -391,7 +391,7 @@ class TestClose:
         """_close calls _restore_fans with the saved fan state."""
         del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
-        alarm._fan_state = True
+        alarm._hardware.fan_state = True
         with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
             alarm._close()
         mock_restore.assert_called_once_with(active=True)
@@ -403,7 +403,7 @@ class TestClose:
         """_close restores the default sink captured at activation."""
         del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
-        alarm._audio_restore = "jbl_sink"
+        alarm._hardware.audio_restore = "jbl_sink"
         with patch(
             "python_pkg.wake_alarm._alarm._restore_alarm_audio",
         ) as mock_restore:
@@ -425,11 +425,11 @@ class TestScreenFlash:
         mock_root.configure.reset_mock()
         mock_root.after.reset_mock()
 
-        alarm._flash_on = False
+        alarm._progress.flash_on = False
         alarm._flash_step()
 
         mock_root.configure.assert_called_once_with(bg="#1a1a1a")
-        assert alarm._flash_on is True
+        assert alarm._progress.flash_on is True
         mock_root.after.assert_called_with(750, alarm._flash_step)
         alarm._stop_beep.set()
 
@@ -443,11 +443,11 @@ class TestScreenFlash:
         mock_root.configure.reset_mock()
         mock_root.after.reset_mock()
 
-        alarm._flash_on = True
+        alarm._progress.flash_on = True
         alarm._flash_step()
 
         mock_root.configure.assert_called_once_with(bg="#ff0000")
-        assert alarm._flash_on is False
+        assert alarm._progress.flash_on is False
         mock_root.after.assert_called_with(750, alarm._flash_step)
         alarm._stop_beep.set()
 

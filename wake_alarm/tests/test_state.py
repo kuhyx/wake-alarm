@@ -14,6 +14,7 @@ from python_pkg.wake_alarm._state import (
     load_wake_state,
     save_wake_state,
     was_alarm_dismissed_today,
+    was_workout_logged_today,
 )
 
 if TYPE_CHECKING:
@@ -259,3 +260,55 @@ class TestWasAlarmDismissedToday:
             return_value=True,
         ):
             assert was_alarm_dismissed_today() is False
+
+
+class TestWasWorkoutLoggedToday:
+    """Tests for was_workout_logged_today."""
+
+    def test_returns_false_when_file_missing(self, tmp_path: Path) -> None:
+        """Return False when the workout log file does not exist."""
+        with patch(
+            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            tmp_path / "workout_log.json",
+        ):
+            assert was_workout_logged_today() is False
+
+    def test_returns_false_when_file_is_invalid_json(self, tmp_path: Path) -> None:
+        """Return False when the workout log contains invalid JSON."""
+        log_file = tmp_path / "workout_log.json"
+        log_file.write_text("not json {{{")
+        with patch(
+            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            log_file,
+        ):
+            assert was_workout_logged_today() is False
+
+    def test_returns_false_when_file_is_not_a_dict(self, tmp_path: Path) -> None:
+        """Return False when the workout log is not a JSON object."""
+        log_file = tmp_path / "workout_log.json"
+        log_file.write_text(json.dumps([1, 2, 3]))
+        with patch(
+            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            log_file,
+        ):
+            assert was_workout_logged_today() is False
+
+    def test_returns_false_when_today_absent(self, tmp_path: Path) -> None:
+        """Return False when the workout log has no entry for today."""
+        log_file = tmp_path / "workout_log.json"
+        log_file.write_text(json.dumps({"1999-01-01": {"type": "old"}}))
+        with patch(
+            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            log_file,
+        ):
+            assert was_workout_logged_today() is False
+
+    def test_returns_true_when_today_present(self, tmp_path: Path) -> None:
+        """Return True when today's date key exists in the workout log."""
+        log_file = tmp_path / "workout_log.json"
+        log_file.write_text(json.dumps({_today_str(): {"type": "phone_verified"}}))
+        with patch(
+            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            log_file,
+        ):
+            assert was_workout_logged_today() is True
