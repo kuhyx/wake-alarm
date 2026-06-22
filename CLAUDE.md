@@ -70,6 +70,16 @@ site-packages:
 /usr/bin/python3 -m pip install --user --break-system-packages -e .
 ```
 
+**Always run `install.sh` (or `pip install -e`) from a durable clone, not a
+scratch directory.** `install.sh` does `pip install -e "$REPO_DIR"` —
+editable, so a later `git pull` in that same clone updates the running
+production code with no reinstall needed. The clone must live somewhere
+permanent (this repo's convention: `~/wake-alarm`, mirroring `~/screen-locker`
+for the screen-locker package) — if you `pip install -e` from `/tmp/...` or
+run `pip install "wake_alarm @ git+https://..."` as a one-off, you get a
+non-editable snapshot frozen at that commit, and the next `git push` here
+silently does **not** reach the running service.
+
 `install.sh` already does this. **If you add a dependency and only install it
 into a dev venv, the production service will silently fail with
 `ModuleNotFoundError` on its next run** — this exact gap caused a 3-day
