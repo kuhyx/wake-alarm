@@ -39,7 +39,13 @@ def _make_mock_tk() -> MagicMock:
 def _block_real_tk() -> Generator[MagicMock]:
     """Prevent any real Tk windows in tests."""
     mock = _make_mock_tk()
-    with patch("python_pkg.wake_alarm._alarm.tk", mock):
+    with (
+        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch(
+            "python_pkg.wake_alarm._alarm.GateRoot",
+            return_value=mock.Tk.return_value,
+        ),
+    ):
         yield mock
 
 
@@ -65,7 +71,13 @@ def _block_extra_devices() -> Generator[MagicMock]:
 def mock_tk_module() -> Generator[MagicMock]:
     """Provide explicit access to the mocked tk module."""
     mock = _make_mock_tk()
-    with patch("python_pkg.wake_alarm._alarm.tk", mock):
+    with (
+        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch(
+            "python_pkg.wake_alarm._alarm.GateRoot",
+            return_value=mock.Tk.return_value,
+        ),
+    ):
         yield mock
 
 
@@ -135,14 +147,20 @@ class TestBeepLoopPhases:
 class TestRunMethod:
     """Tests for the run() method."""
 
-    def test_run_calls_mainloop(
+    def test_run_delegates_to_lock(
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """run() calls root.mainloop()."""
+        """run() hands off to the owned LockWindow.
+
+        Asserts delegation rather than calling the real LockWindow.run(),
+        which installs real SIGTERM/SIGINT handlers in the test process.
+        """
+        del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
-        alarm.run()
-        alarm.root.mainloop.assert_called_once()
+        with patch.object(alarm._lock, "run") as mock_run:
+            alarm.run()
+        mock_run.assert_called_once_with()
         alarm._stop_beep.set()
 
 

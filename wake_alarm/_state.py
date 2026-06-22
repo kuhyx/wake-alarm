@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 import json
 import logging
 
-from python_pkg.shared.log_integrity import (
+from gatelock.log_integrity import (
     compute_entry_hmac,
     verify_entry_hmac,
 )
+
 from python_pkg.wake_alarm._constants import WAKE_STATE_FILE, WORKOUT_LOG_FILE
 
 _logger = logging.getLogger(__name__)

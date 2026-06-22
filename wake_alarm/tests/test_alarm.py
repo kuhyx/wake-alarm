@@ -59,7 +59,13 @@ def _make_mock_tk() -> MagicMock:
 def _block_real_tk() -> Generator[MagicMock]:
     """Prevent any real Tk windows in tests."""
     mock = _make_mock_tk()
-    with patch("python_pkg.wake_alarm._alarm.tk", mock):
+    with (
+        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch(
+            "python_pkg.wake_alarm._alarm.GateRoot",
+            return_value=mock.Tk.return_value,
+        ),
+    ):
         yield mock
 
 
@@ -67,7 +73,13 @@ def _block_real_tk() -> Generator[MagicMock]:
 def mock_tk_module() -> Generator[MagicMock]:
     """Provide explicit access to the mocked tk module."""
     mock = _make_mock_tk()
-    with patch("python_pkg.wake_alarm._alarm.tk", mock):
+    with (
+        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch(
+            "python_pkg.wake_alarm._alarm.GateRoot",
+            return_value=mock.Tk.return_value,
+        ),
+    ):
         yield mock
 
 

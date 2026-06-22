@@ -9,6 +9,7 @@ workout-free day via HMAC-signed wake state.
 from __future__ import annotations
 
 import argparse
+import contextlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
@@ -16,6 +17,8 @@ import sys
 import threading
 import time
 import tkinter as tk
+
+from gatelock import GateRoot, LockConfig, LockWindow
 
 from python_pkg.shared.logging_setup import configure_logging
 from python_pkg.wake_alarm._alarm_display import _restore_display, _wake_display
@@ -108,29 +111,16 @@ class WakeAlarm:
         self.demo_mode = demo_mode
         self.dismissed = False
         self._stop_beep = threading.Event()
-        self._beep_thread: threading.Thread | None = None
         self._alarm_start: float = time.monotonic()
         self._active = True
 
-        self.root = tk.Tk()
+        self.root = GateRoot()
+        self.root.on_callback_error = self.on_callback_error
         self.root.title("Wake Alarm" + (" [DEMO]" if demo_mode else ""))
-        self.root.configure(bg="#1a1a1a")
-
-        # Always hijack the full screen — demo_mode only controls timers.
-        # NOTE: we intentionally do NOT call overrideredirect(True): on X11 it
-        # removes WM management and the Entry widget can't receive keyboard
-        # focus, so the user can't type the dismiss code. -fullscreen +
-        # -topmost is enough to take over the screen while staying typeable.
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-        fullscreen = True
-        self.root.geometry(f"{screen_w}x{screen_h}+0+0")
-        self.root.attributes("-fullscreen", fullscreen)
-        self.root.attributes("-topmost", fullscreen)
-
-        self.root.lift()
-        self.root.focus_force()
-        self.root.update_idletasks()
+        # mode="soft": no watchdog exists yet for a clean, silent lock
+        # failure, so hard-lock (overrideredirect + grab) is deferred.
+        self._lock = LockWindow(self.root, LockConfig(mode="soft"), hooks=self)
+        self._lock.setup()
 
         self._progress = _AlarmProgress(current_challenge=_make_challenge())
         self._view = self._build_ui()
@@ -141,10 +131,31 @@ class WakeAlarm:
         self._schedule_skip_window_close()
         self._start_beep_thread()
         self._hardware = _AlarmHardware(
-            fan_state=_max_fans(),
-            audio_restore=_activate_alarm_audio(),
+            fan_state=_max_fans(), audio_restore=_activate_alarm_audio()
         )
         self._start_screen_flash()
+        self._lock.grab_input()
+
+    def on_focus_ready(self) -> None:
+        """Put keyboard focus on the dismiss-code entry once mapped."""
+        with contextlib.suppress(tk.TclError):
+            self._view.entry.focus_force()
+
+    def on_callback_error(self) -> None:
+        """Surface an unexpected callback error without dropping the alarm."""
+        with contextlib.suppress(tk.TclError):
+            self._view.status_label.configure(
+                text="Something went wrong — try again.",
+            )
+            self._view.entry.focus_force()
+
+    def on_close(self) -> None:
+        """Restore fans/audio/display/plug; runs on every exit path, even SIGTERM."""
+        self._stop_beep.set()
+        _restore_fans(active=self._hardware.fan_state)
+        _restore_alarm_audio(self._hardware.audio_restore)
+        _restore_display()
+        turn_off_plug()
 
     def _build_ui(self) -> _AlarmView:
         """Build the dismiss-challenge UI and return its widgets as a view."""
@@ -316,16 +327,7 @@ class WakeAlarm:
             bg="#1a1a1a",
         ).pack(pady=30)
 
-        self.root.after(3000, self._close)
-
-    def _close(self) -> None:
-        """Close the alarm window."""
-        self._stop_beep.set()
-        _restore_fans(active=self._hardware.fan_state)
-        _restore_alarm_audio(self._hardware.audio_restore)
-        _restore_display()
-        turn_off_plug()
-        self.root.destroy()
+        self.root.after(3000, self._lock.close)
 
     def _schedule_code_refresh(self) -> None:
         """Replace the current challenge periodically.
@@ -389,11 +391,8 @@ class WakeAlarm:
 
     def _start_beep_thread(self) -> None:
         """Start the background beep escalation thread."""
-        self._beep_thread = threading.Thread(
-            target=self._beep_loop,
-            daemon=True,
-        )
-        self._beep_thread.start()
+        thread = threading.Thread(target=self._beep_loop, daemon=True)
+        thread.start()
 
     def _start_screen_flash(self) -> None:
         """Start flashing the screen background to attract attention."""
@@ -427,8 +426,8 @@ class WakeAlarm:
                 self._stop_beep.wait(LOUD_TOGGLE_INTERVAL)
 
     def run(self) -> None:
-        """Start the alarm main loop."""
-        self.root.mainloop()
+        """Start the alarm main loop, restoring hardware on every exit path."""
+        self._lock.run()
 
 
 def _should_run_alarm() -> bool:

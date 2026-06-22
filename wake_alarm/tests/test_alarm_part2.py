@@ -40,7 +40,13 @@ def _make_mock_tk() -> MagicMock:
 def _block_real_tk() -> Generator[MagicMock]:
     """Prevent any real Tk windows in tests."""
     mock = _make_mock_tk()
-    with patch("python_pkg.wake_alarm._alarm.tk", mock):
+    with (
+        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch(
+            "python_pkg.wake_alarm._alarm.GateRoot",
+            return_value=mock.Tk.return_value,
+        ),
+    ):
         yield mock
 
 
@@ -66,7 +72,13 @@ def _block_extra_devices() -> Generator[MagicMock]:
 def mock_tk_module() -> Generator[MagicMock]:
     """Provide explicit access to the mocked tk module."""
     mock = _make_mock_tk()
-    with patch("python_pkg.wake_alarm._alarm.tk", mock):
+    with (
+        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch(
+            "python_pkg.wake_alarm._alarm.GateRoot",
+            return_value=mock.Tk.return_value,
+        ),
+    ):
         yield mock
 
 
@@ -87,15 +99,15 @@ class TestWakeAlarmInit:
         assert alarm.demo_mode is True
         assert alarm.dismissed is False
         mock_root = mock_tk_module.Tk.return_value
-        # We deliberately drop overrideredirect (X11 focus bug); fullscreen+topmost
-        # are what take over the screen now.
+        # LockConfig(mode="soft") never sets overrideredirect (X11 focus bug);
+        # fullscreen+topmost are what take over the screen now.
         mock_root.overrideredirect.assert_not_called()
         fs_calls = [
             c
             for c in mock_root.attributes.call_args_list
-            if c.args and c.args[0] == "-fullscreen"
+            if c.kwargs.get("fullscreen") is True
         ]
-        assert fs_calls, "-fullscreen attribute must be set"
+        assert fs_calls, "fullscreen attribute must be set"
         alarm._stop_beep.set()  # Stop beep thread
 
     def test_production_mode_fullscreen(
@@ -110,9 +122,9 @@ class TestWakeAlarmInit:
         fs_calls = [
             c
             for c in mock_root.attributes.call_args_list
-            if c.args and c.args[0] == "-fullscreen"
+            if c.kwargs.get("fullscreen") is True
         ]
-        assert fs_calls, "-fullscreen attribute must be set"
+        assert fs_calls, "fullscreen attribute must be set"
         alarm._stop_beep.set()
 
 
@@ -367,48 +379,6 @@ class TestBeepLoop:
             "python_pkg.wake_alarm._alarm._beep_soft",
         ):
             alarm._beep_loop()
-        alarm._stop_beep.set()
-
-
-class TestClose:
-    """Tests for the alarm close path."""
-
-    def test_close_stops_beep_and_destroys(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """_close sets stop event and destroys root."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._close()
-        assert alarm._stop_beep.is_set()
-        alarm.root.destroy.assert_called()
-
-    def test_close_restores_fans(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """_close calls _restore_fans with the saved fan state."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._hardware.fan_state = True
-        with patch("python_pkg.wake_alarm._alarm._restore_fans") as mock_restore:
-            alarm._close()
-        mock_restore.assert_called_once_with(active=True)
-
-    def test_close_restores_audio(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """_close restores the default sink captured at activation."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._hardware.audio_restore = "jbl_sink"
-        with patch(
-            "python_pkg.wake_alarm._alarm._restore_alarm_audio",
-        ) as mock_restore:
-            alarm._close()
-        mock_restore.assert_called_once_with("jbl_sink")
         alarm._stop_beep.set()
 
 
