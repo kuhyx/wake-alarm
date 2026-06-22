@@ -127,3 +127,20 @@ class TestDisplayHelpers:
         ):
             _restore_display()
         mock_run.assert_not_called()
+
+    def test_restore_display_runs_xset_s_on_when_present(self) -> None:
+        """_restore_display re-enables the screensaver via xset when present."""
+        with (
+            patch(
+                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                return_value="/usr/bin/xset",
+            ),
+            patch("python_pkg.wake_alarm._alarm_display.subprocess.run") as mock_run,
+        ):
+            _restore_display()
+        mock_run.assert_called_once_with(
+            ["/usr/bin/xset", "s", "on"],
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )

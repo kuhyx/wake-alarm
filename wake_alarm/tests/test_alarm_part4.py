@@ -56,6 +56,7 @@ def _block_extra_devices() -> Generator[MagicMock]:
         patch("python_pkg.wake_alarm._alarm._restore_fans"),
         patch("python_pkg.wake_alarm._alarm._set_max_brightness"),
         patch("python_pkg.wake_alarm._alarm._wake_display"),
+        patch("python_pkg.wake_alarm._alarm._restore_display"),
         patch("python_pkg.wake_alarm._alarm._warn_if_no_real_sink"),
         patch("python_pkg.wake_alarm._alarm._activate_alarm_audio", return_value=None),
         patch("python_pkg.wake_alarm._alarm._restore_alarm_audio"),
