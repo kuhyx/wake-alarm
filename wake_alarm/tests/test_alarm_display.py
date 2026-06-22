@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from python_pkg.wake_alarm._alarm_display import (
+from wake_alarm._alarm_display import (
     _ddcutil_power_on,
     _restore_display,
     _wake_display,
@@ -19,10 +19,10 @@ class TestDdcutilPowerOn:
         """_ddcutil_power_on does nothing when ddcutil is not on PATH."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value=None,
             ),
-            patch("python_pkg.wake_alarm._alarm_display.subprocess.run") as mock_run,
+            patch("wake_alarm._alarm_display.subprocess.run") as mock_run,
         ):
             _ddcutil_power_on()
         mock_run.assert_not_called()
@@ -31,10 +31,10 @@ class TestDdcutilPowerOn:
         """_ddcutil_power_on sends setvcp D6 01 when ddcutil is found."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value="/usr/bin/ddcutil",
             ),
-            patch("python_pkg.wake_alarm._alarm_display.subprocess.run") as mock_run,
+            patch("wake_alarm._alarm_display.subprocess.run") as mock_run,
         ):
             _ddcutil_power_on()
         mock_run.assert_called_once()
@@ -45,11 +45,11 @@ class TestDdcutilPowerOn:
         """_ddcutil_power_on logs success when setvcp returns 0."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value="/usr/bin/ddcutil",
             ),
             patch(
-                "python_pkg.wake_alarm._alarm_display.subprocess.run",
+                "wake_alarm._alarm_display.subprocess.run",
                 return_value=MagicMock(returncode=0),
             ),
         ):
@@ -59,11 +59,11 @@ class TestDdcutilPowerOn:
         """_ddcutil_power_on does not raise on TimeoutExpired."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value="/usr/bin/ddcutil",
             ),
             patch(
-                "python_pkg.wake_alarm._alarm_display.subprocess.run",
+                "wake_alarm._alarm_display.subprocess.run",
                 side_effect=subprocess.TimeoutExpired(cmd="ddcutil", timeout=10),
             ),
         ):
@@ -73,11 +73,11 @@ class TestDdcutilPowerOn:
         """_ddcutil_power_on does not raise on OSError."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value="/usr/bin/ddcutil",
             ),
             patch(
-                "python_pkg.wake_alarm._alarm_display.subprocess.run",
+                "wake_alarm._alarm_display.subprocess.run",
                 side_effect=OSError("no device"),
             ),
         ):
@@ -91,10 +91,10 @@ class TestDisplayHelpers:
         """_wake_display skips xset commands but still attempts ddcutil."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value=None,
             ),
-            patch("python_pkg.wake_alarm._alarm_display.subprocess.run") as mock_run,
+            patch("wake_alarm._alarm_display.subprocess.run") as mock_run,
         ):
             _wake_display()
         mock_run.assert_not_called()
@@ -103,10 +103,10 @@ class TestDisplayHelpers:
         """_wake_display runs ddcutil setvcp, xset dpms force on, xset s off."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value="/usr/bin/xset",
             ),
-            patch("python_pkg.wake_alarm._alarm_display.subprocess.run") as mock_run,
+            patch("wake_alarm._alarm_display.subprocess.run") as mock_run,
         ):
             _wake_display()
         # 1 ddcutil setvcp call + 2 xset calls
@@ -120,10 +120,10 @@ class TestDisplayHelpers:
         """_restore_display does nothing when xset is not on PATH."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value=None,
             ),
-            patch("python_pkg.wake_alarm._alarm_display.subprocess.run") as mock_run,
+            patch("wake_alarm._alarm_display.subprocess.run") as mock_run,
         ):
             _restore_display()
         mock_run.assert_not_called()
@@ -132,10 +132,10 @@ class TestDisplayHelpers:
         """_restore_display re-enables the screensaver via xset when present."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm_display.shutil.which",
+                "wake_alarm._alarm_display.shutil.which",
                 return_value="/usr/bin/xset",
             ),
-            patch("python_pkg.wake_alarm._alarm_display.subprocess.run") as mock_run,
+            patch("wake_alarm._alarm_display.subprocess.run") as mock_run,
         ):
             _restore_display()
         mock_run.assert_called_once_with(

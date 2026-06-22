@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from python_pkg.wake_alarm._state import (
+from wake_alarm._state import (
     _today_str,
     has_workout_skip_today,
     load_wake_state,
@@ -31,7 +31,7 @@ def wake_state_file(tmp_path: Path) -> Path:
 def _patch_wake_state_file(wake_state_file: Path) -> None:
     """Redirect WAKE_STATE_FILE to tmp_path for all tests."""
     with patch(
-        "python_pkg.wake_alarm._state.WAKE_STATE_FILE",
+        "wake_alarm._state.WAKE_STATE_FILE",
         wake_state_file,
     ):
         yield
@@ -54,7 +54,7 @@ class TestSaveWakeState:
     def test_saves_with_hmac(self, wake_state_file: Path) -> None:
         """Save state with HMAC signature when key is available."""
         with patch(
-            "python_pkg.wake_alarm._state.compute_entry_hmac",
+            "wake_alarm._state.compute_entry_hmac",
             return_value="fakesig",
         ):
             result = save_wake_state(
@@ -72,7 +72,7 @@ class TestSaveWakeState:
     def test_saves_without_hmac(self, wake_state_file: Path) -> None:
         """Save unsigned state when HMAC key is unavailable."""
         with patch(
-            "python_pkg.wake_alarm._state.compute_entry_hmac",
+            "wake_alarm._state.compute_entry_hmac",
             return_value=None,
         ):
             result = save_wake_state(
@@ -89,11 +89,11 @@ class TestSaveWakeState:
         """Return False when file cannot be written."""
         with (
             patch(
-                "python_pkg.wake_alarm._state.compute_entry_hmac",
+                "wake_alarm._state.compute_entry_hmac",
                 return_value="sig",
             ),
             patch(
-                "python_pkg.wake_alarm._state.WAKE_STATE_FILE",
+                "wake_alarm._state.WAKE_STATE_FILE",
                 wake_state_file / "nonexistent_dir" / "file.json",
             ),
         ):
@@ -147,7 +147,7 @@ class TestLoadWakeState:
         }
         wake_state_file.write_text(json.dumps(state))
         with patch(
-            "python_pkg.wake_alarm._state.verify_entry_hmac",
+            "wake_alarm._state.verify_entry_hmac",
             return_value=False,
         ):
             assert load_wake_state() is None
@@ -165,7 +165,7 @@ class TestLoadWakeState:
         }
         wake_state_file.write_text(json.dumps(state))
         with patch(
-            "python_pkg.wake_alarm._state.verify_entry_hmac",
+            "wake_alarm._state.verify_entry_hmac",
             return_value=True,
         ):
             result = load_wake_state()
@@ -194,7 +194,7 @@ class TestHasWorkoutSkipToday:
         }
         wake_state_file.write_text(json.dumps(state))
         with patch(
-            "python_pkg.wake_alarm._state.verify_entry_hmac",
+            "wake_alarm._state.verify_entry_hmac",
             return_value=True,
         ):
             assert has_workout_skip_today() is True
@@ -212,7 +212,7 @@ class TestHasWorkoutSkipToday:
         }
         wake_state_file.write_text(json.dumps(state))
         with patch(
-            "python_pkg.wake_alarm._state.verify_entry_hmac",
+            "wake_alarm._state.verify_entry_hmac",
             return_value=True,
         ):
             assert has_workout_skip_today() is False
@@ -238,7 +238,7 @@ class TestWasAlarmDismissedToday:
         }
         wake_state_file.write_text(json.dumps(state))
         with patch(
-            "python_pkg.wake_alarm._state.verify_entry_hmac",
+            "wake_alarm._state.verify_entry_hmac",
             return_value=True,
         ):
             assert was_alarm_dismissed_today() is True
@@ -256,7 +256,7 @@ class TestWasAlarmDismissedToday:
         }
         wake_state_file.write_text(json.dumps(state))
         with patch(
-            "python_pkg.wake_alarm._state.verify_entry_hmac",
+            "wake_alarm._state.verify_entry_hmac",
             return_value=True,
         ):
             assert was_alarm_dismissed_today() is False
@@ -268,7 +268,7 @@ class TestWasWorkoutLoggedToday:
     def test_returns_false_when_file_missing(self, tmp_path: Path) -> None:
         """Return False when the workout log file does not exist."""
         with patch(
-            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            "wake_alarm._state.WORKOUT_LOG_FILE",
             tmp_path / "workout_log.json",
         ):
             assert was_workout_logged_today() is False
@@ -278,7 +278,7 @@ class TestWasWorkoutLoggedToday:
         log_file = tmp_path / "workout_log.json"
         log_file.write_text("not json {{{")
         with patch(
-            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            "wake_alarm._state.WORKOUT_LOG_FILE",
             log_file,
         ):
             assert was_workout_logged_today() is False
@@ -288,7 +288,7 @@ class TestWasWorkoutLoggedToday:
         log_file = tmp_path / "workout_log.json"
         log_file.write_text(json.dumps([1, 2, 3]))
         with patch(
-            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            "wake_alarm._state.WORKOUT_LOG_FILE",
             log_file,
         ):
             assert was_workout_logged_today() is False
@@ -298,7 +298,7 @@ class TestWasWorkoutLoggedToday:
         log_file = tmp_path / "workout_log.json"
         log_file.write_text(json.dumps({"1999-01-01": {"type": "old"}}))
         with patch(
-            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            "wake_alarm._state.WORKOUT_LOG_FILE",
             log_file,
         ):
             assert was_workout_logged_today() is False
@@ -308,7 +308,7 @@ class TestWasWorkoutLoggedToday:
         log_file = tmp_path / "workout_log.json"
         log_file.write_text(json.dumps({_today_str(): {"type": "phone_verified"}}))
         with patch(
-            "python_pkg.wake_alarm._state.WORKOUT_LOG_FILE",
+            "wake_alarm._state.WORKOUT_LOG_FILE",
             log_file,
         ):
             assert was_workout_logged_today() is True

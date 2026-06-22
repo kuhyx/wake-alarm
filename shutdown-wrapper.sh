@@ -11,7 +11,7 @@ set -euo pipefail
 
 REAL_SHUTDOWN=/usr/bin/shutdown
 RTCWAKE=/usr/sbin/rtcwake
-WAKE_AFTER_HOURS=8  # Must match WAKE_AFTER_HOURS in python_pkg/wake_alarm/_constants.py
+WAKE_AFTER_HOURS=8  # Must match WAKE_AFTER_HOURS in wake_alarm/_constants.py
 
 # Pass through reboots and cancel commands unchanged.
 for arg in "$@"; do

@@ -11,7 +11,7 @@ from gatelock.log_integrity import (
     verify_entry_hmac,
 )
 
-from python_pkg.wake_alarm._constants import WAKE_STATE_FILE, WORKOUT_LOG_FILE
+from wake_alarm._constants import WAKE_STATE_FILE, WORKOUT_LOG_FILE
 
 _logger = logging.getLogger(__name__)
 

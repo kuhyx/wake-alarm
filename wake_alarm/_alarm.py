@@ -20,9 +20,8 @@ import tkinter as tk
 
 from gatelock import GateRoot, LockConfig, LockWindow
 
-from python_pkg.shared.logging_setup import configure_logging
-from python_pkg.wake_alarm._alarm_display import _restore_display, _wake_display
-from python_pkg.wake_alarm._audio import (
+from wake_alarm._alarm_display import _restore_display, _wake_display
+from wake_alarm._audio import (
     _activate_alarm_audio,
     _beep_loud,
     _beep_medium,
@@ -34,11 +33,11 @@ from python_pkg.wake_alarm._audio import (
     _set_max_brightness,
     _warn_if_no_real_sink,
 )
-from python_pkg.wake_alarm._challenges import (
+from wake_alarm._challenges import (
     _Challenge,
     _make_challenge,
 )
-from python_pkg.wake_alarm._constants import (
+from wake_alarm._constants import (
     ALARM_DAYS,
     DISMISS_CODE_REFRESH_SECONDS,
     DISMISS_FLASH_SECONDS,
@@ -51,8 +50,9 @@ from python_pkg.wake_alarm._constants import (
     PHASE_SOFT_END,
     SOFT_BEEP_INTERVAL,
 )
-from python_pkg.wake_alarm._smart_plug import turn_off_plug, turn_on_plug
-from python_pkg.wake_alarm._state import (
+from wake_alarm._logging_setup import configure_logging
+from wake_alarm._smart_plug import turn_off_plug, turn_on_plug
+from wake_alarm._state import (
     save_wake_state,
     was_alarm_dismissed_today,
     was_workout_logged_today,

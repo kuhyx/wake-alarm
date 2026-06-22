@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     import pathlib
 
-from python_pkg.wake_alarm._audio import (
+from wake_alarm._audio import (
     _beep_pcspkr,
     _ensure_tone_wav,
     _play_tone,
@@ -27,8 +27,8 @@ class TestSetMaxBrightness:
     def test_noop_when_xrandr_missing(self) -> None:
         """No xrandr on PATH → subprocess.run never called."""
         with (
-            patch("python_pkg.wake_alarm._audio.shutil.which", return_value=None),
-            patch("python_pkg.wake_alarm._audio.subprocess.run") as mock_run,
+            patch("wake_alarm._audio.shutil.which", return_value=None),
+            patch("wake_alarm._audio.subprocess.run") as mock_run,
         ):
             _set_max_brightness()
             mock_run.assert_not_called()
@@ -37,11 +37,11 @@ class TestSetMaxBrightness:
         """OSError from xrandr --query is suppressed."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/xrandr",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=OSError("no display"),
             ),
         ):
@@ -51,11 +51,11 @@ class TestSetMaxBrightness:
         """TimeoutExpired from xrandr --query is suppressed."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/xrandr",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=subprocess.TimeoutExpired("xrandr", 5),
             ),
         ):
@@ -75,10 +75,10 @@ class TestSetMaxBrightness:
 
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/xrandr",
             ),
-            patch("python_pkg.wake_alarm._audio.subprocess.run", side_effect=fake_run),
+            patch("wake_alarm._audio.subprocess.run", side_effect=fake_run),
         ):
             _set_max_brightness()
 
@@ -93,11 +93,11 @@ class TestSetMaxBrightness:
         mock_result.stdout = "Screen 0: minimum 320\nHDMI-0 disconnected\n"
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/xrandr",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 return_value=mock_result,
             ) as mock_run,
         ):
@@ -120,11 +120,11 @@ class TestSetMaxBrightness:
 
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/xrandr",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=_run_side_effect,
             ),
         ):
@@ -136,11 +136,11 @@ class TestEnsureToneWav:
 
     def test_generates_and_caches(self, tmp_path: pathlib.Path) -> None:
         """First call generates the WAV; second call returns the cached path."""
-        from python_pkg.wake_alarm import _audio as alarm_mod
+        from wake_alarm import _audio as alarm_mod
 
         alarm_mod._TONE_CACHE.clear()
         with patch(
-            "python_pkg.wake_alarm._audio.tempfile.gettempdir",
+            "wake_alarm._audio.tempfile.gettempdir",
             return_value=str(tmp_path),
         ):
             path1 = _ensure_tone_wav(440)
@@ -148,7 +148,7 @@ class TestEnsureToneWav:
             size = path1.stat().st_size
             assert size > 0
             # Second call must hit the cache (no regeneration).
-            with patch("python_pkg.wake_alarm._audio.wave.open") as mock_open:
+            with patch("wake_alarm._audio.wave.open") as mock_open:
                 path2 = _ensure_tone_wav(440)
                 mock_open.assert_not_called()
             assert path2 == path1
@@ -159,11 +159,11 @@ class TestEnsureToneWav:
         tmp_path: pathlib.Path,
     ) -> None:
         """If the cached file was deleted, regenerate it."""
-        from python_pkg.wake_alarm._audio import _TONE_CACHE
+        from wake_alarm._audio import _TONE_CACHE
 
         _TONE_CACHE.clear()
         with patch(
-            "python_pkg.wake_alarm._audio.tempfile.gettempdir",
+            "wake_alarm._audio.tempfile.gettempdir",
             return_value=str(tmp_path),
         ):
             path1 = _ensure_tone_wav(880)
@@ -184,7 +184,7 @@ class TestTryPlayer:
         wav = tmp_path / "x.wav"
         wav.write_bytes(b"\x00")
         with patch(
-            "python_pkg.wake_alarm._audio.shutil.which",
+            "wake_alarm._audio.shutil.which",
             return_value=None,
         ):
             assert _try_player("paplay", wav) is False
@@ -197,11 +197,11 @@ class TestTryPlayer:
         result.returncode = 0
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/paplay",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 return_value=result,
             ),
         ):
@@ -219,11 +219,11 @@ class TestTryPlayer:
         result.stderr = b"boom"
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/paplay",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 return_value=result,
             ),
         ):
@@ -235,11 +235,11 @@ class TestTryPlayer:
         wav.write_bytes(b"\x00")
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/paplay",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=subprocess.TimeoutExpired("paplay", 6),
             ),
         ):
@@ -251,11 +251,11 @@ class TestTryPlayer:
         wav.write_bytes(b"\x00")
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/paplay",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=OSError("nope"),
             ),
         ):
@@ -274,10 +274,10 @@ class TestBeepPcspkr:
         mock_open_ctx.__exit__.return_value = False
         with (
             patch(
-                "python_pkg.wake_alarm._audio.Path.open",
+                "wake_alarm._audio.Path.open",
                 return_value=mock_open_ctx,
             ),
-            patch("python_pkg.wake_alarm._audio.time.sleep"),
+            patch("wake_alarm._audio.time.sleep"),
         ):
             _beep_pcspkr(1000, 0.05)
         # First write carries the frequency, second write carries 0 (stop).
@@ -287,7 +287,7 @@ class TestBeepPcspkr:
         """OSError opening the device must not raise."""
 
         with patch(
-            "python_pkg.wake_alarm._audio.Path.open",
+            "wake_alarm._audio.Path.open",
             side_effect=OSError("no device"),
         ):
             _beep_pcspkr(1000, 0.05)  # must not raise
@@ -299,7 +299,7 @@ class TestPlayTone:
     @pytest.fixture(autouse=True)
     def _silence_pcspkr(self) -> Iterator[None]:
         """Stop tests from hitting the real /dev/input PC speaker device."""
-        with patch("python_pkg.wake_alarm._audio._beep_pcspkr"):
+        with patch("wake_alarm._audio._beep_pcspkr"):
             yield
 
     def test_paplay_success_short_circuits(self, tmp_path: pathlib.Path) -> None:
@@ -308,15 +308,15 @@ class TestPlayTone:
         wav.write_bytes(b"\x00")
         with (
             patch(
-                "python_pkg.wake_alarm._audio._ensure_tone_wav",
+                "wake_alarm._audio._ensure_tone_wav",
                 return_value=wav,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._try_player",
+                "wake_alarm._audio._try_player",
                 return_value=True,
             ) as mock_try,
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
             ) as mock_run,
         ):
             _play_tone(440)
@@ -332,19 +332,19 @@ class TestPlayTone:
         wav.write_bytes(b"\x00")
         with (
             patch(
-                "python_pkg.wake_alarm._audio._ensure_tone_wav",
+                "wake_alarm._audio._ensure_tone_wav",
                 return_value=wav,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._try_player",
+                "wake_alarm._audio._try_player",
                 return_value=False,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._speaker_test_path",
+                "wake_alarm._audio._speaker_test_path",
                 return_value="/usr/bin/speaker-test",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
             ) as mock_run,
         ):
             _play_tone(1000)
@@ -362,18 +362,18 @@ class TestPlayTone:
         wav.write_bytes(b"\x00")
         with (
             patch(
-                "python_pkg.wake_alarm._audio._ensure_tone_wav",
+                "wake_alarm._audio._ensure_tone_wav",
                 return_value=wav,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._try_player",
+                "wake_alarm._audio._try_player",
                 return_value=False,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._speaker_test_path",
+                "wake_alarm._audio._speaker_test_path",
                 side_effect=FileNotFoundError("missing"),
             ),
-            patch("python_pkg.wake_alarm._audio._beep_soft") as mock_soft,
+            patch("wake_alarm._audio._beep_soft") as mock_soft,
         ):
             _play_tone(800)
             mock_soft.assert_called_once()
@@ -387,22 +387,22 @@ class TestPlayTone:
         wav.write_bytes(b"\x00")
         with (
             patch(
-                "python_pkg.wake_alarm._audio._ensure_tone_wav",
+                "wake_alarm._audio._ensure_tone_wav",
                 return_value=wav,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._try_player",
+                "wake_alarm._audio._try_player",
                 return_value=False,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._speaker_test_path",
+                "wake_alarm._audio._speaker_test_path",
                 return_value="/usr/bin/speaker-test",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=subprocess.TimeoutExpired("speaker-test", 6),
             ),
-            patch("python_pkg.wake_alarm._audio._beep_soft") as mock_soft,
+            patch("wake_alarm._audio._beep_soft") as mock_soft,
         ):
             _play_tone(800)
             mock_soft.assert_called_once()
@@ -411,10 +411,10 @@ class TestPlayTone:
         """OSError generating WAV → soft beep."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio._ensure_tone_wav",
+                "wake_alarm._audio._ensure_tone_wav",
                 side_effect=OSError("disk full"),
             ),
-            patch("python_pkg.wake_alarm._audio._beep_soft") as mock_soft,
+            patch("wake_alarm._audio._beep_soft") as mock_soft,
         ):
             _play_tone(440)
             mock_soft.assert_called_once()

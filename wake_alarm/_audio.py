@@ -14,7 +14,7 @@ import tempfile
 import time
 import wave
 
-from python_pkg.wake_alarm._constants import (
+from wake_alarm._constants import (
     ALARM_AUDIO_CARD,
     ALARM_AUDIO_PROFILE,
     ALARM_AUDIO_SINK,

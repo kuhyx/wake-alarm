@@ -1,0 +1,18 @@
+# Wake Alarm — runtime + development dependencies
+# Runtime: tkinter/json/hmac/wave/subprocess (stdlib) plus gatelock and
+# python-kasa below (python-kasa is optional at runtime; the module degrades
+# gracefully if it's missing, but is required here for mypy/pylint/tests).
+bandit>=1.7.0
+codespell>=2.2.0
+coverage>=7.4.0
+gatelock @ git+https://github.com/kuhyx/gatelock@v0.1.0
+mypy>=1.8.0
+pre-commit>=3.6.0
+pylint>=3.0.0
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-randomly>=3.15.0
+pytest-sugar>=1.0.0
+pytest-xdist>=3.5.0
+python-kasa>=0.7
+ruff>=0.8.0

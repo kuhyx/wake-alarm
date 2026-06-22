@@ -11,10 +11,10 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-from python_pkg.wake_alarm._alarm import (
+from wake_alarm._alarm import (
     WakeAlarm,
 )
-from python_pkg.wake_alarm._constants import (
+from wake_alarm._constants import (
     PHASE_MEDIUM_END,
     PHASE_SOFT_END,
 )
@@ -40,9 +40,9 @@ def _block_real_tk() -> Generator[MagicMock]:
     """Prevent any real Tk windows in tests."""
     mock = _make_mock_tk()
     with (
-        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm.tk", mock),
         patch(
-            "python_pkg.wake_alarm._alarm.GateRoot",
+            "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,
         ),
     ):
@@ -53,17 +53,17 @@ def _block_real_tk() -> Generator[MagicMock]:
 def _block_extra_devices() -> Generator[MagicMock]:
     """Prevent real subprocess calls for extra ALSA devices and hardware."""
     with (
-        patch("python_pkg.wake_alarm._alarm._play_on_extra_devices") as mock,
-        patch("python_pkg.wake_alarm._alarm._max_fans", return_value=False),
-        patch("python_pkg.wake_alarm._alarm._restore_fans"),
-        patch("python_pkg.wake_alarm._alarm._set_max_brightness"),
-        patch("python_pkg.wake_alarm._alarm._wake_display"),
-        patch("python_pkg.wake_alarm._alarm._restore_display"),
-        patch("python_pkg.wake_alarm._alarm._warn_if_no_real_sink"),
-        patch("python_pkg.wake_alarm._alarm._activate_alarm_audio", return_value=None),
-        patch("python_pkg.wake_alarm._alarm._restore_alarm_audio"),
-        patch("python_pkg.wake_alarm._alarm.turn_on_plug"),
-        patch("python_pkg.wake_alarm._alarm.turn_off_plug"),
+        patch("wake_alarm._alarm._play_on_extra_devices") as mock,
+        patch("wake_alarm._alarm._max_fans", return_value=False),
+        patch("wake_alarm._alarm._restore_fans"),
+        patch("wake_alarm._alarm._set_max_brightness"),
+        patch("wake_alarm._alarm._wake_display"),
+        patch("wake_alarm._alarm._restore_display"),
+        patch("wake_alarm._alarm._warn_if_no_real_sink"),
+        patch("wake_alarm._alarm._activate_alarm_audio", return_value=None),
+        patch("wake_alarm._alarm._restore_alarm_audio"),
+        patch("wake_alarm._alarm.turn_on_plug"),
+        patch("wake_alarm._alarm.turn_off_plug"),
     ):
         yield mock
 
@@ -73,9 +73,9 @@ def mock_tk_module() -> Generator[MagicMock]:
     """Provide explicit access to the mocked tk module."""
     mock = _make_mock_tk()
     with (
-        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm.tk", mock),
         patch(
-            "python_pkg.wake_alarm._alarm.GateRoot",
+            "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,
         ),
     ):
@@ -106,7 +106,7 @@ class TestBeepLoopPhases:
 
         with (
             patch(
-                "python_pkg.wake_alarm._alarm._beep_medium",
+                "wake_alarm._alarm._beep_medium",
                 side_effect=stop_after_one,
             ) as mock_beep,
         ):
@@ -135,7 +135,7 @@ class TestBeepLoopPhases:
 
         with (
             patch(
-                "python_pkg.wake_alarm._alarm._beep_loud",
+                "wake_alarm._alarm._beep_loud",
                 side_effect=stop_after_one,
             ) as mock_beep,
         ):
@@ -220,7 +220,7 @@ class TestFlashChallenge:
         mock_tk_module: MagicMock,
     ) -> None:
         """_flash_tick counts down per second and hides the code at zero."""
-        from python_pkg.wake_alarm._alarm import _Challenge
+        from wake_alarm._alarm import _Challenge
 
         alarm = WakeAlarm(demo_mode=True)
         alarm._progress.current_challenge = _Challenge(
@@ -269,7 +269,7 @@ class TestFlashChallenge:
         mock_tk_module: MagicMock,
     ) -> None:
         """Wrong flash answer restores the code and restarts the countdown."""
-        from python_pkg.wake_alarm._alarm import _Challenge
+        from wake_alarm._alarm import _Challenge
 
         alarm = WakeAlarm(demo_mode=True)
         alarm._progress.current_challenge = _Challenge(
@@ -294,7 +294,7 @@ class TestFlashChallenge:
         mock_tk_module: MagicMock,
     ) -> None:
         """When the next-round challenge is flash, the countdown starts immediately."""
-        from python_pkg.wake_alarm._alarm import _Challenge
+        from wake_alarm._alarm import _Challenge
 
         alarm = WakeAlarm(demo_mode=True)
         alarm._progress.current_challenge = _Challenge(
@@ -306,9 +306,7 @@ class TestFlashChallenge:
         mock_entry = mock_tk_module.Entry.return_value
         mock_entry.get.return_value = "4"
 
-        with patch(
-            "python_pkg.wake_alarm._alarm._make_challenge", return_value=next_flash
-        ):
+        with patch("wake_alarm._alarm._make_challenge", return_value=next_flash):
             alarm._on_submit()
 
         assert alarm._progress.current_challenge.kind == "flash"
@@ -330,7 +328,7 @@ class TestDismissWithoutSkip:
         alarm._view.container.winfo_children.return_value = [mock_widget]
 
         with patch(
-            "python_pkg.wake_alarm._alarm.save_wake_state",
+            "wake_alarm._alarm.save_wake_state",
         ) as mock_save:
             alarm._dismiss_alarm(earned_skip=False)
 

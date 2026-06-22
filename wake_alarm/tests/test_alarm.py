@@ -13,11 +13,11 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-from python_pkg.wake_alarm._alarm import (
+from wake_alarm._alarm import (
     _is_alarm_day,
     _should_run_alarm,
 )
-from python_pkg.wake_alarm._audio import (
+from wake_alarm._audio import (
     _beep_loud,
     _beep_medium,
     _beep_soft,
@@ -27,11 +27,11 @@ from python_pkg.wake_alarm._audio import (
     _restore_fans,
     _speaker_test_path,
 )
-from python_pkg.wake_alarm._challenges import (
+from wake_alarm._challenges import (
     _DISMISS_CHARS,
     _generate_code,
 )
-from python_pkg.wake_alarm._constants import (
+from wake_alarm._constants import (
     DISMISS_CODE_LENGTH,
 )
 
@@ -60,9 +60,9 @@ def _block_real_tk() -> Generator[MagicMock]:
     """Prevent any real Tk windows in tests."""
     mock = _make_mock_tk()
     with (
-        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm.tk", mock),
         patch(
-            "python_pkg.wake_alarm._alarm.GateRoot",
+            "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,
         ),
     ):
@@ -74,9 +74,9 @@ def mock_tk_module() -> Generator[MagicMock]:
     """Provide explicit access to the mocked tk module."""
     mock = _make_mock_tk()
     with (
-        patch("python_pkg.wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm.tk", mock),
         patch(
-            "python_pkg.wake_alarm._alarm.GateRoot",
+            "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,
         ),
     ):
@@ -117,7 +117,7 @@ class TestIsAlarmDay:
 
         # Create a date that is Monday
         with patch(
-            "python_pkg.wake_alarm._alarm.datetime",
+            "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 0  # Monday
@@ -128,7 +128,7 @@ class TestIsAlarmDay:
     def test_tuesday_is_not_alarm_day(self) -> None:
         """Tuesday (weekday=1) is NOT an alarm day."""
         with patch(
-            "python_pkg.wake_alarm._alarm.datetime",
+            "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 1  # Tuesday
@@ -138,7 +138,7 @@ class TestIsAlarmDay:
     def test_friday_is_alarm_day(self) -> None:
         """Friday (weekday=4) is an alarm day."""
         with patch(
-            "python_pkg.wake_alarm._alarm.datetime",
+            "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 4  # Friday
@@ -148,7 +148,7 @@ class TestIsAlarmDay:
     def test_saturday_is_alarm_day(self) -> None:
         """Saturday (weekday=5) is an alarm day."""
         with patch(
-            "python_pkg.wake_alarm._alarm.datetime",
+            "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 5
@@ -158,7 +158,7 @@ class TestIsAlarmDay:
     def test_sunday_is_alarm_day(self) -> None:
         """Sunday (weekday=6) is an alarm day."""
         with patch(
-            "python_pkg.wake_alarm._alarm.datetime",
+            "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 6
@@ -168,7 +168,7 @@ class TestIsAlarmDay:
     def test_wednesday_is_not_alarm_day(self) -> None:
         """Wednesday (weekday=2) is NOT an alarm day."""
         with patch(
-            "python_pkg.wake_alarm._alarm.datetime",
+            "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 2
@@ -182,7 +182,7 @@ class TestSpeakerTestPath:
     def test_returns_path_when_found(self) -> None:
         """Return full path when speaker-test is available."""
         with patch(
-            "python_pkg.wake_alarm._audio.shutil.which",
+            "wake_alarm._audio.shutil.which",
             return_value="/usr/bin/speaker-test",
         ):
             assert _speaker_test_path() == "/usr/bin/speaker-test"
@@ -191,7 +191,7 @@ class TestSpeakerTestPath:
         """Raise FileNotFoundError when speaker-test is missing."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value=None,
             ),
             pytest.raises(FileNotFoundError, match="speaker-test not found"),
@@ -204,7 +204,7 @@ class TestBeepFunctions:
 
     def test_beep_soft_writes_bell(self) -> None:
         """_beep_soft writes terminal bell character."""
-        with patch("python_pkg.wake_alarm._audio.sys") as mock_sys:
+        with patch("wake_alarm._audio.sys") as mock_sys:
             mock_sys.stdout = MagicMock()
             _beep_soft()
             mock_sys.stdout.write.assert_called_once_with("\a")
@@ -212,13 +212,13 @@ class TestBeepFunctions:
 
     def test_beep_medium_delegates_to_play_tone(self) -> None:
         """_beep_medium just delegates to _play_tone."""
-        with patch("python_pkg.wake_alarm._audio._play_tone") as mock_play:
+        with patch("wake_alarm._audio._play_tone") as mock_play:
             _beep_medium(frequency=800)
             mock_play.assert_called_once_with(800)
 
     def test_beep_loud_delegates_to_play_tone(self) -> None:
         """_beep_loud just delegates to _play_tone."""
-        with patch("python_pkg.wake_alarm._audio._play_tone") as mock_play:
+        with patch("wake_alarm._audio._play_tone") as mock_play:
             _beep_loud(frequency=1200)
             mock_play.assert_called_once_with(1200)
 
@@ -229,7 +229,7 @@ class TestShouldRunAlarm:
     def test_returns_false_on_non_alarm_day(self) -> None:
         """Return False when today is not an alarm day."""
         with patch(
-            "python_pkg.wake_alarm._alarm._is_alarm_day",
+            "wake_alarm._alarm._is_alarm_day",
             return_value=False,
         ):
             assert _should_run_alarm() is False
@@ -238,11 +238,11 @@ class TestShouldRunAlarm:
         """Return False when alarm was already dismissed today."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm._is_alarm_day",
+                "wake_alarm._alarm._is_alarm_day",
                 return_value=True,
             ),
             patch(
-                "python_pkg.wake_alarm._alarm.was_alarm_dismissed_today",
+                "wake_alarm._alarm.was_alarm_dismissed_today",
                 return_value=True,
             ),
         ):
@@ -252,15 +252,15 @@ class TestShouldRunAlarm:
         """Return True when today is alarm day and not yet dismissed."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm._is_alarm_day",
+                "wake_alarm._alarm._is_alarm_day",
                 return_value=True,
             ),
             patch(
-                "python_pkg.wake_alarm._alarm.was_alarm_dismissed_today",
+                "wake_alarm._alarm.was_alarm_dismissed_today",
                 return_value=False,
             ),
             patch(
-                "python_pkg.wake_alarm._alarm.was_workout_logged_today",
+                "wake_alarm._alarm.was_workout_logged_today",
                 return_value=False,
             ),
         ):
@@ -270,15 +270,15 @@ class TestShouldRunAlarm:
         """Return False when workout was already logged today."""
         with (
             patch(
-                "python_pkg.wake_alarm._alarm._is_alarm_day",
+                "wake_alarm._alarm._is_alarm_day",
                 return_value=True,
             ),
             patch(
-                "python_pkg.wake_alarm._alarm.was_alarm_dismissed_today",
+                "wake_alarm._alarm.was_alarm_dismissed_today",
                 return_value=False,
             ),
             patch(
-                "python_pkg.wake_alarm._alarm.was_workout_logged_today",
+                "wake_alarm._alarm.was_workout_logged_today",
                 return_value=True,
             ),
         ):
@@ -292,10 +292,10 @@ class TestPlayOnExtraDevices:
         """_play_on_extra_devices spawns speaker-test with PIPEWIRE_NODE set."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio._speaker_test_path",
+                "wake_alarm._audio._speaker_test_path",
                 return_value="/usr/bin/speaker-test",
             ),
-            patch("python_pkg.wake_alarm._audio.subprocess.Popen") as mock_popen,
+            patch("wake_alarm._audio.subprocess.Popen") as mock_popen,
         ):
             _play_on_extra_devices(1000)
             mock_popen.assert_called_once()
@@ -311,10 +311,10 @@ class TestPlayOnExtraDevices:
         """_play_on_extra_devices does nothing when speaker-test is absent."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio._speaker_test_path",
+                "wake_alarm._audio._speaker_test_path",
                 side_effect=FileNotFoundError("not found"),
             ),
-            patch("python_pkg.wake_alarm._audio.subprocess.Popen") as mock_popen,
+            patch("wake_alarm._audio.subprocess.Popen") as mock_popen,
         ):
             _play_on_extra_devices(1000)
             mock_popen.assert_not_called()
@@ -323,11 +323,11 @@ class TestPlayOnExtraDevices:
         """_play_on_extra_devices silently ignores OSError from Popen."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio._speaker_test_path",
+                "wake_alarm._audio._speaker_test_path",
                 return_value="/usr/bin/speaker-test",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.Popen",
+                "wake_alarm._audio.subprocess.Popen",
                 side_effect=OSError("device busy"),
             ),
         ):
@@ -374,18 +374,18 @@ class TestMaxFans:
 
     def test_returns_false_when_no_hwmon(self) -> None:
         """No fan controller → returns False immediately."""
-        with patch("python_pkg.wake_alarm._audio._find_fan_hwmon", return_value=None):
+        with patch("wake_alarm._audio._find_fan_hwmon", return_value=None):
             assert _max_fans() is False
 
     def test_returns_false_on_script_oserror(self, tmp_path: pathlib.Path) -> None:
         """OSError running fan script → returns False."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio._find_fan_hwmon",
+                "wake_alarm._audio._find_fan_hwmon",
                 return_value=str(tmp_path),
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=OSError("not found"),
             ),
         ):
@@ -395,11 +395,11 @@ class TestMaxFans:
         """TimeoutExpired running fan script → returns False."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio._find_fan_hwmon",
+                "wake_alarm._audio._find_fan_hwmon",
                 return_value=str(tmp_path),
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=subprocess.TimeoutExpired("fan", 5),
             ),
         ):
@@ -411,11 +411,11 @@ class TestMaxFans:
         mock_result.returncode = 1
         with (
             patch(
-                "python_pkg.wake_alarm._audio._find_fan_hwmon",
+                "wake_alarm._audio._find_fan_hwmon",
                 return_value=str(tmp_path),
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 return_value=mock_result,
             ),
         ):
@@ -427,11 +427,11 @@ class TestMaxFans:
         mock_result.returncode = 0
         with (
             patch(
-                "python_pkg.wake_alarm._audio._find_fan_hwmon",
+                "wake_alarm._audio._find_fan_hwmon",
                 return_value=str(tmp_path),
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 return_value=mock_result,
             ),
         ):
@@ -443,13 +443,13 @@ class TestRestoreFans:
 
     def test_noop_when_inactive(self) -> None:
         """False state → subprocess.run is never called."""
-        with patch("python_pkg.wake_alarm._audio.subprocess.run") as mock_run:
+        with patch("wake_alarm._audio.subprocess.run") as mock_run:
             _restore_fans(active=False)
             mock_run.assert_not_called()
 
     def test_calls_fan_script_restore(self) -> None:
         """Active state → fan script called with restore (no args)."""
-        with patch("python_pkg.wake_alarm._audio.subprocess.run") as mock_run:
+        with patch("wake_alarm._audio.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             _restore_fans(active=True)
             mock_run.assert_called_once()
@@ -459,7 +459,7 @@ class TestRestoreFans:
     def test_ignores_oserror_on_restore(self) -> None:
         """OSError from fan script is silently suppressed."""
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             side_effect=OSError("no script"),
         ):
             _restore_fans(active=True)  # must not raise
@@ -467,7 +467,7 @@ class TestRestoreFans:
     def test_ignores_timeout_on_restore(self) -> None:
         """TimeoutExpired from fan script is silently suppressed."""
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             side_effect=subprocess.TimeoutExpired("fan", 5),
         ):
             _restore_fans(active=True)  # must not raise

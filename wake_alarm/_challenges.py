@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import secrets
 
-from python_pkg.wake_alarm._constants import DISMISS_CODE_LENGTH, DISMISS_FLASH_SECONDS
+from wake_alarm._constants import DISMISS_CODE_LENGTH, DISMISS_FLASH_SECONDS
 
 # Uppercase alphanumeric chars with visually ambiguous characters removed:
 # O/0 (oh vs zero) and I/1 (capital-i vs one) are excluded so the code is

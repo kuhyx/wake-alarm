@@ -1,0 +1,20 @@
+[Unit]
+Description=Weekend Wake Alarm
+After=graphical-session.target
+
+[Service]
+Type=simple
+# DISPLAY mirrors workout-locker.service: without DISPLAY the alarm crashes
+# on cold boot with "no display name and no $DISPLAY" (Tk can't open the X
+# server) before systemd retries. The short sleep lets the X session export
+# DISPLAY into the user environment first.
+# No PYTHONPATH needed: wake_alarm is pip-installed (see install.sh /
+# README), so /usr/bin/python finds it via user site-packages.
+Environment=DISPLAY=:0
+ExecStartPre=/bin/sleep 1
+ExecStart=/usr/bin/python -m wake_alarm._alarm --production
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

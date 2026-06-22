@@ -4,17 +4,22 @@
 # Usage: bash install.sh
 #
 # What it does:
-#   1. Copies wake-alarm.service to ~/.config/systemd/user/
-#   2. Enables and starts the service
-#   3. Installs the systemd-sleep hook (restarts alarm after hibernate resume)
-#   4. Adds a sudoers entry for passwordless rtcwake
-#   5. Installs shutdown wrapper so "shutdown now" also hibernates on alarm nights
-#   6. Installs fan-control script so alarm can max fans on wake
-#   7. Installs python-kasa (AUR) so the alarm can toggle a Tapo P110 smart plug
+#   1. Installs wake_alarm + dependencies for /usr/bin/python
+#   2. Installs system dependencies (alsa-utils, ddcutil)
+#   3. Copies wake-alarm.service to ~/.config/systemd/user/ and enables it
+#   4. Installs the systemd-sleep hook (restarts alarm after hibernate resume)
+#   5. Adds a sudoers entry for passwordless rtcwake
+#   6. Installs shutdown wrapper so "shutdown now" also hibernates on alarm nights
+#   7. Installs fan-control script so alarm can max fans on wake
+#   8. Installs python-kasa (AUR) so the alarm can toggle a Tapo P110 smart plug
+#   9. Installs ddcutil and grants /dev/i2c-* access for DDC/CI monitor control
 
 set -euo pipefail
 
+# Split declare/assign so the command-substitution exit code is not masked (SC2155).
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+readonly SCRIPT_DIR
+readonly REPO_DIR="$SCRIPT_DIR"
 SERVICE_FILE="$SCRIPT_DIR/wake-alarm.service"
 SLEEP_HOOK_SRC="$SCRIPT_DIR/sleep-hook.sh"
 SHUTDOWN_WRAPPER_SRC="$SCRIPT_DIR/shutdown-wrapper.sh"
@@ -28,8 +33,15 @@ RTCWAKE_BIN="/usr/sbin/rtcwake"
 
 echo "=== Weekend Wake Alarm Installer ==="
 
-# 0. Install system dependencies
-echo "[0/7] Checking system dependencies..."
+# 1. Install this package + its dependencies into system Python -------------
+echo "[1/9] Installing wake_alarm + dependencies for /usr/bin/python..."
+/usr/bin/python3 -m pip install --user --break-system-packages -e "$REPO_DIR"
+echo "  Installed. Verifying import..."
+/usr/bin/python3 -c "import wake_alarm; import gatelock" \
+    && echo "  wake_alarm and gatelock import cleanly from the system interpreter."
+
+# 2. Install system dependencies
+echo "[2/9] Checking system dependencies..."
 if ! command -v speaker-test &>/dev/null; then
     echo "  Installing alsa-utils (required for speaker-test)..."
     sudo pacman -S --noconfirm alsa-utils
@@ -37,26 +49,23 @@ else
     echo "  alsa-utils already installed"
 fi
 
-# 1. Install systemd user service
-echo "[1/7] Installing systemd user service..."
+# 3. Install systemd user service
+echo "[3/9] Installing systemd user service..."
 mkdir -p "$SYSTEMD_USER_DIR"
 cp "$SERVICE_FILE" "$SYSTEMD_USER_DIR/wake-alarm.service"
 systemctl --user daemon-reload
 echo "  Installed to $SYSTEMD_USER_DIR/wake-alarm.service"
-
-# 2. Enable service
-echo "[2/7] Enabling wake-alarm.service..."
 systemctl --user enable wake-alarm.service
 echo "  Service enabled (will start on next boot)"
 
-# 3. Install systemd-sleep hook (restarts alarm after hibernate resume)
-echo "[3/7] Installing systemd-sleep hook..."
+# 4. Install systemd-sleep hook (restarts alarm after hibernate resume)
+echo "[4/9] Installing systemd-sleep hook..."
 sudo cp "$SLEEP_HOOK_SRC" "$SLEEP_HOOK_DST"
 sudo chmod 0755 "$SLEEP_HOOK_DST"
 echo "  Installed to $SLEEP_HOOK_DST"
 
-# 4. Add sudoers entry for rtcwake (requires root)
-echo "[4/7] Setting up sudoers for rtcwake..."
+# 5. Add sudoers entry for rtcwake (requires root)
+echo "[5/9] Setting up sudoers for rtcwake..."
 SUDOERS_LINE="$USER ALL=(root) NOPASSWD: $RTCWAKE_BIN"
 if [[ -f "$SUDOERS_FILE" ]] && grep -qF "$SUDOERS_LINE" "$SUDOERS_FILE"; then
     echo "  Sudoers entry already exists"
@@ -67,15 +76,15 @@ else
     echo "  Added: $SUDOERS_LINE"
 fi
 
-# 5. Install shutdown wrapper (/usr/local/bin/shutdown shadows /usr/bin/shutdown)
-echo "[5/7] Installing shutdown wrapper..."
+# 6. Install shutdown wrapper (/usr/local/bin/shutdown shadows /usr/bin/shutdown)
+echo "[6/9] Installing shutdown wrapper..."
 sudo cp "$SHUTDOWN_WRAPPER_SRC" "$SHUTDOWN_WRAPPER_DST"
 sudo chmod 0755 "$SHUTDOWN_WRAPPER_DST"
 echo "  Installed to $SHUTDOWN_WRAPPER_DST"
 echo "  'shutdown now' will now hibernate (not poweroff) on alarm nights."
 
-# 6. Install fan-control script and its sudoers entry
-echo "[6/7] Installing fan-control script..."
+# 7. Install fan-control script and its sudoers entry
+echo "[7/9] Installing fan-control script..."
 sudo cp "$FANS_SCRIPT_SRC" "$FANS_SCRIPT_DST"
 sudo chmod 0755 "$FANS_SCRIPT_DST"
 FANS_SUDOERS_LINE="$USER ALL=(root) NOPASSWD: $FANS_SCRIPT_DST"
@@ -88,8 +97,8 @@ else
     echo "  Added fan sudoers entry"
 fi
 
-# 7. Install python-kasa (AUR) for TP-Link Tapo P110 smart-plug control
-echo "[7/8] Installing python-kasa (AUR)..."
+# 8. Install python-kasa (AUR) for TP-Link Tapo P110 smart-plug control
+echo "[8/9] Installing python-kasa (AUR)..."
 if python -c 'import kasa' 2>/dev/null; then
     echo "  python-kasa already installed"
 elif command -v yay &>/dev/null; then
@@ -102,10 +111,10 @@ if [[ ! -f "$HOME/.config/wake_alarm/tapo.json" ]]; then
     echo "        Create it (mode 0600) with keys: host, email, password."
 fi
 
-# 8. Install ddcutil for DDC/CI monitor power control
+# 9. Install ddcutil for DDC/CI monitor power control
 # ddcutil lets the alarm force the G27Q on via DDC/CI even when the monitor
 # was physically powered off (power button), bypassing DPMS limitations.
-echo "[8/8] Installing ddcutil (DDC/CI monitor power control)..."
+echo "[9/9] Installing ddcutil (DDC/CI monitor power control)..."
 if command -v ddcutil &>/dev/null; then
     echo "  ddcutil already installed"
 else
@@ -128,4 +137,4 @@ echo "=== Installation complete ==="
 echo "The wake alarm will activate on boot for alarm days (Mon, Fri, Sat, Sun)."
 echo "After hibernate resume the sleep hook will restart the alarm service."
 echo "Fans will ramp to 100% while the alarm is active, then restore automatically."
-echo "To test now: python -m python_pkg.wake_alarm._alarm --demo"
+echo "To test now: python -m wake_alarm._alarm --demo"

@@ -22,7 +22,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from python_pkg.wake_alarm._constants import (
+from wake_alarm._constants import (
     TAPO_CONFIG_FILE,
     TAPO_TIMEOUT_SECONDS,
 )

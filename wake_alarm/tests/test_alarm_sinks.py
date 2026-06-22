@@ -5,8 +5,8 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from python_pkg.wake_alarm._alarm import _parse_args
-from python_pkg.wake_alarm._audio import (
+from wake_alarm._alarm import _parse_args
+from wake_alarm._audio import (
     _activate_alarm_audio,
     _alarm_sink_present,
     _current_default_sink,
@@ -22,11 +22,11 @@ class TestWarnIfNoRealSink:
         """No pactl on PATH → warns and returns."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value=None,
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
             ) as mock_run,
         ):
             _warn_if_no_real_sink()
@@ -38,14 +38,14 @@ class TestWarnIfNoRealSink:
         result.stdout = b"4319\tauto_null\tPipeWire\tfloat32le 2ch 48000Hz\tIDLE\n"
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/pactl",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 return_value=result,
             ),
-            patch("python_pkg.wake_alarm._audio._logger") as mock_log,
+            patch("wake_alarm._audio._logger") as mock_log,
         ):
             _warn_if_no_real_sink()
             mock_log.warning.assert_called()
@@ -56,14 +56,14 @@ class TestWarnIfNoRealSink:
         result.stdout = b"1\talsa_output.pci-0000_01_00.1.hdmi-stereo\tPipeWire\t-\t-\n"
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/pactl",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 return_value=result,
             ),
-            patch("python_pkg.wake_alarm._audio._logger") as mock_log,
+            patch("wake_alarm._audio._logger") as mock_log,
         ):
             _warn_if_no_real_sink()
             mock_log.info.assert_called()
@@ -73,11 +73,11 @@ class TestWarnIfNoRealSink:
         """OSError/TimeoutExpired running pactl → warning, no raise."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/pactl",
             ),
             patch(
-                "python_pkg.wake_alarm._audio.subprocess.run",
+                "wake_alarm._audio.subprocess.run",
                 side_effect=subprocess.TimeoutExpired("pactl", 5),
             ),
         ):
@@ -89,11 +89,11 @@ class TestAlarmSinkPresent:
 
     def test_true_when_sink_listed(self) -> None:
         """Returns True when the alarm sink name appears in pactl output."""
-        from python_pkg.wake_alarm._constants import ALARM_AUDIO_SINK
+        from wake_alarm._constants import ALARM_AUDIO_SINK
 
         proc = MagicMock(stdout=ALARM_AUDIO_SINK.encode() + b"\tPipeWire\n")
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             return_value=proc,
         ):
             assert _alarm_sink_present("/usr/bin/pactl") is True
@@ -102,7 +102,7 @@ class TestAlarmSinkPresent:
         """Returns False when the alarm sink is not in pactl output."""
         proc = MagicMock(stdout=b"auto_null\tPipeWire\n")
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             return_value=proc,
         ):
             assert _alarm_sink_present("/usr/bin/pactl") is False
@@ -110,7 +110,7 @@ class TestAlarmSinkPresent:
     def test_false_on_subprocess_error(self) -> None:
         """OSError while listing sinks → False, no raise."""
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             side_effect=OSError("boom"),
         ):
             assert _alarm_sink_present("/usr/bin/pactl") is False
@@ -123,7 +123,7 @@ class TestCurrentDefaultSink:
         """Returns the trimmed default sink name."""
         proc = MagicMock(stdout=b"jbl_sink\n")
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             return_value=proc,
         ):
             assert _current_default_sink("/usr/bin/pactl") == "jbl_sink"
@@ -132,7 +132,7 @@ class TestCurrentDefaultSink:
         """Empty output → None."""
         proc = MagicMock(stdout=b"\n")
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             return_value=proc,
         ):
             assert _current_default_sink("/usr/bin/pactl") is None
@@ -140,7 +140,7 @@ class TestCurrentDefaultSink:
     def test_returns_none_on_error(self) -> None:
         """TimeoutExpired → None, no raise."""
         with patch(
-            "python_pkg.wake_alarm._audio.subprocess.run",
+            "wake_alarm._audio.subprocess.run",
             side_effect=subprocess.TimeoutExpired("pactl", 3),
         ):
             assert _current_default_sink("/usr/bin/pactl") is None
@@ -152,8 +152,8 @@ class TestActivateAlarmAudio:
     def test_returns_none_when_pactl_missing(self) -> None:
         """No pactl on PATH → returns None without touching audio."""
         with (
-            patch("python_pkg.wake_alarm._audio.shutil.which", return_value=None),
-            patch("python_pkg.wake_alarm._audio.subprocess.run") as mock_run,
+            patch("wake_alarm._audio.shutil.which", return_value=None),
+            patch("wake_alarm._audio.subprocess.run") as mock_run,
         ):
             assert _activate_alarm_audio() is None
             mock_run.assert_not_called()
@@ -162,23 +162,23 @@ class TestActivateAlarmAudio:
         """Sink present → routes audio there and returns prior default sink."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/pactl",
             ),
             patch(
-                "python_pkg.wake_alarm._audio._alarm_sink_present",
+                "wake_alarm._audio._alarm_sink_present",
                 return_value=True,
             ),
             patch(
-                "python_pkg.wake_alarm._audio._current_default_sink",
+                "wake_alarm._audio._current_default_sink",
                 return_value="jbl_sink",
             ),
-            patch("python_pkg.wake_alarm._audio.subprocess.run") as mock_run,
+            patch("wake_alarm._audio.subprocess.run") as mock_run,
         ):
             result = _activate_alarm_audio()
         assert result == "jbl_sink"
         cmds = [call.args[0] for call in mock_run.call_args_list]
-        from python_pkg.wake_alarm._constants import (
+        from wake_alarm._constants import (
             ALARM_AUDIO_CARD,
             ALARM_AUDIO_PROFILE,
             ALARM_AUDIO_SINK,
@@ -196,15 +196,15 @@ class TestActivateAlarmAudio:
         """Sink never shows up → returns None after polling (no raise)."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/pactl",
             ),
             patch(
-                "python_pkg.wake_alarm._audio._alarm_sink_present",
+                "wake_alarm._audio._alarm_sink_present",
                 return_value=False,
             ),
-            patch("python_pkg.wake_alarm._audio.time.sleep") as mock_sleep,
-            patch("python_pkg.wake_alarm._audio.subprocess.run"),
+            patch("wake_alarm._audio.time.sleep") as mock_sleep,
+            patch("wake_alarm._audio.subprocess.run"),
         ):
             assert _activate_alarm_audio() is None
             mock_sleep.assert_called()
@@ -213,19 +213,19 @@ class TestActivateAlarmAudio:
         """Sink absent then present → sleeps once, then routes audio."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/pactl",
             ),
             patch(
-                "python_pkg.wake_alarm._audio._alarm_sink_present",
+                "wake_alarm._audio._alarm_sink_present",
                 side_effect=[False, True],
             ),
             patch(
-                "python_pkg.wake_alarm._audio._current_default_sink",
+                "wake_alarm._audio._current_default_sink",
                 return_value="old",
             ),
-            patch("python_pkg.wake_alarm._audio.time.sleep") as mock_sleep,
-            patch("python_pkg.wake_alarm._audio.subprocess.run"),
+            patch("wake_alarm._audio.time.sleep") as mock_sleep,
+            patch("wake_alarm._audio.subprocess.run"),
         ):
             assert _activate_alarm_audio() == "old"
             mock_sleep.assert_called_once()
@@ -236,15 +236,15 @@ class TestRestoreAlarmAudio:
 
     def test_none_is_noop(self) -> None:
         """None default → does nothing, no pactl lookup."""
-        with patch("python_pkg.wake_alarm._audio.shutil.which") as mock_which:
+        with patch("wake_alarm._audio.shutil.which") as mock_which:
             _restore_alarm_audio(None)
             mock_which.assert_not_called()
 
     def test_no_pactl_returns_silently(self) -> None:
         """Default present but pactl missing → no raise, no run."""
         with (
-            patch("python_pkg.wake_alarm._audio.shutil.which", return_value=None),
-            patch("python_pkg.wake_alarm._audio.subprocess.run") as mock_run,
+            patch("wake_alarm._audio.shutil.which", return_value=None),
+            patch("wake_alarm._audio.subprocess.run") as mock_run,
         ):
             _restore_alarm_audio("jbl_sink")
             mock_run.assert_not_called()
@@ -253,10 +253,10 @@ class TestRestoreAlarmAudio:
         """Calls set-default-sink with the captured prior default."""
         with (
             patch(
-                "python_pkg.wake_alarm._audio.shutil.which",
+                "wake_alarm._audio.shutil.which",
                 return_value="/usr/bin/pactl",
             ),
-            patch("python_pkg.wake_alarm._audio.subprocess.run") as mock_run,
+            patch("wake_alarm._audio.subprocess.run") as mock_run,
         ):
             _restore_alarm_audio("jbl_sink")
         cmds = [call.args[0] for call in mock_run.call_args_list]

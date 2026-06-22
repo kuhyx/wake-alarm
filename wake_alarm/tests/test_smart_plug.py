@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from python_pkg.wake_alarm import _smart_plug
-from python_pkg.wake_alarm._smart_plug import (
+from wake_alarm import _smart_plug
+from wake_alarm._smart_plug import (
     _connect,
     _load_config,
     _run,

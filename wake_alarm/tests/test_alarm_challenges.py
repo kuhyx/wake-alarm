@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from python_pkg.wake_alarm._challenges import (
+from wake_alarm._challenges import (
     _DISMISS_CHARS,
     _Challenge,
     _make_challenge,
@@ -12,7 +12,7 @@ from python_pkg.wake_alarm._challenges import (
     _make_math_challenge,
     _make_sort_challenge,
 )
-from python_pkg.wake_alarm._constants import DISMISS_FLASH_SECONDS
+from wake_alarm._constants import DISMISS_FLASH_SECONDS
 
 
 class TestMakeMathChallenge:
@@ -25,9 +25,9 @@ class TestMakeMathChallenge:
     def test_answer_is_correct_for_addition(self) -> None:
         """Stored answer is numerically correct for addition."""
         with (
-            patch("python_pkg.wake_alarm._challenges.secrets.choice", return_value="+"),
+            patch("wake_alarm._challenges.secrets.choice", return_value="+"),
             patch(
-                "python_pkg.wake_alarm._challenges.secrets.randbelow",
+                "wake_alarm._challenges.secrets.randbelow",
                 side_effect=[13, 35],  # 10+13=23, 10+35=45
             ),
         ):
@@ -38,9 +38,9 @@ class TestMakeMathChallenge:
     def test_answer_is_correct_for_subtraction(self) -> None:
         """Stored answer is numerically correct for subtraction."""
         with (
-            patch("python_pkg.wake_alarm._challenges.secrets.choice", return_value="-"),
+            patch("wake_alarm._challenges.secrets.choice", return_value="-"),
             patch(
-                "python_pkg.wake_alarm._challenges.secrets.randbelow",
+                "wake_alarm._challenges.secrets.randbelow",
                 side_effect=[30, 7],  # 20+30=50, 10+7=17
             ),
         ):
@@ -51,9 +51,9 @@ class TestMakeMathChallenge:
     def test_answer_is_correct_for_multiplication(self) -> None:
         """Stored answer is numerically correct for multiplication."""
         with (
-            patch("python_pkg.wake_alarm._challenges.secrets.choice", return_value="*"),
+            patch("wake_alarm._challenges.secrets.choice", return_value="*"),
             patch(
-                "python_pkg.wake_alarm._challenges.secrets.randbelow",
+                "wake_alarm._challenges.secrets.randbelow",
                 side_effect=[3, 4],  # 12+3=15, 3+4=7
             ),
         ):
