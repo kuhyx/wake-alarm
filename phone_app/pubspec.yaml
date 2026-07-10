@@ -1,0 +1,26 @@
+name: wake_alarm_sync
+description: "Wake alarm phone-side sync app — sets phone alarm and writes time to GitHub Gist."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  android_intent_plus: ^5.0.0
+  cupertino_icons: ^1.0.8
+  flutter:
+    sdk: flutter
+  flutter_secure_storage: ^9.0.0
+  http: ^1.2.0
+  shared_preferences: ^2.3.0
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  very_good_analysis: ^10.2.0
+
+flutter:
+  uses-material-design: true
