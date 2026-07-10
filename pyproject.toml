@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Hibernate-scheduled weekend wake alarm with fan ramp and smart-plug control"
 requires-python = ">=3.10"
 dependencies = [
-    "gatelock @ git+https://github.com/kuhyx/gatelock@v0.1.0",
+    "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.1.0#subdirectory=gatelock",
     "python-kasa>=0.7",
 ]
 
