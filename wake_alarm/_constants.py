@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 # Days the wake alarm is active (Python weekday(): Mon=0 ... Sun=6)
-# Monday, Friday, Saturday, Sunday
-ALARM_DAYS: frozenset[int] = frozenset({0, 4, 5, 6})
+# Every day of the week.
+ALARM_DAYS: frozenset[int] = frozenset({0, 1, 2, 3, 4, 5, 6})
 
 # How many hours after shutdown the PC should wake
 WAKE_AFTER_HOURS: int = 8
@@ -28,11 +28,11 @@ MEDIUM_BEEP_INTERVAL: float = 5.0
 LOUD_TOGGLE_INTERVAL: float = 2.0
 
 # Dismiss challenge: length of the random code
-DISMISS_CODE_LENGTH: int = 8
+DISMISS_CODE_LENGTH: int = 10
 # Number of correct code entries required to dismiss the alarm.
 # Requiring more than one round forces the user to stay awake long enough
 # to actually read and type multiple independent codes.
-DISMISS_ROUNDS_REQUIRED: int = 2
+DISMISS_ROUNDS_REQUIRED: int = 4
 # Seconds the code is visible before being hidden in a flash challenge.
 DISMISS_FLASH_SECONDS: int = 4
 # How often the dismiss code refreshes (seconds)

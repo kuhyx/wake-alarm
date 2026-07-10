@@ -191,8 +191,10 @@ class WakeAlarm:
         )
         info_label.pack(pady=10)
 
-        # Math and sort use a smaller font because their display text is wider.
-        code_font_size = 48 if challenge.kind in ("math", "sort") else 72
+        # Non-flash types use a smaller font because their display text is wider.
+        code_font_size = (
+            48 if challenge.kind in ("math", "sort", "sequence", "reverse") else 72
+        )
         code_label = tk.Label(
             container,
             text=challenge.display,

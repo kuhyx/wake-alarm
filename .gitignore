@@ -14,3 +14,7 @@ coverage.lcov
 htmlcov/
 *.log
 .DS_Store
+
+# Runtime state: HMAC-signed dismissal record for the current alarm day.
+# Never tracked (see CLAUDE.md).
+wake_alarm/wake_state.json

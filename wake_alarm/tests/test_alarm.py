@@ -125,15 +125,15 @@ class TestIsAlarmDay:
             mock_dt.side_effect = datetime
             assert _is_alarm_day() is True
 
-    def test_tuesday_is_not_alarm_day(self) -> None:
-        """Tuesday (weekday=1) is NOT an alarm day."""
+    def test_tuesday_is_alarm_day(self) -> None:
+        """Tuesday (weekday=1) is an alarm day."""
         with patch(
             "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 1  # Tuesday
             mock_dt.now.return_value = mock_now
-            assert _is_alarm_day() is False
+            assert _is_alarm_day() is True
 
     def test_friday_is_alarm_day(self) -> None:
         """Friday (weekday=4) is an alarm day."""
@@ -165,15 +165,25 @@ class TestIsAlarmDay:
             mock_dt.now.return_value = mock_now
             assert _is_alarm_day() is True
 
-    def test_wednesday_is_not_alarm_day(self) -> None:
-        """Wednesday (weekday=2) is NOT an alarm day."""
+    def test_wednesday_is_alarm_day(self) -> None:
+        """Wednesday (weekday=2) is an alarm day."""
         with patch(
             "wake_alarm._alarm.datetime",
         ) as mock_dt:
             mock_now = MagicMock()
             mock_now.weekday.return_value = 2
             mock_dt.now.return_value = mock_now
-            assert _is_alarm_day() is False
+            assert _is_alarm_day() is True
+
+    def test_thursday_is_alarm_day(self) -> None:
+        """Thursday (weekday=3) is an alarm day."""
+        with patch(
+            "wake_alarm._alarm.datetime",
+        ) as mock_dt:
+            mock_now = MagicMock()
+            mock_now.weekday.return_value = 3
+            mock_dt.now.return_value = mock_now
+            assert _is_alarm_day() is True
 
 
 class TestSpeakerTestPath:
