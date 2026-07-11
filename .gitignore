@@ -18,3 +18,6 @@ htmlcov/
 # Runtime state: HMAC-signed dismissal record for the current alarm day.
 # Never tracked (see CLAUDE.md).
 wake_alarm/wake_state.json
+
+# ci_mirror.sh cached requirements.txt venv (rebuilt on demand)
+.ci-mirror-venv/
