@@ -283,13 +283,11 @@ class TestActivateAllOutputs:
         assert ["/usr/bin/pactl", "set-default-sink", ALARM_AUDIO_SINK] in cmds
         assert mock_audible.call_count == 2
 
-    def test_waits_for_slow_monitor_sink(self) -> None:
-        """The dead analog sink is present first; activation waits for the
-        monitor HDMI sink to enumerate on a later poll, then routes to it.
+    def test_does_not_block_on_sink_enumeration(self) -> None:
+        """Activation checks present sinks once — no polling/sleeping loop.
 
-        This is the exact wake-time scenario the change fixes: a live-but-silent
-        sink already present must not short-circuit the wait for the always-on
-        monitor speaker.
+        The per-cycle presence check in _play_on_all_sinks is what covers a
+        slow monitor sink, so activation must not spin waiting for it.
         """
         state = self._sentinel_state()
         with (
@@ -299,53 +297,41 @@ class TestActivateAllOutputs:
             patch("wake_alarm._sinks._parse_cards", return_value={}),
             patch(
                 "wake_alarm._sinks._list_real_sinks",
-                side_effect=[["dead_analog"], ["dead_analog", ALARM_AUDIO_SINK]],
-            ),
+                return_value=[ALARM_AUDIO_SINK],
+            ) as mock_list,
             patch("wake_alarm._sinks._ensure_sink_audible"),
-            patch("wake_alarm._sinks.time.sleep") as mock_sleep,
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
+            patch("wake_alarm._sinks.subprocess.run"),
         ):
             assert _activate_all_outputs() is state
-        mock_sleep.assert_called_once()
-        cmds = [call.args[0] for call in mock_run.call_args_list]
-        assert ["/usr/bin/pactl", "set-default-sink", ALARM_AUDIO_SINK] in cmds
+        # Enumerated exactly once — no retry/poll loop.
+        mock_list.assert_called_once()
 
     def test_falls_back_to_first_sink_when_alarm_sink_absent(self) -> None:
-        """ALARM_AUDIO_SINK never appears → default is the first real sink."""
+        """ALARM_AUDIO_SINK not present → default is the first present sink."""
         state = self._sentinel_state()
         with (
             patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
             patch("wake_alarm._sinks._capture_audio_state", return_value=state),
             patch("wake_alarm._sinks._pactl_text", return_value=""),
             patch("wake_alarm._sinks._parse_cards", return_value={}),
-            patch("wake_alarm._sinks.ALARM_AUDIO_SINK_WAIT_SECONDS", 1.0),
-            patch("wake_alarm._sinks.ALARM_AUDIO_SINK_POLL_SECONDS", 0.5),
-            patch(
-                "wake_alarm._sinks._list_real_sinks",
-                side_effect=[["other"], ["other"], ["other"]],
-            ),
+            patch("wake_alarm._sinks._list_real_sinks", return_value=["other"]),
             patch("wake_alarm._sinks._ensure_sink_audible"),
-            patch("wake_alarm._sinks.time.sleep") as mock_sleep,
             patch("wake_alarm._sinks.subprocess.run") as mock_run,
         ):
             assert _activate_all_outputs() is state
-        mock_sleep.assert_called()
         cmds = [call.args[0] for call in mock_run.call_args_list]
         assert ["/usr/bin/pactl", "set-default-sink", "other"] in cmds
 
-    def test_returns_state_when_no_sink_at_all(self) -> None:
-        """No real sink ever appears → returns state, no default set."""
+    def test_returns_state_when_no_sink_present(self) -> None:
+        """No real sink present yet → returns state, no default, no maxing."""
         state = self._sentinel_state()
         with (
             patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
             patch("wake_alarm._sinks._capture_audio_state", return_value=state),
             patch("wake_alarm._sinks._pactl_text", return_value=""),
             patch("wake_alarm._sinks._parse_cards", return_value={}),
-            patch("wake_alarm._sinks.ALARM_AUDIO_SINK_WAIT_SECONDS", 1.0),
-            patch("wake_alarm._sinks.ALARM_AUDIO_SINK_POLL_SECONDS", 0.5),
             patch("wake_alarm._sinks._list_real_sinks", return_value=[]),
             patch("wake_alarm._sinks._ensure_sink_audible") as mock_audible,
-            patch("wake_alarm._sinks.time.sleep"),
             patch("wake_alarm._sinks.subprocess.run") as mock_run,
         ):
             assert _activate_all_outputs() is state

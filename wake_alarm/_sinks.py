@@ -15,12 +15,9 @@ import logging
 import re
 import shutil
 import subprocess
-import time
 
 from wake_alarm._constants import (
     ALARM_AUDIO_SINK,
-    ALARM_AUDIO_SINK_POLL_SECONDS,
-    ALARM_AUDIO_SINK_WAIT_SECONDS,
 )
 
 _logger = logging.getLogger(__name__)
@@ -233,10 +230,11 @@ def _activate_all_outputs() -> _AudioState | None:
     and hope: a switched-off external speaker cannot be revived by software, so
     every *other* output is tried in parallel instead.
 
-    It waits (bounded) for the known-slow ``ALARM_AUDIO_SINK`` (the G27Q
-    monitor's HDMI speaker, ~15 s to enumerate after power-on) so that output is
-    included in the first pass; the default sink is set to it when present but is
-    only a convenience — per-cycle all-sink playback is what guarantees audio.
+    It does not block waiting for the known-slow ``ALARM_AUDIO_SINK`` (the G27Q
+    monitor's HDMI speaker, ~15 s to enumerate); it activates whatever is present
+    now and lets the per-cycle presence check in ``_play_on_all_sinks`` sweep in
+    the rest. The default sink, when set, is only a convenience — per-cycle
+    all-sink playback is what guarantees audio.
 
     Returns:
         The prior audio state (to restore on close), or ``None`` only when
@@ -255,30 +253,18 @@ def _activate_all_outputs() -> _AudioState | None:
                 timeout=3,
                 check=False,
             )
-    # Wait for the known always-on monitor sink specifically, not just "any"
-    # sink: a switched-off external speaker often leaves a live-but-silent sink
-    # already present, and breaking on that would route the alarm to the dead
-    # output (the exact silent-alarm failure this change fixes). Fall back to
-    # whatever sinks exist if the monitor never enumerates.
-    attempts = max(
-        1,
-        int(ALARM_AUDIO_SINK_WAIT_SECONDS / ALARM_AUDIO_SINK_POLL_SECONDS),
-    )
-    sinks: list[str] = []
-    for _ in range(attempts):
-        sinks = _list_real_sinks(pactl)
-        if ALARM_AUDIO_SINK in sinks:
-            break
-        time.sleep(ALARM_AUDIO_SINK_POLL_SECONDS)
-    else:
-        _logger.warning(
-            "Preferred sink %s did not appear after %.0fs; using whatever exists",
-            ALARM_AUDIO_SINK,
-            ALARM_AUDIO_SINK_WAIT_SECONDS,
-        )
-        sinks = _list_real_sinks(pactl)
+    # No sleep-and-hope wait. Forcing the profiles on above makes sinks appear
+    # asynchronously (the monitor's HDMI sink can take ~15 s), but we don't block
+    # on a timer guessing when it's "ready". We activate whatever is present
+    # right now; the beep loop's _play_on_all_sinks re-checks _list_real_sinks
+    # every cycle, so each output is made audible and played on the moment it
+    # actually exists — a real presence check, never a timed guess.
+    sinks = _list_real_sinks(pactl)
     if not sinks:
-        _logger.warning("No real sink available; alarm relies on PC speaker")
+        _logger.warning(
+            "No real sink present yet; the beep loop will pick sinks up as they "
+            "enumerate (PC speaker covers the gap).",
+        )
         return state
     for sink in sinks:
         _ensure_sink_audible(pactl, sink)
@@ -290,7 +276,8 @@ def _activate_all_outputs() -> _AudioState | None:
         check=False,
     )
     _logger.warning(
-        "Alarm audio activated on %d sink(s) at 100%%, default=%s",
+        "Alarm audio activated on %d present sink(s) at 100%%, default=%s; more "
+        "are added by the beep loop as they enumerate.",
         len(sinks),
         default,
     )

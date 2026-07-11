@@ -40,7 +40,6 @@ from wake_alarm._constants import (
     DISMISS_FLASH_SECONDS,
     DISMISS_ROUNDS_REQUIRED,
     DISMISS_WINDOW_MINUTES,
-    DISPLAY_WAKE_WAIT_SECONDS,
     LOUD_TOGGLE_INTERVAL,
     MEDIUM_BEEP_INTERVAL,
     PHASE_MEDIUM_END,
@@ -486,10 +485,11 @@ def main() -> None:
         args.trigger_now,
     )
     _warn_if_no_real_sink()
+    # Wake the display, then proceed immediately — no sleep hoping the monitor
+    # is "up". The monitor powers on in parallel; brightness and audio don't
+    # block on it, and the beep loop's per-cycle sink check picks up the HDMI
+    # output the moment it enumerates.
     _wake_display()
-    # Wait for the G27Q to power on and enumerate its HDMI audio sink before
-    # _activate_all_outputs runs, else the alarm is silent if it was off.
-    time.sleep(DISPLAY_WAKE_WAIT_SECONDS)
     _set_max_brightness()
     turn_on_plug()
     alarm = WakeAlarm(demo_mode=args.demo)

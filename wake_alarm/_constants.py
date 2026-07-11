@@ -44,25 +44,12 @@ WAKE_STATE_FILE: Path = Path(__file__).resolve().parent / "wake_state.json"
 # rtcwake binary path
 RTCWAKE_BIN: str = "/usr/sbin/rtcwake"
 
-# Alarm audio output (machine-specific, empirically verified 2026-05-25).
-# At wake time the Bluetooth speaker is disconnected and PipeWire only has the
-# auto_null sink, so the alarm is silent unless we activate a real output. The
-# only audible always-present output on this machine is the G27Q monitor's
-# built-in speaker on the NVidia GPU's HDMI audio. WirePlumber leaves the card
-# profile "off", so the alarm must force the profile on and wait for the sink.
-ALARM_AUDIO_CARD: str = "alsa_card.pci-0000_01_00.1"
-ALARM_AUDIO_PROFILE: str = "output:hdmi-stereo"
+# Preferred alarm audio output (machine-specific, empirically verified).
+# At wake time the Bluetooth speaker is disconnected and PipeWire often has only
+# the auto_null sink, so the alarm activates every card and plays on all sinks.
+# This is the G27Q monitor's built-in HDMI speaker — the one always-present
+# output on this machine — used as the preferred default sink when present.
 ALARM_AUDIO_SINK: str = "alsa_output.pci-0000_01_00.1.hdmi-stereo"
-# Seconds to wait for the HDMI sink to appear after forcing the profile on.
-# The G27Q takes up to ~15 s to power on from a hard-off state and enumerate
-# its HDMI audio; 6 s was too short when the monitor was physically off.
-ALARM_AUDIO_SINK_WAIT_SECONDS: float = 20.0
-# Poll interval while waiting for the sink.
-ALARM_AUDIO_SINK_POLL_SECONDS: float = 0.5
-# Seconds to pause after waking the display (xset dpms force on) before
-# attempting audio setup.  Gives the G27Q time to come out of power-off
-# and re-enumerate its HDMI audio sink under PipeWire.
-DISPLAY_WAKE_WAIT_SECONDS: float = 5.0
 
 # Path to the workout log written by the companion screen_locker package.
 # Dict keyed by YYYY-MM-DD date strings; presence of today's key means the
