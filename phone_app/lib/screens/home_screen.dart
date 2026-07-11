@@ -4,10 +4,11 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
-import 'package:wake_alarm_sync/services/gist_service.dart';
+import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
 
-/// Main screen: displays the current alarm time and syncs it to the Gist.
+/// Main screen: displays the current alarm time and syncs it to the PC via
+/// the shared crdt_sync transport.
 class HomeScreen extends StatefulWidget {
   /// Creates a [HomeScreen].
   const HomeScreen({super.key});
@@ -22,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _busy = false;
   String _status = '';
   bool _configured = false;
+  AlarmSyncService? _service;
 
   @override
   void initState() {
@@ -30,25 +32,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSavedTime() async {
-    final settings = await SyncSettings.load();
-    if (!mounted) return;
-    setState(() => _configured = settings.isConfigured);
-    if (!settings.isConfigured) return;
-
+    final SyncSettings settings;
+    final AlarmSyncService service;
     try {
-      final time = await readGistAlarm(
-        token: settings.token,
-        gistId: settings.gistId,
-      );
-      if (time != null && mounted) {
-        setState(() {
-          _hour = time.hour;
-          _minute = time.minute;
-          _status = 'Loaded from Gist';
-        });
-      }
+      settings = await SyncSettings.load();
+      service = await AlarmSyncService.open();
     } on Exception catch (_) {
-      // Non-fatal: local defaults used.
+      // Storage/plugins unavailable (e.g. under a widget test, or a keystore
+      // hiccup): keep the on-screen defaults rather than crashing.
+      return;
+    }
+    if (!mounted) return;
+    _service = service;
+    setState(() => _configured = settings.isConfigured);
+
+    final alarm = service.currentAlarm;
+    if (alarm != null && mounted) {
+      setState(() {
+        _hour = alarm.hour;
+        _minute = alarm.minute;
+        _status = 'Loaded saved alarm';
+      });
     }
   }
 
@@ -88,7 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _syncAndSet() async {
     final settings = await SyncSettings.load();
-    if (!settings.isConfigured) {
+    final service = _service;
+    if (!settings.isConfigured || service == null) {
       setState(
         () => _status = 'Configure GitHub in Settings first.',
       );
@@ -97,17 +102,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       _busy = true;
-      _status = 'Syncing to Gist…';
+      _status = 'Syncing to PC…';
     });
     try {
-      await writeGistAlarm(
-        token: settings.token,
-        gistId: settings.gistId,
-        hour: _hour,
-        minute: _minute,
-      );
+      await service.setLocal(_hour, _minute);
+      await service.push(settings.token);
       setState(
-        () => _status = 'Gist updated ✓ — opening Clock app…',
+        () => _status = 'Synced ✓ — opening Clock app…',
       );
       await _setPhoneAlarm();
       setState(

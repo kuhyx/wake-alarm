@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:wake_alarm_sync/services/gist_service.dart';
 import 'package:wake_alarm_sync/services/github_device_auth.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
 
-/// Settings screen for GitHub connection and Gist configuration.
+/// Settings screen for the GitHub connection used to sync the alarm.
 ///
 /// The "Connect GitHub" button runs the OAuth device flow — the user
 /// enters a short code on github.com; no token pasting required.
@@ -21,7 +20,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  SyncSettings _settings = const SyncSettings(token: '', gistId: '');
+  SyncSettings _settings = const SyncSettings(token: '');
   bool _busy = false;
   String _status = '';
 
@@ -52,16 +51,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       setState(() {
         _busy = true;
-        _status = 'Connected — creating Gist…';
+        _status = 'Connecting…';
       });
-      final gistId = await createGist(token: token);
-      final updated = SyncSettings(token: token, gistId: gistId);
+      final updated = SyncSettings(token: token);
       await updated.save();
       if (mounted) {
         setState(() {
           _settings = updated;
           _busy = false;
-          _status = 'Connected! Gist ID: $gistId';
+          _status = 'Connected! Alarm will sync to kuhyx/syncs.';
         });
       }
     } on Exception catch (e) {
@@ -80,7 +78,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await SyncSettings.clear();
     if (mounted) {
       setState(() {
-        _settings = const SyncSettings(token: '', gistId: '');
+        _settings = const SyncSettings(token: '');
         _status = 'Disconnected.';
       });
     }
@@ -96,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _StatusCard(connected: isConnected, gistId: _settings.gistId),
+            _StatusCard(connected: isConnected),
             const SizedBox(height: 16),
             if (!isConnected)
               ElevatedButton.icon(
@@ -133,8 +131,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Divider(height: 32),
             const Text(
               'PC config — create this file:\n'
-              '~/.config/wake_alarm/gist_sync.json\n\n'
-              '{ "token": "<same token>", "gist_id": "<shown above>" }',
+              '~/.config/wake_alarm/sync.json\n\n'
+              '{ "token": "<same token>" }\n\n'
+              'The token needs "repo" scope so the PC can read '
+              'kuhyx/syncs at shutdown.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -145,10 +145,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.connected, required this.gistId});
+  const _StatusCard({required this.connected});
 
   final bool connected;
-  final String gistId;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +163,7 @@ class _StatusCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                connected ? 'Connected — Gist: $gistId' : 'Not connected',
+                connected ? 'Connected to GitHub' : 'Not connected',
               ),
             ),
           ],

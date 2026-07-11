@@ -65,6 +65,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  crdt_sync:
+    dependency: "direct main"
+    description:
+      path: crdt_sync_dart
+      ref: "crdt_sync_dart-v0.2.0"
+      resolved-ref: "5be99ab11d1657ec04edd65508b8c4ecae4da906"
+      url: "https://github.com/kuhyx/utils"
+    source: git
+    version: "0.2.0"
   crypto:
     dependency: transitive
     description:
@@ -289,7 +298,7 @@ packages:
     source: hosted
     version: "2.2.0"
   path:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path
       sha256: "75cca69d1490965be98c73ceaea117e8a04dd21217b37b292c9ddbec0d955bc5"
@@ -297,7 +306,7 @@ packages:
     source: hosted
     version: "1.9.1"
   path_provider:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path_provider
       sha256: a7f4874f987173da295a61c181b8ee71dab59b332a486b391babf26a1b884825

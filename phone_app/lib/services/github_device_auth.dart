@@ -62,12 +62,12 @@ class DeviceAuthException implements Exception {
 ///
 /// Device flow needs only a public `client_id` (no client secret), which
 /// makes it safe for a distributed app. The resulting access token is then
-/// used exactly like a PAT by the Gist service.
+/// used exactly like a PAT by the crdt_sync GitHub-Contents transport.
 class GitHubDeviceAuth {
   /// Creates a [GitHubDeviceAuth] instance.
   GitHubDeviceAuth({
     required this.clientId,
-    this.scope = 'gist',
+    this.scope = 'repo',
     http.Client? httpClient,
     Future<void> Function(Duration)? delay,
   })  : _http = httpClient ?? http.Client(),
@@ -76,7 +76,8 @@ class GitHubDeviceAuth {
   /// OAuth App client ID (public identifier, not a secret).
   final String clientId;
 
-  /// OAuth scope requested. `gist` is required to read/write Gists.
+  /// OAuth scope requested. `repo` is required for the Contents API to
+  /// read/write the private `kuhyx/syncs` repo (Gists are no longer used).
   final String scope;
 
   final http.Client _http;

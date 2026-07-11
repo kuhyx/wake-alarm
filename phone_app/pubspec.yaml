@@ -1,5 +1,5 @@
 name: wake_alarm_sync
-description: "Wake alarm phone-side sync app — sets phone alarm and writes time to GitHub Gist."
+description: "Wake alarm phone-side sync app — sets the phone alarm and syncs the time to the PC via the shared crdt_sync transport."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -9,11 +9,18 @@ environment:
 
 dependencies:
   android_intent_plus: ^5.0.0
+  crdt_sync:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: crdt_sync_dart-v0.2.0
+      path: crdt_sync_dart
   cupertino_icons: ^1.0.8
   flutter:
     sdk: flutter
   flutter_secure_storage: ^9.0.0
   http: ^1.2.0
+  path: ^1.9.0
+  path_provider: ^2.1.0
   shared_preferences: ^2.3.0
   url_launcher: ^6.3.0
 
