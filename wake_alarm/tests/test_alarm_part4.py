@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 from wake_alarm._alarm import WakeAlarm
+from wake_alarm._sinks import _AudioState
 
 # ---------------------------------------------------------------------------
 # Helpers (duplicated from part 1 so this file is self-contained)
@@ -51,15 +52,15 @@ def _block_real_tk() -> Generator[MagicMock]:
 def _block_extra_devices() -> Generator[MagicMock]:
     """Prevent real subprocess.Popen calls for extra ALSA devices."""
     with (
-        patch("wake_alarm._alarm._play_on_extra_devices") as mock,
+        patch("wake_alarm._alarm._play_on_all_sinks") as mock,
         patch("wake_alarm._alarm._max_fans", return_value=False),
         patch("wake_alarm._alarm._restore_fans"),
         patch("wake_alarm._alarm._set_max_brightness"),
         patch("wake_alarm._alarm._wake_display"),
         patch("wake_alarm._alarm._restore_display"),
         patch("wake_alarm._alarm._warn_if_no_real_sink"),
-        patch("wake_alarm._alarm._activate_alarm_audio", return_value=None),
-        patch("wake_alarm._alarm._restore_alarm_audio"),
+        patch("wake_alarm._alarm._activate_all_outputs", return_value=None),
+        patch("wake_alarm._alarm._restore_audio_state"),
         patch("wake_alarm._alarm.turn_on_plug"),
         patch("wake_alarm._alarm.turn_off_plug"),
     ):
@@ -142,13 +143,19 @@ class TestClose:
         self,
         mock_tk_module: MagicMock,
     ) -> None:
-        """on_close restores the default sink captured at activation."""
+        """on_close restores the audio state captured at activation."""
         del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
-        alarm._hardware.audio_restore = "jbl_sink"
+        state = _AudioState(
+            default_sink="jbl_sink",
+            card_profiles={},
+            sink_volumes={},
+            sink_mutes={},
+        )
+        alarm._hardware.audio_restore = state
         with patch(
-            "wake_alarm._alarm._restore_alarm_audio",
+            "wake_alarm._alarm._restore_audio_state",
         ) as mock_restore:
             alarm.on_close()
-        mock_restore.assert_called_once_with("jbl_sink")
+        mock_restore.assert_called_once_with(state)
         alarm._stop_beep.set()

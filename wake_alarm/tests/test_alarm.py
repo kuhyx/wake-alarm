@@ -23,7 +23,6 @@ from wake_alarm._audio import (
     _beep_soft,
     _find_fan_hwmon,
     _max_fans,
-    _play_on_extra_devices,
     _restore_fans,
     _speaker_test_path,
 )
@@ -293,55 +292,6 @@ class TestShouldRunAlarm:
             ),
         ):
             assert _should_run_alarm() is False
-
-
-class TestPlayOnExtraDevices:
-    """Tests for _play_on_extra_devices."""
-
-    def test_popen_called_for_each_device(self) -> None:
-        """_play_on_extra_devices spawns speaker-test with PIPEWIRE_NODE set."""
-        with (
-            patch(
-                "wake_alarm._audio._speaker_test_path",
-                return_value="/usr/bin/speaker-test",
-            ),
-            patch("wake_alarm._audio.subprocess.Popen") as mock_popen,
-        ):
-            _play_on_extra_devices(1000)
-            mock_popen.assert_called_once()
-            args = mock_popen.call_args[0][0]
-            env = mock_popen.call_args.kwargs["env"]
-            assert "/usr/bin/speaker-test" in args
-            assert "-D" not in args
-            assert "1000" in args
-            assert "PIPEWIRE_NODE" in env
-            assert "alsa_output" in env["PIPEWIRE_NODE"]
-
-    def test_noop_when_speaker_test_missing(self) -> None:
-        """_play_on_extra_devices does nothing when speaker-test is absent."""
-        with (
-            patch(
-                "wake_alarm._audio._speaker_test_path",
-                side_effect=FileNotFoundError("not found"),
-            ),
-            patch("wake_alarm._audio.subprocess.Popen") as mock_popen,
-        ):
-            _play_on_extra_devices(1000)
-            mock_popen.assert_not_called()
-
-    def test_ignores_oserror_on_popen(self) -> None:
-        """_play_on_extra_devices silently ignores OSError from Popen."""
-        with (
-            patch(
-                "wake_alarm._audio._speaker_test_path",
-                return_value="/usr/bin/speaker-test",
-            ),
-            patch(
-                "wake_alarm._audio.subprocess.Popen",
-                side_effect=OSError("device busy"),
-            ),
-        ):
-            _play_on_extra_devices(1000)  # must not raise
 
 
 class TestFindFanHwmon:

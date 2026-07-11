@@ -54,15 +54,15 @@ def _block_real_tk() -> Generator[MagicMock]:
 def _block_extra_devices() -> Generator[MagicMock]:
     """Prevent real subprocess.Popen calls for extra ALSA devices."""
     with (
-        patch("wake_alarm._alarm._play_on_extra_devices") as mock,
+        patch("wake_alarm._alarm._play_on_all_sinks") as mock,
         patch("wake_alarm._alarm._max_fans", return_value=False),
         patch("wake_alarm._alarm._restore_fans"),
         patch("wake_alarm._alarm._set_max_brightness"),
         patch("wake_alarm._alarm._wake_display"),
         patch("wake_alarm._alarm._restore_display"),
         patch("wake_alarm._alarm._warn_if_no_real_sink"),
-        patch("wake_alarm._alarm._activate_alarm_audio", return_value=None),
-        patch("wake_alarm._alarm._restore_alarm_audio"),
+        patch("wake_alarm._alarm._activate_all_outputs", return_value=None),
+        patch("wake_alarm._alarm._restore_audio_state"),
         patch("wake_alarm._alarm.turn_on_plug"),
         patch("wake_alarm._alarm.turn_off_plug"),
     ):

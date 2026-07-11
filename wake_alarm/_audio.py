@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 from pathlib import Path
 import shutil
 import struct
@@ -14,12 +13,10 @@ import tempfile
 import time
 import wave
 
-from wake_alarm._constants import (
-    ALARM_AUDIO_CARD,
-    ALARM_AUDIO_PROFILE,
-    ALARM_AUDIO_SINK,
-    ALARM_AUDIO_SINK_POLL_SECONDS,
-    ALARM_AUDIO_SINK_WAIT_SECONDS,
+from wake_alarm._sinks import (
+    _ensure_sink_audible,
+    _list_real_sinks,
+    _pactl_path,
 )
 
 _logger = logging.getLogger(__name__)
@@ -44,10 +41,6 @@ _PCSPKR_EV_SND: int = 0x12
 _PCSPKR_SND_TONE: int = 0x02
 # struct input_event: timeval (long sec, long usec), u16 type, u16 code, s32 val
 _PCSPKR_EVENT_FMT: str = "llHHi"
-
-# Extra PipeWire sinks to always play alarm audio on (alongside the default).
-# alsa_output...hdmi-stereo = GA102 → G27Q (has built-in speaker, always on).
-_EXTRA_PIPEWIRE_SINKS: tuple[str, ...] = ("alsa_output.pci-0000_01_00.1.hdmi-stereo",)
 
 # NCT Super I/O chip names that expose a single pwm1 fan control channel.
 _NCT_CHIP_NAMES: frozenset[str] = frozenset(
@@ -222,28 +215,77 @@ def _play_tone(frequency: int) -> None:
         _beep_soft()
 
 
-def _play_on_extra_devices(frequency: int) -> None:
-    """Fire-and-forget: play a sine tone on each extra PipeWire sink."""
-    try:
-        path = _speaker_test_path()
-    except FileNotFoundError:
-        _logger.warning("speaker-test missing; skipping extra-device beep")
+def _play_on_all_sinks(frequency: int) -> None:
+    """Play the tone WAV on every real PipeWire sink, simultaneously.
+
+    Re-enumerates sinks on every call so outputs that appear late (the G27Q
+    HDMI sink can take ~15 s to power on) are automatically included without
+    re-running activation. All sinks are launched concurrently, then reaped so
+    the 30-minute alarm loop does not accumulate zombie ``paplay`` children.
+    """
+    pactl = _pactl_path()
+    if pactl is None:
         return
-    for sink in _EXTRA_PIPEWIRE_SINKS:
-        _play_tone_on_sink(path, sink, frequency)
-
-
-def _play_tone_on_sink(path: str, sink: str, frequency: int) -> None:
-    """Launch speaker-test for *sink*; log a warning on OSError."""
+    paplay = shutil.which("paplay")
+    if paplay is None:
+        _logger.warning("paplay not on PATH; skipping per-sink alarm playback")
+        return
     try:
-        subprocess.Popen(
-            [path, "-t", "sine", "-f", str(frequency), "-l", "1"],
-            env={**os.environ, "PIPEWIRE_NODE": sink},
+        wav = _ensure_tone_wav(frequency)
+    except OSError:
+        _logger.warning(
+            "Could not generate tone WAV at %d Hz for per-sink playback",
+            frequency,
+            exc_info=True,
+        )
+        return
+    procs: list[subprocess.Popen[bytes]] = []
+    for sink in _list_real_sinks(pactl):
+        # Re-assert audibility every cycle: a source that is muted, low, or only
+        # just appeared (a monitor powering on mid-alarm) is made audible before
+        # we play on it — we never bet on one sink staying the chosen output.
+        _ensure_sink_audible(pactl, sink)
+        proc = _play_wav_on_sink(paplay, sink, wav)
+        if proc is not None:
+            procs.append(proc)
+    _reap_players(procs)
+
+
+def _play_wav_on_sink(
+    paplay: str,
+    sink: str,
+    wav: Path,
+) -> subprocess.Popen[bytes] | None:
+    """Launch ``paplay --device=<sink>`` for *wav*; return the process or None."""
+    try:
+        return subprocess.Popen(
+            [paplay, f"--device={sink}", str(wav)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
     except OSError:
         _logger.warning("Failed to play tone on sink %s", sink, exc_info=True)
+        return None
+
+
+def _reap_players(procs: list[subprocess.Popen[bytes]]) -> None:
+    """Wait for each concurrent paplay to finish, killing any that hang.
+
+    The tone is ~1.5 s, so all launched players finish quickly and are reaped
+    here rather than left as ``<defunct>`` children for the alarm's lifetime.
+    """
+    for proc in procs:
+        _reap_player(proc)
+
+
+def _reap_player(proc: subprocess.Popen[bytes]) -> None:
+    """Wait for one paplay process, killing and reaping it if it hangs."""
+    try:
+        proc.wait(timeout=_TONE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        _logger.warning("paplay hung; killing pid %d", proc.pid)
+        proc.kill()
+        proc.wait()
 
 
 def _find_fan_hwmon() -> str | None:
@@ -361,133 +403,3 @@ def _beep_medium(frequency: int = 1000) -> None:
 def _beep_loud(frequency: int = 1000) -> None:
     """Play a loud sine tone via paplay/aplay/speaker-test."""
     _play_tone(frequency)
-
-
-def _pactl_path() -> str | None:
-    """Return the absolute path to pactl, or None when not installed."""
-    return shutil.which("pactl")
-
-
-def _alarm_sink_present(pactl: str) -> bool:
-    """Return True when the dedicated alarm HDMI sink exists in PipeWire."""
-    try:
-        result = subprocess.run(
-            [pactl, "list", "short", "sinks"],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning("pactl list sinks failed", exc_info=True)
-        return False
-    return ALARM_AUDIO_SINK in result.stdout.decode(errors="replace")
-
-
-def _current_default_sink(pactl: str) -> str | None:
-    """Return the current default sink name, or None on failure / empty."""
-    try:
-        result = subprocess.run(
-            [pactl, "get-default-sink"],
-            capture_output=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning("pactl get-default-sink failed", exc_info=True)
-        return None
-    name = result.stdout.decode(errors="replace").strip()
-    return name or None
-
-
-def _activate_alarm_audio() -> str | None:
-    """Force the monitor's HDMI output on and route the alarm to it.
-
-    At wake time the Bluetooth speaker is disconnected and PipeWire only has the
-    ``auto_null`` sink, so the alarm is silent. This forces the HDMI card
-    profile on, waits for its sink to appear, makes it the default sink, and
-    raises it to full volume - empirically the only output audible on this
-    machine at wake time (the G27Q monitor's built-in speaker).
-
-    Returns:
-        The previous default sink name (to restore on close), or ``None`` when
-        the alarm audio sink could not be activated.
-    """
-    pactl = _pactl_path()
-    if pactl is None:
-        _logger.warning("pactl not on PATH; cannot activate alarm audio")
-        return None
-    subprocess.run(
-        [pactl, "set-card-profile", ALARM_AUDIO_CARD, ALARM_AUDIO_PROFILE],
-        capture_output=True,
-        timeout=3,
-        check=False,
-    )
-    attempts = max(
-        1,
-        int(ALARM_AUDIO_SINK_WAIT_SECONDS / ALARM_AUDIO_SINK_POLL_SECONDS),
-    )
-    for _ in range(attempts):
-        if _alarm_sink_present(pactl):
-            break
-        time.sleep(ALARM_AUDIO_SINK_POLL_SECONDS)
-    else:
-        _logger.warning(
-            "Alarm audio sink %s did not appear after %.0fs; alarm may be silent",
-            ALARM_AUDIO_SINK,
-            ALARM_AUDIO_SINK_WAIT_SECONDS,
-        )
-        return None
-    old_default = _current_default_sink(pactl)
-    for cmd in (
-        [pactl, "set-default-sink", ALARM_AUDIO_SINK],
-        [pactl, "set-sink-mute", ALARM_AUDIO_SINK, "0"],
-        [pactl, "set-sink-volume", ALARM_AUDIO_SINK, "100%"],
-    ):
-        subprocess.run(cmd, capture_output=True, timeout=3, check=False)
-    _logger.warning("Alarm audio routed to %s at 100%%", ALARM_AUDIO_SINK)
-    return old_default
-
-
-def _restore_alarm_audio(old_default: str | None) -> None:
-    """Restore the default sink captured by :func:`_activate_alarm_audio`."""
-    if old_default is None:
-        return
-    pactl = _pactl_path()
-    if pactl is None:
-        return
-    subprocess.run(
-        [pactl, "set-default-sink", old_default],
-        capture_output=True,
-        timeout=3,
-        check=False,
-    )
-
-
-def _warn_if_no_real_sink() -> None:
-    """Log a loud warning if PipeWire only has the auto_null sink."""
-    pactl = _pactl_path()
-    if pactl is None:
-        _logger.warning("pactl not on PATH; cannot verify audio sinks")
-        return
-    try:
-        result = subprocess.run(
-            [pactl, "list", "short", "sinks"],
-            capture_output=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning("pactl list sinks failed", exc_info=True)
-        return
-    sinks_text = result.stdout.decode(errors="replace").strip()
-    sink_names = [
-        line.split("\t")[1] for line in sinks_text.splitlines() if "\t" in line
-    ]
-    real_sinks = [s for s in sink_names if s != "auto_null"]
-    if not real_sinks:
-        _logger.warning(
-            "ONLY auto_null PipeWire sink available — alarm will be SILENT. Sinks: %s",
-            sink_names or "<none>",
-        )
-    else:
-        _logger.info("Audio sinks available: %s", sink_names)

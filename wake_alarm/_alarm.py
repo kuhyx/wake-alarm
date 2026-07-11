@@ -22,16 +22,13 @@ from gatelock import GateRoot, LockConfig, LockWindow
 
 from wake_alarm._alarm_display import _restore_display, _wake_display
 from wake_alarm._audio import (
-    _activate_alarm_audio,
     _beep_loud,
     _beep_medium,
     _beep_soft,
     _max_fans,
-    _play_on_extra_devices,
-    _restore_alarm_audio,
+    _play_on_all_sinks,
     _restore_fans,
     _set_max_brightness,
-    _warn_if_no_real_sink,
 )
 from wake_alarm._challenges import (
     _Challenge,
@@ -51,6 +48,12 @@ from wake_alarm._constants import (
     SOFT_BEEP_INTERVAL,
 )
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._sinks import (
+    _activate_all_outputs,
+    _AudioState,
+    _restore_audio_state,
+    _warn_if_no_real_sink,
+)
 from wake_alarm._smart_plug import turn_off_plug, turn_on_plug
 from wake_alarm._state import (
     save_wake_state,
@@ -96,7 +99,7 @@ class _AlarmHardware:
     """Hardware state captured at alarm start, restored when it closes."""
 
     fan_state: bool
-    audio_restore: str | None
+    audio_restore: _AudioState | None
 
 
 class WakeAlarm:
@@ -131,7 +134,7 @@ class WakeAlarm:
         self._schedule_skip_window_close()
         self._start_beep_thread()
         self._hardware = _AlarmHardware(
-            fan_state=_max_fans(), audio_restore=_activate_alarm_audio()
+            fan_state=_max_fans(), audio_restore=_activate_all_outputs()
         )
         self._start_screen_flash()
         self._lock.grab_input()
@@ -153,7 +156,7 @@ class WakeAlarm:
         """Restore fans/audio/display/plug; runs on every exit path, even SIGTERM."""
         self._stop_beep.set()
         _restore_fans(active=self._hardware.fan_state)
-        _restore_alarm_audio(self._hardware.audio_restore)
+        _restore_audio_state(self._hardware.audio_restore)
         _restore_display()
         turn_off_plug()
 
@@ -414,16 +417,16 @@ class WakeAlarm:
             elapsed_minutes = (time.monotonic() - self._alarm_start) / 60.0
 
             if elapsed_minutes < PHASE_SOFT_END:
-                _play_on_extra_devices(440)
+                _play_on_all_sinks(440)
                 _beep_soft()
                 self._stop_beep.wait(SOFT_BEEP_INTERVAL)
             elif elapsed_minutes < PHASE_MEDIUM_END:
-                _play_on_extra_devices(1000)
+                _play_on_all_sinks(1000)
                 _beep_medium()
                 self._stop_beep.wait(MEDIUM_BEEP_INTERVAL)
             else:
                 freq = 800 if int(elapsed_minutes * 10) % 2 == 0 else 1200
-                _play_on_extra_devices(freq)
+                _play_on_all_sinks(freq)
                 _beep_loud(freq)
                 self._stop_beep.wait(LOUD_TOGGLE_INTERVAL)
 
@@ -484,9 +487,8 @@ def main() -> None:
     )
     _warn_if_no_real_sink()
     _wake_display()
-    # Wait for the G27Q to power on and enumerate its HDMI audio sink.
-    # Without this delay the sink often isn't visible yet when _activate_alarm_audio
-    # runs, making the alarm silent when the monitor was physically off at wake time.
+    # Wait for the G27Q to power on and enumerate its HDMI audio sink before
+    # _activate_all_outputs runs, else the alarm is silent if it was off.
     time.sleep(DISPLAY_WAKE_WAIT_SECONDS)
     _set_max_brightness()
     turn_on_plug()
