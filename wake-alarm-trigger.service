@@ -1,0 +1,12 @@
+[Unit]
+Description=Wake Alarm trigger tick (fire at the phone's alarm time)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+Type=oneshot
+# One short check-and-fire tick, run once a minute by wake-alarm-trigger.timer.
+# It reads the alarm the phone pushed and, on the alarm minute, starts
+# morning-routine.service. No DISPLAY needed: this process never opens a
+# window — the unit it starts does.
+# No PYTHONPATH needed: wake_alarm is pip-installed (see install.sh).
+ExecStart=/usr/bin/python -m wake_alarm._trigger

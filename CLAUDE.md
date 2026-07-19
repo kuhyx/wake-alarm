@@ -10,27 +10,82 @@ fullscreen Tk window that must be dismissed (with a typed challenge — see
 through whatever sink comes up after the monitor wakes, and optionally
 toggles a TP-Link Tapo P110 smart plug via `python-kasa`.
 
-## Scheduling — hibernate-based, not a systemd timer
+## Scheduling — a per-minute timer, with hibernate as the fallback
 
-There is **no systemd timer** for this package. The wake mechanism is:
+The PC is **always on**. The alarm time comes from the phone, which can change
+it at any hour, so nothing about the schedule may be baked in ahead of time.
 
-1. `shutdown-wrapper.sh`, installed to `/usr/local/bin/shutdown` (shadowing
-   `/usr/bin/shutdown` via PATH order), intercepts shutdown/poweroff calls on
-   alarm nights and calls `rtcwake -m disk` instead — hibernating with the
-   RTC alarm set to wake the machine at `WAKE_AFTER_HOURS` (`_constants.py`)
-   from now.
-2. `sleep-hook.sh`, installed to `/usr/lib/systemd/system-sleep/`, fires on
-   resume (`$1 == post`) and starts `morning-routine.service` for every
-   logged-in session. That orchestrator (lives in testsAndMisc, not here —
-   see below) runs the alarm first, then the workout screen lock, so the two
-   never fight for the fullscreen.
-3. `wake-alarm.service` itself is `Type=simple`, started either directly or
-   by the orchestrator, and exits once the alarm is dismissed.
+**Primary path — `wake-alarm-trigger.timer`:**
+
+1. The timer ticks every minute (`OnCalendar=*:*:00`, `Persistent=true`) and
+   runs `python -m wake_alarm._trigger` — a short, stateless check-and-fire.
+2. `_trigger` resolves the alarm via `_sync.get_alarm()`, builds today's fire
+   instant in **local** time, and fires iff `now` is in
+   `[fire_time, fire_time + TRIGGER_CATCHUP_MINUTES)`. The catch-up window is
+   what makes a suspended or just-booted machine still fire.
+3. Firing = `systemctl --user start morning-routine.service`. **Never**
+   `wake-alarm.service` directly — see the orchestrator section below.
+   Starting an already-active unit is a no-op, so an alarm on screen needs no
+   extra dedupe state; the `was_alarm_dismissed_today()` /
+   `was_workout_logged_today()` gates cover the rest.
+
+A timer, not a resident daemon: each tick is a fresh process, so there is no
+long-lived scheduler to die silently and no wall-clock jump to handle across
+suspend/resume.
+
+**Fallback path — hibernate (only when the PC really is powered down):**
+
+`shutdown-wrapper.sh` (installed to `/usr/local/bin/shutdown`, shadowing
+`/usr/bin/shutdown` via PATH order) still intercepts shutdown/poweroff, reads
+the same synced alarm, and sets `rtcwake`. `sleep-hook.sh` (in
+`/usr/lib/systemd/system-sleep/`) fires on resume (`$1 == post`) and starts
+`morning-routine.service`. This is now a backstop, not the main mechanism.
 
 If you change `WAKE_AFTER_HOURS` in `_constants.py`, you must also update the
 duplicate constant in `shutdown-wrapper.sh` (`WAKE_AFTER_HOURS=8`) — they are
 not wired together, by design (the shell wrapper has no Python runtime
-available at the point it intercepts `shutdown`).
+available at the point it intercepts `shutdown`). The same duplication applies
+to the token search order: `SYNC_CONFIG_FILE` / `SYNC_TOKEN_FALLBACK_FILES` in
+`_constants.py` are mirrored by `read_sync_token()` in the wrapper.
+
+## `wake-alarm.service` must never auto-start
+
+`wake-alarm.service` deliberately has **no `[Install]` section** and nothing
+starts it automatically. `_should_run_alarm()` gates on day / dismissed /
+workout-logged but has **no time gate**, so a
+`WantedBy=graphical-session.target` there fires the alarm at *login* time on
+any alarm day — which is every day now that the machine no longer reboots into
+the alarm. `install.sh` explicitly runs `systemctl --user disable
+wake-alarm.service` to clear the stale symlink from older installs.
+
+The unit survives only as a manual test handle. Do not "fix" its missing
+auto-start.
+
+## Reading the phone's alarm
+
+`_sync.py` is the Python reader; `shutdown-wrapper.sh` is a second, jq-based
+reader of the **same file**. Keep their parse and token order in step.
+
+- Source of truth: `wake-alarm-sync/devices/phone/alarm.json` in the private
+  `kuhyx/syncs` repo, written by `phone_app/` as a `crdt_sync` log. The value
+  lives at `.alarm.fields.alarm_hour[0]` / `.alarm_minute[0]`.
+- Token: `~/.config/wake_alarm/sync.json` key `token`, else a sibling app's
+  raw `~/.config/{diet_guard,screen_locker}/sync_token`. Needs `repo` scope —
+  the repo is private, and a token without access returns **404, not 403**.
+- `_sync` is **stdlib-only** (`urllib.request`) on purpose: the service runs
+  `/usr/bin/python`, so every dependency is a production install-path hazard.
+- Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch →
+  stale cache → `FALLBACK_ALARM_HOUR`. The cache
+  (`~/.config/wake_alarm/alarm_cache.json`) is what bounds GitHub reads to
+  ~288/day despite the per-minute tick, and what keeps a network blip from
+  costing a wake-up.
+- **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute,
+  so a persistent condition logged loudly is 1440 identical journal lines a
+  day. `_trigger` emits the single WARNING that matters: it is firing *now* on
+  a non-phone alarm time.
+
+Check what the PC currently resolves: `python -m wake_alarm._sync --show`.
+Check what it would do right now: `python -m wake_alarm._trigger --dry-run`.
 
 ## Cross-repo coupling — not a bug
 
@@ -110,12 +165,26 @@ considering a dependency change done.
 - Run tests: `python -m pytest wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-fail-under=100`
 - Lint: `pre-commit run --all-files`
 - Test the lock manually (safe, closeable): `python -m wake_alarm._alarm --demo`
+- Show the resolved alarm: `python -m wake_alarm._sync --show` (add
+  `--no-cache` to force a live GitHub read)
+- Show what the next tick would do: `python -m wake_alarm._trigger --dry-run`
+- Watch it live: `journalctl --user -fu wake-alarm-trigger.service`
 - Install for production: `bash install.sh`
+
+Note the dev venv lacks `gatelock`, so anything importing `_state` (including
+`_trigger`) must be run with `/usr/bin/python3`, not `.venv/bin/python`.
 
 ## Do NOT
 
 - Don't add a dependency without doing the production install-path check
-  above.
+  above. `_sync.py` is stdlib-only for exactly this reason — don't "improve"
+  it to `requests`.
 - Don't forget the orchestrator when changing this package's module path or
   invocation — see "The morning_routine orchestrator lives elsewhere" above.
+- Don't give `wake-alarm.service` an `[Install]` section or enable it. It
+  fires at login time, not alarm time — see the section above.
+- Don't make the trigger start `wake-alarm.service`; it must start
+  `morning-routine.service` so the workout lock still runs.
+- Don't raise the log level of the routine degraded-read paths in `_sync` —
+  the per-minute tick turns any WARNING there into journal spam.
 - Don't commit `wake_state.json`.

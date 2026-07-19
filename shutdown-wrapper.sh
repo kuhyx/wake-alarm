@@ -7,11 +7,17 @@
 # Install to /usr/local/bin/shutdown (takes priority over /usr/bin/shutdown
 # because /usr/local/bin appears first in PATH).
 #
+# This is the FALLBACK path, for the rare night the PC is actually powered
+# down. The primary path is wake-alarm-trigger.timer, which ticks once a
+# minute on the always-on machine and fires at the phone's alarm time without
+# any rtcwake involvement (see wake_alarm/_trigger.py).
+#
 # Wake time is taken from the alarm the phone app pushes to the private
 # kuhyx/syncs repo via the shared crdt_sync transport (see phone_app/). Falls
-# back to WAKE_AFTER_HOURS if sync is not configured or unreachable. Config:
-# ~/.config/wake_alarm/sync.json with key "token" (GitHub PAT/token with
-# "repo" scope, so the Contents API can read the private repo).
+# back to WAKE_AFTER_HOURS if sync is not configured or unreachable. Token:
+# ~/.config/wake_alarm/sync.json key "token", else a sibling app's
+# ~/.config/{diet_guard,screen_locker}/sync_token. Needs "repo" scope, since
+# the Contents API must read a private repo.
 
 set -euo pipefail
 
@@ -30,6 +36,37 @@ for arg in "$@"; do
     esac
 done
 
+# Resolve the GitHub token, preferring wake_alarm's own JSON config and falling
+# back to the sibling companion apps' raw single-line token files (one
+# repo-scoped PAT covers every app syncing through kuhyx/syncs).
+# Mirrors SYNC_CONFIG_FILE / SYNC_TOKEN_FALLBACK_FILES in
+# wake_alarm/_constants.py — keep the two readers in step.
+read_sync_token() {
+    local cfg="$HOME/.config/wake_alarm/sync.json"
+    local token fallback
+
+    if [[ -f "$cfg" ]]; then
+        token=$(jq -r '.token // empty' "$cfg" 2>/dev/null) || token=""
+        if [[ -n "$token" ]]; then
+            printf '%s' "$token"
+            return 0
+        fi
+    fi
+
+    for fallback in \
+        "$HOME/.config/diet_guard/sync_token" \
+        "$HOME/.config/screen_locker/sync_token"; do
+        [[ -f "$fallback" ]] || continue
+        token=$(tr -d '[:space:]' < "$fallback") || continue
+        if [[ -n "$token" ]]; then
+            printf '%s' "$token"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # Read the alarm time the phone pushed to kuhyx/syncs via crdt_sync.
 # Returns the Unix epoch (seconds) of the next occurrence of the stored H:M.
 # Exits non-zero if sync is not configured, unreachable, or malformed.
@@ -41,12 +78,8 @@ done
 # [H, "<hlc>"], "alarm_minute": [M, "<hlc>"]}, ...}}. The raw media type makes
 # the Contents API return that JSON directly, so no base64 decode is needed.
 get_synced_alarm_epoch() {
-    local cfg="$HOME/.config/wake_alarm/sync.json"
-    [[ -f "$cfg" ]] || return 1
-
     local token log_json hour minute target_epoch now_epoch
-    token=$(jq -r .token "$cfg" 2>/dev/null) || return 1
-    [[ -n "$token" && "$token" != "null" ]] || return 1
+    token=$(read_sync_token) || return 1
 
     local url="https://api.github.com/repos/kuhyx/syncs/contents"
     url="$url/wake-alarm-sync/devices/phone/alarm.json"

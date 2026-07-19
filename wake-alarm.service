@@ -16,5 +16,16 @@ ExecStart=/usr/bin/python -m wake_alarm._alarm --production
 Restart=on-failure
 RestartSec=10
 
-[Install]
-WantedBy=graphical-session.target
+# There is intentionally NO [Install] section, and nothing auto-starts this
+# unit. The PC is always on now, so graphical-session.target is reached on
+# every login — and _should_run_alarm() has no time gate, so a
+# WantedBy=graphical-session.target here fires the alarm at *login time* on
+# any alarm day (i.e. every day). That was the bug this design removed.
+#
+# What actually runs the alarm: wake-alarm-trigger.timer ticks once a minute
+# and starts morning-routine.service at the phone's alarm time; that
+# orchestrator runs `python -m wake_alarm._alarm` as a subprocess (the alarm
+# first, the workout lock after). This unit survives only as a manual test
+# handle: `systemctl --user start wake-alarm.service`.
+#
+# Do not "fix" the missing auto-start.

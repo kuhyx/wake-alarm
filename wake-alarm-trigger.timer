@@ -1,0 +1,17 @@
+[Unit]
+Description=Wake Alarm trigger tick, once a minute
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Timer]
+# Tick every minute on the minute so the alarm fires on its exact minute.
+# The tick itself only hits the network when its cache is older than
+# ALARM_CACHE_MAX_AGE_SECONDS (5 min), so this costs ~288 GitHub reads/day,
+# not 1440 - see wake_alarm/_sync.py.
+OnCalendar=*:*:00
+AccuracySec=1s
+# Run a missed tick immediately after resume/boot. Combined with the trigger's
+# catch-up window this is what makes a suspended PC still fire on wake.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

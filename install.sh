@@ -6,7 +6,8 @@
 # What it does:
 #   1. Installs wake_alarm + dependencies for /usr/bin/python
 #   2. Installs system dependencies (alsa-utils, ddcutil)
-#   3. Copies wake-alarm.service to ~/.config/systemd/user/ and enables it
+#   3. Installs the systemd user units and enables the per-minute trigger timer
+#      (which fires the alarm at the time the phone synced)
 #   4. Installs the systemd-sleep hook (restarts alarm after hibernate resume)
 #   5. Adds a sudoers entry for passwordless rtcwake
 #   6. Installs shutdown wrapper so "shutdown now" also hibernates on alarm nights
@@ -21,6 +22,8 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 readonly SCRIPT_DIR
 readonly REPO_DIR="$SCRIPT_DIR"
 SERVICE_FILE="$SCRIPT_DIR/wake-alarm.service"
+TRIGGER_SERVICE_SRC="$SCRIPT_DIR/wake-alarm-trigger.service"
+TRIGGER_TIMER_SRC="$SCRIPT_DIR/wake-alarm-trigger.timer"
 SLEEP_HOOK_SRC="$SCRIPT_DIR/sleep-hook.sh"
 SHUTDOWN_WRAPPER_SRC="$SCRIPT_DIR/shutdown-wrapper.sh"
 FANS_SCRIPT_SRC="$SCRIPT_DIR/wake-alarm-fans.sh"
@@ -49,14 +52,26 @@ else
     echo "  alsa-utils already installed"
 fi
 
-# 3. Install systemd user service
-echo "[3/9] Installing systemd user service..."
+# 3. Install systemd user units (alarm + the trigger timer that fires it)
+echo "[3/9] Installing systemd user units..."
 mkdir -p "$SYSTEMD_USER_DIR"
 cp "$SERVICE_FILE" "$SYSTEMD_USER_DIR/wake-alarm.service"
+cp "$TRIGGER_SERVICE_SRC" "$SYSTEMD_USER_DIR/wake-alarm-trigger.service"
+cp "$TRIGGER_TIMER_SRC" "$SYSTEMD_USER_DIR/wake-alarm-trigger.timer"
 systemctl --user daemon-reload
-echo "  Installed to $SYSTEMD_USER_DIR/wake-alarm.service"
-systemctl --user enable wake-alarm.service
-echo "  Service enabled (will start on next boot)"
+echo "  Installed wake-alarm.service, wake-alarm-trigger.{service,timer}"
+
+# wake-alarm.service must NOT auto-start: the PC is always on, so
+# graphical-session.target is reached on every login and the alarm has no time
+# gate — it would fire at login time. The timer owns firing (via
+# morning-routine.service). Both guards matter under `set -euo pipefail`:
+# a unit with no [Install] can't be enabled, and disabling a never-enabled unit
+# can also return non-zero.
+systemctl --user disable wake-alarm.service 2>/dev/null || true
+echo "  wake-alarm.service left disabled (started only by the trigger)"
+
+systemctl --user enable --now wake-alarm-trigger.timer
+echo "  Trigger timer enabled and started (ticks once a minute)"
 
 # 4. Install systemd-sleep hook (restarts alarm after hibernate resume)
 echo "[4/9] Installing systemd-sleep hook..."
@@ -134,7 +149,11 @@ else
 fi
 
 echo "=== Installation complete ==="
-echo "The wake alarm will activate on boot for alarm days (Mon, Fri, Sat, Sun)."
-echo "After hibernate resume the sleep hook will restart the alarm service."
+echo "The trigger timer ticks once a minute and fires the alarm at the time"
+echo "the phone last synced (needs ~/.config/wake_alarm/sync.json with a"
+echo "repo-scoped GitHub token — see MIGRATION.md)."
+echo "Check what it resolves right now: python -m wake_alarm._sync --show"
+echo "If the PC is powered down instead, the shutdown wrapper hibernates with"
+echo "rtcwake set to the same alarm, and the sleep hook runs it on resume."
 echo "Fans will ramp to 100% while the alarm is active, then restore automatically."
 echo "To test now: python -m wake_alarm._alarm --demo"
