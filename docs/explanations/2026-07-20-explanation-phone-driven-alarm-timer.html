@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone-driven wake alarm on an always-on PC</title>
+<style>
+  :root {
+    --bg: #fdfdfc;
+    --fg: #1c1c1a;
+    --muted: #5d5d57;
+    --rule: #e0dfd8;
+    --card: #f5f4ef;
+    --accent: #b4531f;
+    --accent-soft: #f7ede5;
+    --ok: #2f6b3c;
+    --ok-soft: #e8f2e9;
+    --bad: #a3302a;
+    --bad-soft: #f8e9e8;
+    --code-bg: #f2f1ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a;
+      --fg: #e6e5e0;
+      --muted: #a3a29a;
+      --rule: #32343a;
+      --card: #1e2025;
+      --accent: #e0894f;
+      --accent-soft: #2a2119;
+      --ok: #7fc08c;
+      --ok-soft: #1b2a1e;
+      --bad: #e08a83;
+      --bad-soft: #2c1c1b;
+      --code-bg: #1a1c20;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fdfdfc; --fg: #1c1c1a; --muted: #5d5d57; --rule: #e0dfd8;
+    --card: #f5f4ef; --accent: #b4531f; --accent-soft: #f7ede5;
+    --ok: #2f6b3c; --ok-soft: #e8f2e9; --bad: #a3302a; --bad-soft: #f8e9e8;
+    --code-bg: #f2f1ea;
+  }
+  :root[data-theme="dark"] {
+    --bg: #16171a; --fg: #e6e5e0; --muted: #a3a29a; --rule: #32343a;
+    --card: #1e2025; --accent: #e0894f; --accent-soft: #2a2119;
+    --ok: #7fc08c; --ok-soft: #1b2a1e; --bad: #e08a83; --bad-soft: #2c1c1b;
+    --code-bg: #1a1c20;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0 auto;
+    padding: 2.5rem 1rem 6rem;
+    max-width: min(48rem, 92vw);
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    overflow-x: hidden;
+  }
+  h1 { font-size: 1.85rem; line-height: 1.25; margin: 0 0 .4rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 1.32rem; margin: 3rem 0 .9rem; padding-top: .8rem;
+    border-top: 1px solid var(--rule); letter-spacing: -.005em;
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .6rem; }
+  p, li { color: var(--fg); }
+  .sub { color: var(--muted); margin: 0 0 1.6rem; font-size: 1.02rem; }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .88em; background: var(--code-bg); padding: .1em .35em;
+    border-radius: 3px; word-break: break-word;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 7px; padding: .85rem 1rem; margin: 1rem 0;
+    overflow-x: auto; max-width: 100%;
+  }
+  pre code {
+    background: none; padding: 0; font-size: .84rem; line-height: 1.55;
+    white-space: pre-wrap; overflow-wrap: anywhere; display: block;
+  }
+  .toc {
+    background: var(--card); border: 1px solid var(--rule);
+    border-radius: 8px; padding: .9rem 1.1rem; margin: 1.8rem 0 2.4rem;
+  }
+  .toc-title {
+    font-size: .74rem; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--muted); margin-bottom: .5rem;
+  }
+  .toc ol { margin: 0; padding-left: 1.15rem; }
+  .toc li { margin: .22rem 0; }
+  .note {
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+    padding: .8rem 1rem; margin: 1.3rem 0; border-radius: 0 6px 6px 0;
+  }
+  .note p { margin: 0; }
+  .note p + p { margin-top: .6rem; }
+  figure {
+    margin: 1.6rem 0; padding: 1.1rem; background: var(--card);
+    border: 1px solid var(--rule); border-radius: 8px;
+  }
+  figcaption {
+    font-size: .85rem; color: var(--muted); margin-top: .85rem;
+    text-align: center; line-height: 1.5;
+  }
+
+  /* diagram primitives */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; justify-content: center; }
+  .node {
+    background: var(--bg); border: 1px solid var(--rule); border-radius: 6px;
+    padding: .5rem .7rem; font-size: .82rem; min-width: 0; flex: 1 1 8.5rem;
+    text-align: center;
+  }
+  .node b { display: block; font-size: .8rem; }
+  .node span { color: var(--muted); font-size: .76rem; }
+  .node.on { border-color: var(--ok); background: var(--ok-soft); }
+  .node.off { border-color: var(--bad); background: var(--bad-soft); }
+  .node.hl { border-color: var(--accent); background: var(--accent-soft); }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.05rem; flex: 0 0 auto; }
+  .stack { display: flex; flex-direction: column; gap: .45rem; }
+
+  /* timeline */
+  .tl { position: relative; margin: .4rem 0 .2rem; }
+  .tl-bar {
+    position: relative; height: 2.1rem; border-radius: 5px;
+    background: var(--code-bg); border: 1px solid var(--rule); overflow: hidden;
+  }
+  .tl-win { position: absolute; top: 0; bottom: 0; background: var(--ok-soft); border-left: 2px solid var(--ok); border-right: 2px dashed var(--muted); }
+  .tl-now { position: absolute; top: -.25rem; bottom: -.25rem; width: 2px; background: var(--accent); }
+  .tl-now::after {
+    content: "now"; position: absolute; top: -1.15rem; left: 50%;
+    transform: translateX(-50%); font-size: .7rem; color: var(--accent);
+    background: var(--bg); padding: 0 .2rem; white-space: nowrap;
+  }
+  .tl-labels { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); margin-top: .3rem; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1.2rem 0; font-size: .88rem; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--rule); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+
+  /* micro-world */
+  .sim { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 1.1rem; margin: 1.6rem 0; }
+  .sim h3 { margin-top: 0; }
+  .ctrls { display: flex; flex-wrap: wrap; gap: .9rem 1.2rem; margin-bottom: 1rem; }
+  .ctrl { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; color: var(--muted); }
+  .ctrl input[type=time] {
+    font: inherit; font-size: .9rem; padding: .3rem .4rem; border-radius: 5px;
+    border: 1px solid var(--rule); background: var(--bg); color: var(--fg);
+  }
+  .ctrl.check { flex-direction: row; align-items: center; gap: .4rem; font-size: .84rem; }
+  .verdict { padding: .75rem .9rem; border-radius: 6px; font-size: .92rem; margin-top: .9rem; }
+  .verdict.fire { background: var(--ok-soft); border: 1px solid var(--ok); }
+  .verdict.no { background: var(--bad-soft); border: 1px solid var(--bad); }
+  .verdict b { display: block; margin-bottom: .2rem; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 6px;
+    border: 1px solid var(--rule); background: var(--bg); color: var(--fg);
+    padding: .4rem .8rem; font-size: .85rem;
+  }
+  button:hover { border-color: var(--accent); }
+
+  /* quiz */
+  .q { border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.1rem; margin: 1.1rem 0; background: var(--card); }
+  .q-stem { font-weight: 600; margin: 0 0 .75rem; }
+  .opt {
+    display: block; width: 100%; text-align: left; margin: .4rem 0;
+    padding: .55rem .75rem; border-radius: 6px; border: 1px solid var(--rule);
+    background: var(--bg); color: var(--fg); font-size: .89rem; line-height: 1.45;
+  }
+  .opt:disabled { cursor: default; }
+  .opt.correct { border-color: var(--ok); background: var(--ok-soft); }
+  .opt.wrong { border-color: var(--bad); background: var(--bad-soft); }
+  .why { font-size: .85rem; color: var(--muted); margin: .6rem 0 0; display: none; }
+  .why.show { display: block; }
+  #score { font-weight: 600; margin-top: 1.2rem; }
+  ul.tight li { margin: .3rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Following the phone: turning a hibernate-scheduled alarm into a per-minute timer</h1>
+<p class="sub">wake-alarm · commits <code>87d2629</code> → <code>997a1c7</code> · 2026-07-20</p>
+
+<nav class="toc">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#background">Background — what this thing is</a></li>
+    <li><a href="#intuition">Intuition — the essence of the change</a></li>
+    <li><a href="#sim">Play with it — the fire-window simulator</a></li>
+    <li><a href="#code">Code — a walkthrough</a></li>
+    <li><a href="#quiz">Quiz</a></li>
+  </ol>
+</nav>
+
+<h2 id="background">Background — what this thing is</h2>
+
+<p><code>wake_alarm</code> is a personal alarm clock that runs on a Linux desktop. When it
+fires, it opens a fullscreen Tk window you cannot dismiss without typing several
+randomly-generated codes, ramps the case fans to 100%, forces the monitor on over DDC/CI,
+and plays audio through whatever sound sink happens to exist at that moment. The point is
+to be genuinely hard to ignore.</p>
+
+<p>Two facts about its surroundings matter for this change.</p>
+
+<p><strong>The alarm time comes from a phone.</strong> A small Flutter app
+(<code>phone_app/</code>) lets you pick a time and pushes it to a private GitHub repo,
+<code>kuhyx/syncs</code>, as a CRDT log at
+<code>wake-alarm-sync/devices/phone/alarm.json</code>. GitHub here is not a git remote in
+any interesting sense — it is dumb file storage behind the REST Contents API. The PC reads
+that one file back. The stored shape is a record whose fields are
+<code>(value, hybrid-logical-clock)</code> pairs, so the hour lives at
+<code>.alarm.fields.alarm_hour[0]</code>.</p>
+
+<p><strong>The alarm does not run alone.</strong> A separate program,
+<code>screen_locker</code>, locks the screen until you have logged a workout. To stop the
+two fullscreen windows fighting each other, a third component —
+<code>morning-routine.service</code>, which lives in yet another repository — runs them as
+sequential subprocesses: alarm first, workout lock after. Nothing should ever start
+<code>wake-alarm.service</code> directly; going through the orchestrator is what keeps the
+workout lock in the picture.</p>
+
+<figure>
+  <div class="flow">
+    <div class="node"><b>phone app</b><span>pick 06:40</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><b>kuhyx/syncs</b><span>alarm.json</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><b>PC reader</b><span>_sync.py</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><b>orchestrator</b><span>alarm → lock</span></div>
+  </div>
+  <figcaption>The alarm time's journey. The PC is a read-only consumer; the phone is the
+  only writer.</figcaption>
+</figure>
+
+<h3>How scheduling used to work</h3>
+
+<p>The old design assumed <em>the machine is off at night</em>. That single assumption did
+all the work:</p>
+
+<ul class="tight">
+  <li><code>shutdown-wrapper.sh</code> was installed at <code>/usr/local/bin/shutdown</code>,
+  which shadows <code>/usr/bin/shutdown</code> because <code>/usr/local/bin</code> comes
+  first in <code>PATH</code>. Whenever you shut down, it intercepted the call, read the
+  phone's alarm, and armed the real-time clock with <code>rtcwake</code> before
+  hibernating.</li>
+  <li>The BIOS woke the machine at that time. A <code>systemd-sleep</code> hook
+  (<code>sleep-hook.sh</code>) noticed the resume and started
+  <code>morning-routine.service</code>.</li>
+</ul>
+
+<p>Note what that means: the alarm instant was <strong>baked into the RTC at shutdown</strong>
+and could not change afterwards. That was fine when the decision and the event were only
+eight hours apart and the machine was inert in between.</p>
+
+<div class="note">
+  <p><strong>Then the premise changed.</strong> The PC stopped being shut down at night.
+  With no shutdown there is no <code>rtcwake</code>; with no resume there is no hook. The
+  alarm simply never fired.</p>
+</div>
+
+<h3>The bug hiding behind that</h3>
+
+<p>There was a second, nastier problem. <code>wake-alarm.service</code> shipped with
+<code>WantedBy=graphical-session.target</code> and <code>install.sh</code> enabled it. Look
+at what actually gated the alarm — <code>_should_run_alarm()</code> in
+<code>_alarm.py</code>:</p>
+
+<pre><code>def _should_run_alarm() -> bool:
+    if not _is_alarm_day():          # every day is an alarm day
+        return False
+    if was_alarm_dismissed_today():  # already dealt with
+        return False
+    if was_workout_logged_today():   # nothing left to enforce
+        return False
+    return True</code></pre>
+
+<p>There is no <em>time</em> condition anywhere in it. Under the old model that was safe
+by accident: the only boot was the <code>rtcwake</code> boot, so "session start" and
+"alarm time" were the same moment. On an always-on machine
+<code>graphical-session.target</code> is reached on every login — so the alarm would fire
+when you logged in, at any hour.</p>
+
+<h2 id="intuition">Intuition — the essence of the change</h2>
+
+<p>The change replaces one scheduling decision made <em>hours early and frozen</em> with a
+cheap decision re-made <em>every minute</em>.</p>
+
+<figure>
+  <div class="stack">
+    <div class="flow">
+      <div class="node off" style="flex:0 0 5.5rem"><b>before</b><span>21:30</span></div>
+      <div class="node">shutdown intercepted → read alarm → <b>arm RTC for 06:40</b></div>
+      <div class="arrow">→</div>
+      <div class="node off">frozen: phone changes are now invisible</div>
+    </div>
+    <div class="flow">
+      <div class="node on" style="flex:0 0 5.5rem"><b>after</b><span>every :00</span></div>
+      <div class="node">tick → resolve alarm → <b>is now inside the window?</b></div>
+      <div class="arrow">→</div>
+      <div class="node on">a phone change lands within ~5 min</div>
+    </div>
+  </div>
+  <figcaption>The old path decided once; the new path re-decides 1440 times a day. Each
+  tick is a fresh process that exits in milliseconds.</figcaption>
+</figure>
+
+<p>A timer rather than a long-lived daemon matters for two reasons. A resident scheduler
+can die silently and nobody notices until a missed morning; each timer tick is a new
+process, so there is nothing to keep alive. And a daemon that sleeps until a target time
+has to reason about the wall clock jumping when the machine suspends and resumes — a tick
+that only ever asks "what time is it <em>now</em>?" never has that problem.</p>
+
+<h3>The fire window, not the fire instant</h3>
+
+<p>The obvious rule — "fire when <code>now == alarm</code>" — is too brittle. A tick can be
+missed while the machine is suspended, or the machine may boot at 07:10 having been off at
+07:00. So the trigger fires when <em>now</em> falls inside a half-open window that starts
+at the alarm and lasts <code>TRIGGER_CATCHUP_MINUTES</code> (60):</p>
+
+<figure>
+  <div class="tl">
+    <div class="tl-bar">
+      <div class="tl-win" style="left:33%; right:17%"></div>
+      <div class="tl-now" style="left:44%"></div>
+    </div>
+    <div class="tl-labels"><span>05:00</span><span>alarm 06:40</span><span>07:40</span><span>09:00</span></div>
+  </div>
+  <figcaption>Fires while <code>06:40 &le; now &lt; 07:40</code>. The window is half-open:
+  07:40 exactly no longer fires.</figcaption>
+</figure>
+
+<p>Repeated firing inside that window is not a problem, and this is the neat part: firing
+means <code>systemctl --user start morning-routine.service</code>, and starting an
+already-active unit is a <strong>no-op</strong>. So while the alarm is on screen the
+following ticks do nothing, and once you dismiss it the
+<code>was_alarm_dismissed_today()</code> gate closes. The design needs no dedup bookkeeping
+of its own — it borrows systemd's and the existing state file's.</p>
+
+<h3>Never trusting the network with your morning</h3>
+
+<p>A read can fail: no network, an expired token, GitHub down. Failing to wake up is a much
+worse outcome than waking at a slightly wrong time, so <code>get_alarm()</code> degrades
+through four steps rather than raising:</p>
+
+<figure>
+  <div class="flow">
+    <div class="node hl"><b>fresh cache</b><span>&lt; 5 min old</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><b>live fetch</b><span>GitHub</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><b>stale cache</b><span>any age</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><b>13:00</b><span>fallback</span></div>
+  </div>
+  <figcaption>Each arrow is "the previous step was unavailable". The cache is also what
+  keeps the per-minute tick from making 1440 GitHub requests a day — only ~288.</figcaption>
+</figure>
+
+<p>That cache does double duty, and it is the reason the tick can be per-minute while the
+network read is only every fifth minute. Firing lands on the exact minute; a phone change
+still shows up within about five.</p>
+
+<div class="note">
+  <p><strong>An aside that cost real time.</strong> Because this path degrades so
+  gracefully, it also hides breakage. The phone's stored OAuth token survived an app
+  update that changed the requested scope from <code>gist</code> to <code>repo</code>, so
+  every push had been failing for eight days — while the app's settings screen cheerfully
+  showed "Connected to GitHub", because that check only tests that a token
+  <em>exists</em>. Meanwhile both PC readers fell back silently. Nothing looked broken
+  anywhere.</p>
+</div>
+
+<h3>The part the diff alone does not show</h3>
+
+<p>After all this shipped, the alarm still went off at 07:00 on a morning the phone said
+08:00 — and the journal showed no <code>Firing</code> line from the new trigger at all.
+Something else was starting the orchestrator:</p>
+
+<figure>
+  <div class="stack">
+    <div class="flow">
+      <div class="node off"><b>night-lockdown</b><span>05:00 · 05:15 · 05:30 · 06:00 · 07:00</span></div>
+      <div class="arrow">→</div>
+      <div class="node">morning-routine.service</div>
+    </div>
+    <div class="flow">
+      <div class="node on"><b>wake-alarm-trigger</b><span>every minute, phone's time</span></div>
+      <div class="arrow">→</div>
+      <div class="node">morning-routine.service</div>
+    </div>
+  </div>
+  <figcaption>Two independent triggers, one of which ignored the phone. The fixed ladder
+  was itself a workaround for the lost hibernate event — the exact problem the new timer
+  solves.</figcaption>
+</figure>
+
+<p>It fired at 07:00, ran undismissed for its 30-minute window, and left the unit still
+active — so when the real 08:00 trigger arrived, its <code>systemctl start</code> was a
+no-op against the stale run. Removing that fixed-hour ladder is what actually made "the PC
+follows the phone" true.</p>
+
+<h2 id="sim">Play with it — the fire-window simulator</h2>
+
+<p>This runs the real decision logic from <code>_decide()</code>: the gates are checked
+first and short-circuit, then the window test. Move the times and watch the verdict.</p>
+
+<div class="sim">
+  <h3>Would this tick fire?</h3>
+  <div class="ctrls">
+    <label class="ctrl">Phone alarm
+      <input type="time" id="alarmT" value="06:40">
+    </label>
+    <label class="ctrl">Now (this tick)
+      <input type="time" id="nowT" value="06:55">
+    </label>
+    <label class="ctrl check"><input type="checkbox" id="gDis"> already dismissed today</label>
+    <label class="ctrl check"><input type="checkbox" id="gWork"> workout already logged</label>
+    <label class="ctrl check"><input type="checkbox" id="gDay" checked> today is an alarm day</label>
+  </div>
+  <div class="tl">
+    <div class="tl-bar">
+      <div class="tl-win" id="simWin"></div>
+      <div class="tl-now" id="simNow"></div>
+    </div>
+    <div class="tl-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+  </div>
+  <div class="verdict" id="simOut"></div>
+  <p style="margin:.9rem 0 0">
+    <button id="pShift">Phone moves alarm 30 min earlier</button>
+    <button id="pResume">Machine resumes 20 min late</button>
+    <button id="pMiss">Tick 2 hours after the alarm</button>
+  </p>
+</div>
+
+<h2 id="code">Code — a walkthrough</h2>
+
+<h3>1. Reading the phone's alarm — <code>wake_alarm/_sync.py</code> (new)</h3>
+
+<p>The whole module is deliberately stdlib-only. The systemd units run
+<code>/usr/bin/python</code> directly rather than a virtualenv, so every third-party import
+is a way for the alarm to die at 06:40 with <code>ModuleNotFoundError</code>. A single HTTP
+GET is not worth that risk, so it uses <code>urllib.request</code>.</p>
+
+<p>The parse deliberately mirrors <code>shutdown-wrapper.sh</code>, which reads the
+<em>same file</em> with <code>jq</code> for the hibernate fallback path. Two readers of one
+format is a drift hazard, so both are pinned to the same field path and documented as a
+pair.</p>
+
+<pre><code>def get_alarm(*, max_cache_age_seconds=ALARM_CACHE_MAX_AGE_SECONDS) -> Alarm:
+    cached = _read_cache()
+    if cached is not None:
+        hour, minute, fetched_at = cached
+        if time.time() - fetched_at &lt; max_cache_age_seconds:
+            return Alarm(hour, minute, "cache")      # no network at all
+
+    remote = fetch_remote_alarm()
+    if remote is not None:
+        _write_cache(*remote)
+        return Alarm(remote[0], remote[1], "remote")
+
+    if cached is not None:
+        return Alarm(cached[0], cached[1], "stale-cache")
+
+    return Alarm(FALLBACK_ALARM_HOUR, 0, "fallback")</code></pre>
+
+<p>The <code>source</code> field is not decoration — it is what makes a wrong alarm
+diagnosable at a glance, and the trigger uses it to decide whether to complain.</p>
+
+<h3>2. Log levels, because this runs 1440 times a day</h3>
+
+<p>Every degraded branch above logs at <code>INFO</code>, not <code>WARNING</code>. A
+persistent condition — an unconfigured token, say — logged at warning level once a minute
+is 1440 identical journal lines a day, which trains you to ignore the journal. The single
+warning that survives is emitted by the trigger at the one moment it is actionable:</p>
+
+<pre><code>if alarm.source not in {"remote", "cache"}:
+    _logger.warning(
+        "Firing on a degraded alarm source (%s) — the phone's alarm "
+        "could not be read; check ~/.config/wake_alarm/sync.json",
+        alarm.source,
+    )</code></pre>
+
+<p>That is: <em>I am waking you up right now, at a time that did not come from your
+phone.</em></p>
+
+<h3>3. The tick — <code>wake_alarm/_trigger.py</code> (new)</h3>
+
+<p>Gates first, clock second. The ordering is not cosmetic: it means a tick on an
+already-handled day costs two file reads and no network.</p>
+
+<pre><code>def _decide(now: datetime, alarm: Alarm) -&gt; tuple[bool, str]:
+    skip = _skip_reason(now)
+    if skip is not None:
+        return False, skip
+
+    fire_at, window_end = _fire_window(alarm, now)
+    if now &lt; fire_at:
+        return False, f"alarm {alarm} is still ahead"
+    if now &gt;= window_end:
+        return False, f"alarm {alarm} passed over ... — window closed"
+    return True, f"alarm {alarm} is due (since {fire_at:%H:%M})"</code></pre>
+
+<p>Times are local and timezone-aware. The phone stores a wall-clock <code>H:M</code>, so
+the fire instant must be built in the timezone you read off the phone — but carrying the
+offset explicitly keeps comparisons unambiguous. Building it needs one subtlety:</p>
+
+<pre><code>fire_at = (
+    now.replace(tzinfo=None)                                  # drop to wall clock
+    .replace(hour=alarm.hour, minute=alarm.minute, second=0, microsecond=0)
+    .astimezone()                                             # re-derive the offset
+)</code></pre>
+
+<p>Calling <code>.replace(hour=...)</code> straight on an aware datetime keeps
+<em>now</em>'s UTC offset. On the night the clocks change, deciding a 06:40 alarm from a
+03:00 tick would then attach the wrong offset. Dropping to naive and re-attaching asks the
+system what the offset is <em>at the target wall time</em>.</p>
+
+<h3>4. Closing the login-fire hole — <code>wake-alarm.service</code>, <code>install.sh</code></h3>
+
+<p>The unit loses its <code>[Install]</code> section entirely and gains a comment
+explaining that this is deliberate. <code>install.sh</code> actively disables it, to clear
+the stale symlink left by older installs:</p>
+
+<pre><code>systemctl --user disable wake-alarm.service 2&gt;/dev/null || true</code></pre>
+
+<p>Both guards matter under <code>set -euo pipefail</code>: a unit with no
+<code>[Install]</code> cannot be enabled, and disabling a never-enabled unit can also
+return non-zero. The unit now survives only as a manual test handle — nothing starts it
+automatically, and the comment says so, so nobody "repairs" the missing auto-start and
+reintroduces the bug.</p>
+
+<h3>5. The installer had been silently broken — <code>pyproject.toml</code></h3>
+
+<p>This one is worth dwelling on because the symptom pointed somewhere else. The installed
+<code>/usr/local/bin/shutdown</code> was stale, which looked like a forgotten reinstall.
+It was not: <code>install.sh</code> had been <em>failing at step 1</em> ever since the
+Flutter <code>phone_app/</code> directory was added.</p>
+
+<pre><code>error: Multiple top-level packages discovered in a flat-layout:
+       ['phone_app', 'wake_alarm']</code></pre>
+
+<p>setuptools refuses to guess. Because the script runs under <code>set -euo pipefail</code>
+and does the editable install first, it aborted before installing the units, the sleep
+hook, the fan script or the shutdown wrapper — silently, as far as anyone watching the
+alarm was concerned. The fix is to stop relying on autodiscovery:</p>
+
+<pre><code>[build-system]
+requires = ["setuptools&gt;=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["wake_alarm*"]</code></pre>
+
+<h3>6. Beyond this repo</h3>
+
+<p>Two changes landed elsewhere in the same effort, because the behaviour is only correct
+with all three:</p>
+
+<table>
+  <tr><th>Repo</th><th>Change</th><th>Why it belongs to this story</th></tr>
+  <tr>
+    <td><code>testsAndMisc</code></td>
+    <td>Removed <code>maybe_start_morning_alarm()</code> from the night-lockdown unlock
+    script</td>
+    <td>It was the second, phone-independent trigger — the 07:00 fire. Its own comment
+    called it a workaround for the lost hibernate event.</td>
+  </tr>
+  <tr>
+    <td><code>screen-locker</code></td>
+    <td>Bounded retry around sync calls; stopped reporting network errors as
+    <code>403</code></td>
+    <td>The orchestrator starts seconds after boot/resume, before DHCP settles. Every such
+    run failed and blamed the token, which was fine.</td>
+  </tr>
+</table>
+
+<h2 id="quiz">Quiz</h2>
+<p>Five questions on the reasoning behind the change. Click an option to check it.</p>
+<div id="quiz"></div>
+<p id="score">Score: 0 / 0</p>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- micro-world: the real _decide() rule ---------- */
+  var CATCHUP = 60; // TRIGGER_CATCHUP_MINUTES
+  var el = function (id) { return document.getElementById(id); };
+  var alarmT = el("alarmT"), nowT = el("nowT"),
+      gDis = el("gDis"), gWork = el("gWork"), gDay = el("gDay"),
+      simWin = el("simWin"), simNow = el("simNow"), simOut = el("simOut");
+
+  function mins(v) {
+    var p = String(v || "0:00").split(":");
+    return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+  }
+  function fmt(m) {
+    m = ((m % 1440) + 1440) % 1440;
+    var h = Math.floor(m / 60), x = m % 60;
+    return (h < 10 ? "0" : "") + h + ":" + (x < 10 ? "0" : "") + x;
+  }
+
+  function decide() {
+    var a = mins(alarmT.value), n = mins(nowT.value);
+    var end = a + CATCHUP;
+
+    // window band across a 24h bar
+    simWin.style.left = (a / 1440 * 100) + "%";
+    simWin.style.right = (100 - Math.min(end, 1440) / 1440 * 100) + "%";
+    simNow.style.left = (n / 1440 * 100) + "%";
+
+    // gates first — exactly as _skip_reason() runs before the clock test
+    var skip = null;
+    if (!gDay.checked) skip = "not an alarm day";
+    else if (gDis.checked) skip = "alarm already dismissed today";
+    else if (gWork.checked) skip = "workout already logged today";
+
+    var fire, msg;
+    if (skip) {
+      fire = false;
+      msg = "not firing: " + skip;
+    } else if (n < a) {
+      fire = false;
+      msg = "not firing: alarm " + fmt(a) + " is still ahead";
+    } else if (n >= end) {
+      fire = false;
+      msg = "not firing: alarm " + fmt(a) + " passed over " + CATCHUP +
+            " minutes ago — window closed";
+    } else {
+      fire = true;
+      msg = "WOULD FIRE: alarm " + fmt(a) + " is due (since " + fmt(a) + ")";
+    }
+
+    simOut.className = "verdict " + (fire ? "fire" : "no");
+    simOut.innerHTML = "<b>" + fmt(n) + " tick</b>" + msg +
+      (fire ? "<br><span style='font-size:.83rem;opacity:.8'>→ systemctl --user start morning-routine.service"
+            + " (a no-op if it is already running)</span>" : "");
+  }
+
+  [alarmT, nowT, gDis, gWork, gDay].forEach(function (c) {
+    c.addEventListener("input", decide);
+    c.addEventListener("change", decide);
+  });
+
+  el("pShift").addEventListener("click", function () {
+    alarmT.value = fmt(mins(alarmT.value) - 30); decide();
+  });
+  el("pResume").addEventListener("click", function () {
+    nowT.value = fmt(mins(alarmT.value) + 20); gDis.checked = false; gDay.checked = true; decide();
+  });
+  el("pMiss").addEventListener("click", function () {
+    nowT.value = fmt(mins(alarmT.value) + 120); decide();
+  });
+  decide();
+
+  /* ---------- quiz ---------- */
+  var QS = [
+    {
+      q: "Why does <code>wake-alarm.service</code> deliberately ship with no <code>[Install]</code> section?",
+      o: [
+        "Because systemd forbids a user unit from having both a timer and an install section.",
+        "Because <code>_should_run_alarm()</code> gates on day and dismissal, but never on the time.",
+        "Because the orchestrator starts it directly, and enabling it would double-fire.",
+        "Because <code>graphical-session.target</code> is unreachable on an always-on machine now."
+      ],
+      a: 1,
+      why: "graphical-session.target is reached at every login, and nothing in the alarm's own gate checks the clock — so an enabled unit fires at login time, not alarm time."
+    },
+    {
+      q: "The timer ticks every minute but only reaches the network every ~5 minutes. Why tick per minute at all?",
+      o: [
+        "A five-minute tick would also round the fire time up to a five-minute boundary.",
+        "GitHub's API rate limit is measured per minute, so smaller reads help spread the load.",
+        "systemd user timers cannot express sub-hour intervals with any reliability.",
+        "The dismissal state file is rewritten on every tick and must be kept current."
+      ],
+      a: 0,
+      why: "Tick granularity is fire granularity: a 07:03 alarm on a 5-minute tick fires at 07:05. The cache decouples the two, so firing is exact while reads stay cheap."
+    },
+    {
+      q: "Why does the trigger start <code>morning-routine.service</code> rather than <code>wake-alarm.service</code>?",
+      o: [
+        "Because <code>wake-alarm.service</code> is disabled, and systemd refuses to start any disabled unit.",
+        "Because starting an active unit errors, and the orchestrator dedupes that for us.",
+        "Because only the orchestrator has the DISPLAY variable needed to open the Tk window.",
+        "Because the orchestrator also runs the workout lock, which would otherwise be skipped."
+      ],
+      a: 3,
+      why: "The orchestrator exists to run the alarm and the workout lock in sequence. Starting the alarm unit directly silently drops the workout lock — a documented past failure."
+    },
+    {
+      q: "The alarm fired at 07:00 on a morning the phone said 08:00. What actually caused it?",
+      o: [
+        "The cached alarm had gone stale, so the trigger fell back to <code>FALLBACK_ALARM_HOUR</code>.",
+        "The catch-up window reached back an hour and re-fired the previous day's alarm.",
+        "night-lockdown's unlock script started the routine on its own fixed-hour ladder.",
+        "The phone pushed 07:00 first, and the PC cached it before the 08:00 sync landed."
+      ],
+      a: 2,
+      why: "The journal showed no 'Firing' line from the trigger at 07:00 at all — a separate script on a 05:00/05:15/05:30/06:00/07:00 ladder started the orchestrator."
+    },
+    {
+      q: "In screen-locker, why does the retry helper also retry <code>RepoNotFoundError</code> instead of failing fast?",
+      o: [
+        "Because a missing repo is often transient while GitHub replicates a new push.",
+        "Because the retry budget is shared, so failing fast would waste later attempts.",
+        "Because classifying errors would couple the code to crdt_sync's internals.",
+        "Because RepoNotFoundError is raised for DNS failures as well as permissions."
+      ],
+      a: 2,
+      why: "Telling transient from permanent would depend on which exception the library chains where. Wasting a few seconds on a genuinely bad token is the cheaper mistake."
+    }
+  ];
+
+  var answered = 0, correct = 0;
+  var host = el("quiz");
+
+  QS.forEach(function (item, qi) {
+    var box = document.createElement("div");
+    box.className = "q";
+    var stem = document.createElement("p");
+    stem.className = "q-stem";
+    stem.innerHTML = (qi + 1) + ". " + item.q;
+    box.appendChild(stem);
+
+    var why = document.createElement("p");
+    why.className = "why";
+    why.textContent = item.why;
+
+    item.o.forEach(function (text, oi) {
+      var b = document.createElement("button");
+      b.className = "opt";
+      b.innerHTML = text;
+      b.addEventListener("click", function () {
+        if (box.dataset.done) return;
+        box.dataset.done = "1";
+        answered++;
+        if (oi === item.a) correct++;
+        Array.prototype.forEach.call(box.querySelectorAll(".opt"), function (btn, bi) {
+          btn.disabled = true;
+          if (bi === item.a) btn.classList.add("correct");
+          else if (bi === oi) btn.classList.add("wrong");
+        });
+        why.classList.add("show");
+        el("score").textContent = "Score: " + correct + " / " + answered;
+      });
+      box.appendChild(b);
+    });
+
+    box.appendChild(why);
+    host.appendChild(box);
+  });
+})();
+</script>
+
+</body>
+</html>
