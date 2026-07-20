@@ -2,8 +2,10 @@
 
 `phone_app`'s alarm sync was moved off a bespoke GitHub Gist onto the shared
 [`crdt_sync`](https://github.com/kuhyx/utils/tree/main/crdt_sync_dart) library
-(pinned tag `crdt_sync_dart-v0.3.0`), matching how the other companion apps
-sync.
+(pinned tag `crdt_sync_dart-v0.2.0` — see `phone_app/pubspec.yaml`, which is
+the authority; `pubspec.lock` resolves it to `5be99ab`), matching how the other
+companion apps sync. A `crdt_sync_dart-v0.3.0` tag also exists upstream and is
+*not* in use here — bumping to it is an untaken decision, not a drift to fix.
 
 ## What changed
 
