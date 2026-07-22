@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
+import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// Main screen: displays the current alarm time and syncs it to the PC via
 /// the shared crdt_sync transport.
@@ -131,7 +132,11 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Wake Alarm Sync'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: Icon(
+              Icons.settings,
+              // Dimmed relative to the adjacent title text (rule 28).
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             onPressed: () async {
               await Navigator.push<void>(
                 context,
@@ -195,16 +200,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: _status.contains('Error')
-                        ? Colors.redAccent
-                        : Colors.greenAccent,
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(
+                            context,
+                          ).extension<AppStatusColors>()!.success,
                   ),
                 ),
               if (!_configured) ...[
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Open Settings (gear icon) to connect GitHub.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.orange),
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).extension<AppStatusColors>()!.warning,
+                  ),
                 ),
               ],
             ],

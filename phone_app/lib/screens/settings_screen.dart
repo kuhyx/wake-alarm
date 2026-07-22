@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:wake_alarm_sync/services/github_device_auth.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
+import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// Settings screen for the GitHub connection used to sync the alarm.
 ///
@@ -108,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : const Icon(Icons.link),
                 label: const Text('Connect GitHub'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   textStyle: const TextStyle(fontSize: 16),
                 ),
               )
@@ -124,18 +125,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _status,
                 style: TextStyle(
                   color: _status.contains('Error')
-                      ? Colors.redAccent
-                      : Colors.greenAccent,
+                      ? Theme.of(context).colorScheme.error
+                      : Theme.of(
+                          context,
+                        ).extension<AppStatusColors>()!.success,
                 ),
               ),
             const Divider(height: 32),
-            const Text(
+            Text(
               'PC config — create this file:\n'
               '~/.config/wake_alarm/sync.json\n\n'
               '{ "token": "<same token>" }\n\n'
               'The token needs "repo" scope so the PC can read '
               'kuhyx/syncs at shutdown.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              // Was 12px/Colors.grey — below the 16px reading floor (rule
+              // 20) and off-palette (rule 4); this is real setup
+              // instructions, not decorative chrome.
+              style: TextStyle(
+                fontSize: 16,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -151,6 +160,8 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final success = Theme.of(context).extension<AppStatusColors>()!.success;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -158,9 +169,11 @@ class _StatusCard extends StatelessWidget {
           children: [
             Icon(
               connected ? Icons.check_circle : Icons.cancel,
-              color: connected ? Colors.greenAccent : Colors.redAccent,
+              // Dimmed relative to the adjacent label text (rule 28).
+              color: (connected ? success : colorScheme.error)
+                  .withValues(alpha: 0.8),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 connected ? 'Connected to GitHub' : 'Not connected',
@@ -242,7 +255,10 @@ class _DeviceCodeDialogState extends State<_DeviceCodeDialog> {
               ],
             )
           else
-            Text(_error!, style: const TextStyle(color: Colors.red)),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
         ],
       ),
       actions: [
