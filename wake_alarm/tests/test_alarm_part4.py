@@ -40,6 +40,7 @@ def _block_real_tk() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,
@@ -73,6 +74,7 @@ def mock_tk_module() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,

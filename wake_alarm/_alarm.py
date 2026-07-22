@@ -21,6 +21,7 @@ import tkinter as tk
 from gatelock import GateRoot, LockConfig, LockWindow
 
 from wake_alarm._alarm_display import _restore_display, _wake_display
+from wake_alarm._alarm_view import _build_alarm_view
 from wake_alarm._audio import (
     _beep_loud,
     _beep_medium,
@@ -69,20 +70,6 @@ def _is_alarm_day() -> bool:
 
 
 @dataclass
-class _AlarmView:
-    """The Tk widgets that make up the alarm's dismiss-challenge screen."""
-
-    container: tk.Frame
-    title_label: tk.Label
-    round_label: tk.Label
-    info_label: tk.Label
-    code_label: tk.Label
-    entry: tk.Entry
-    status_label: tk.Label
-    timer_label: tk.Label
-
-
-@dataclass
 class _AlarmProgress:
     """Mutable dismiss-challenge progress state."""
 
@@ -121,11 +108,14 @@ class WakeAlarm:
         self.root.title("Wake Alarm" + (" [DEMO]" if demo_mode else ""))
         # mode="soft": no watchdog exists yet for a clean, silent lock
         # failure, so hard-lock (overrideredirect + grab) is deferred.
-        self._lock = LockWindow(self.root, LockConfig(mode="soft"), hooks=self)
+        config = LockConfig(mode="soft")
+        self._lock = LockWindow(self.root, config, hooks=self)
         self._lock.setup()
 
         self._progress = _AlarmProgress(current_challenge=_make_challenge())
-        self._view = self._build_ui()
+        self._view = _build_alarm_view(
+            self.root, self._progress.current_challenge, config, self._on_submit
+        )
         self._update_timer()
         if self._progress.current_challenge.kind == "flash":
             self._start_flash_countdown()
@@ -159,92 +149,6 @@ class WakeAlarm:
         _restore_display()
         turn_off_plug()
 
-    def _build_ui(self) -> _AlarmView:
-        """Build the dismiss-challenge UI and return its widgets as a view."""
-        challenge = self._progress.current_challenge
-
-        container = tk.Frame(self.root, bg="#1a1a1a")
-        container.place(relx=0.5, rely=0.5, anchor="center")
-
-        title_label = tk.Label(
-            container,
-            text="WAKE UP!",
-            font=("Arial", 48, "bold"),
-            fg="#ff4444",
-            bg="#1a1a1a",
-        )
-        title_label.pack(pady=20)
-
-        round_label = tk.Label(
-            container,
-            text=f"Round 1 / {DISMISS_ROUNDS_REQUIRED}",
-            font=("Arial", 24, "bold"),
-            fg="#ffaa00",
-            bg="#1a1a1a",
-        )
-        round_label.pack(pady=5)
-
-        info_label = tk.Label(
-            container,
-            text=challenge.hint,
-            font=("Arial", 18),
-            fg="white",
-            bg="#1a1a1a",
-        )
-        info_label.pack(pady=10)
-
-        # Non-flash types use a smaller font because their display text is wider.
-        code_font_size = (
-            48 if challenge.kind in ("math", "sort", "sequence", "reverse") else 72
-        )
-        code_label = tk.Label(
-            container,
-            text=challenge.display,
-            font=("Courier", code_font_size, "bold"),
-            fg="#00ff00",
-            bg="#1a1a1a",
-        )
-        code_label.pack(pady=30)
-
-        entry = tk.Entry(
-            container,
-            font=("Courier", 36),
-            justify="center",
-            width=12,
-        )
-        entry.pack(pady=10)
-        entry.focus_set()
-        entry.bind("<Return>", self._on_submit)
-
-        status_label = tk.Label(
-            container,
-            text="",
-            font=("Arial", 18),
-            fg="#ff4444",
-            bg="#1a1a1a",
-        )
-        status_label.pack(pady=10)
-
-        timer_label = tk.Label(
-            container,
-            text="",
-            font=("Arial", 14),
-            fg="#aaaaaa",
-            bg="#1a1a1a",
-        )
-        timer_label.pack(pady=5)
-
-        return _AlarmView(
-            container=container,
-            title_label=title_label,
-            round_label=round_label,
-            info_label=info_label,
-            code_label=code_label,
-            entry=entry,
-            status_label=status_label,
-            timer_label=timer_label,
-        )
-
     def _on_submit(self, _event: object = None) -> None:
         """Handle challenge submission.
 
@@ -260,7 +164,7 @@ class WakeAlarm:
             if self._progress.current_challenge.kind == "flash":
                 self._view.code_label.configure(
                     text=self._progress.current_challenge.display,
-                    fg="#00ff00",
+                    fg=self._view.config.success,
                 )
                 self._start_flash_countdown()
             return
@@ -271,7 +175,7 @@ class WakeAlarm:
         self._progress.current_challenge = _make_challenge()
         self._view.code_label.configure(
             text=self._progress.current_challenge.display,
-            fg="#00ff00",
+            fg=self._view.config.success,
         )
         self._view.info_label.configure(text=self._progress.current_challenge.hint)
         self._view.entry.delete(0, tk.END)
@@ -302,7 +206,7 @@ class WakeAlarm:
             self.root.after(1000, self._flash_tick)
         else:
             hidden = "?" * len(self._progress.current_challenge.display)
-            self._view.code_label.configure(text=hidden, fg="#555555")
+            self._view.code_label.configure(text=hidden, fg=self._view.config.muted)
             self._view.status_label.configure(text="Now type the code from memory!")
 
     def _dismiss_alarm(self, *, earned_skip: bool) -> None:
@@ -321,14 +225,15 @@ class WakeAlarm:
             if earned_skip
             else "Alarm dismissed. No workout skip."
         )
-        color = "#00ff00" if earned_skip else "#ffaa00"
+        cfg = self._view.config
+        color = cfg.success if earned_skip else cfg.warning
 
         tk.Label(
             self._view.container,
             text=msg,
             font=("Arial", 36, "bold"),
             fg=color,
-            bg="#1a1a1a",
+            bg=cfg.bg,
         ).pack(pady=30)
 
         self.root.after(3000, self._lock.close)
@@ -344,7 +249,7 @@ class WakeAlarm:
         self._progress.current_challenge = _make_challenge()
         self._view.code_label.configure(
             text=self._progress.current_challenge.display,
-            fg="#00ff00",
+            fg=self._view.config.success,
         )
         self._view.info_label.configure(text=self._progress.current_challenge.hint)
         self._view.entry.delete(0, tk.END)
@@ -406,7 +311,8 @@ class WakeAlarm:
         """Alternate background colour every 750 ms (below seizure-risk 3 Hz)."""
         if not self._active:
             return
-        self.root.configure(bg="#ff0000" if self._progress.flash_on else "#1a1a1a")
+        cfg = self._view.config
+        self.root.configure(bg=cfg.danger if self._progress.flash_on else cfg.bg)
         self._progress.flash_on = not self._progress.flash_on
         self.root.after(750, self._flash_step)
 

@@ -42,6 +42,7 @@ def _block_real_tk() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,
@@ -75,6 +76,7 @@ def mock_tk_module() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
             return_value=mock.Tk.return_value,
@@ -397,7 +399,7 @@ class TestScreenFlash:
         alarm._progress.flash_on = False
         alarm._flash_step()
 
-        mock_root.configure.assert_called_once_with(bg="#1a1a1a")
+        mock_root.configure.assert_called_once_with(bg=alarm._view.config.bg)
         assert alarm._progress.flash_on is True
         mock_root.after.assert_called_with(750, alarm._flash_step)
         alarm._stop_beep.set()
@@ -415,7 +417,7 @@ class TestScreenFlash:
         alarm._progress.flash_on = True
         alarm._flash_step()
 
-        mock_root.configure.assert_called_once_with(bg="#ff0000")
+        mock_root.configure.assert_called_once_with(bg=alarm._view.config.danger)
         assert alarm._progress.flash_on is False
         mock_root.after.assert_called_with(750, alarm._flash_step)
         alarm._stop_beep.set()
