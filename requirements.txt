@@ -5,7 +5,7 @@
 bandit>=1.7.0
 codespell>=2.2.0
 coverage>=7.4.0
-gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.1.1#subdirectory=gatelock
+gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.2.0#subdirectory=gatelock
 mypy>=1.8.0
 pre-commit>=3.6.0
 pylint>=3.0.0
