@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import logging
 import sys
@@ -18,10 +18,17 @@ import threading
 import time
 import tkinter as tk
 
-from gatelock import GateRoot, LockConfig, LockWindow
+from gatelock import (
+    RANK_WAKE_ALARM,
+    Arbiter,
+    GateRoot,
+    LockConfig,
+    LockWindow,
+    SurfaceInfo,
+)
 
 from wake_alarm._alarm_display import _restore_display, _wake_display
-from wake_alarm._alarm_view import _build_alarm_view
+from wake_alarm._alarm_view import _build_alarm_view, _ViewGroup
 from wake_alarm._audio import (
     _beep_loud,
     _beep_medium,
@@ -47,6 +54,7 @@ from wake_alarm._constants import (
     PHASE_SOFT_END,
     SOFT_BEEP_INTERVAL,
 )
+from wake_alarm._escape_flow import EscapeHatch, build_tracker
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._sinks import (
     _activate_all_outputs,
@@ -74,6 +82,7 @@ class _AlarmProgress:
     """Mutable dismiss-challenge progress state."""
 
     current_challenge: _Challenge
+    started_at: float = field(default_factory=time.monotonic)
     skip_earnable: bool = True
     rounds_completed: int = 0
     flash_remaining: int = 0
@@ -100,22 +109,42 @@ class WakeAlarm:
         self.demo_mode = demo_mode
         self.dismissed = False
         self._stop_beep = threading.Event()
-        self._alarm_start: float = time.monotonic()
         self._active = True
 
         self.root = GateRoot()
         self.root.on_callback_error = self.on_callback_error
         self.root.title("Wake Alarm" + (" [DEMO]" if demo_mode else ""))
-        # mode="soft": no watchdog exists yet for a clean, silent lock
-        # failure, so hard-lock (overrideredirect + grab) is deferred.
-        config = LockConfig(mode="soft")
-        self._lock = LockWindow(self.root, config, hooks=self)
-        self._lock.setup()
-
-        self._progress = _AlarmProgress(current_challenge=_make_challenge())
-        self._view = _build_alarm_view(
-            self.root, self._progress.current_challenge, config, self._on_submit
+        # Production hard-locks as of gatelock v0.2.0. The old comment here
+        # deferred it for want of "a watchdog for a clean, silent lock
+        # failure" -- the recovery loop is that watchdog. Demo stays grab-free
+        # so a manual test cannot trap the developer, but takes
+        # overrideredirect anyway: per-output placement is impossible without
+        # it, since a window manager rewrites a managed window's geometry.
+        config = LockConfig(
+            mode="soft" if demo_mode else "hard",
+            overrideredirect=True,
+            app_name="wake_alarm",
+            rank=RANK_WAKE_ALARM,
         )
+        # A local, not an attribute: the arbiter is published here and then
+        # owned by LockWindow, which is what releases it on close.
+        arbiter = Arbiter(
+            "wake_alarm",
+            RANK_WAKE_ALARM,
+            grab=config.resolved_grab(),
+            disable_vt=config.resolved_disable_vt(),
+        )
+        arbiter.publish()
+        arbiter.acquire_holder()
+
+        # Built before setup(): setup() calls build_surface for every live
+        # output, and those need the challenge and the shared entry variable.
+        self._progress = _AlarmProgress(current_challenge=_make_challenge())
+        self._view = _ViewGroup(config, tk.StringVar(master=self.root))
+        self._escape = EscapeHatch(build_tracker(), self._view, self._on_escape_granted)
+
+        self._lock = LockWindow(self.root, config, hooks=self, arbiter=arbiter)
+        self._lock.setup()
         self._update_timer()
         if self._progress.current_challenge.kind == "flash":
             self._start_flash_countdown()
@@ -128,8 +157,36 @@ class WakeAlarm:
         self._start_screen_flash()
         self._lock.grab_input()
 
-    def on_focus_ready(self) -> None:
-        """Put keyboard focus on the dismiss-code entry once mapped."""
+    def build_surface(self, parent: tk.Misc, surface: SurfaceInfo) -> None:
+        """Paint the full challenge on one monitor.
+
+        Called once per live output, and again whenever an output comes
+        back. Every copy shares one entry variable and one submit handler,
+        so answering on any monitor dismisses the alarm on all of them.
+        """
+        view = _build_alarm_view(
+            parent,
+            self._progress.current_challenge,
+            self._view.config,
+            on_submit=self._on_submit,
+            entry_var=self._view.entry_var,
+        )
+        view.output_name = surface.output_name
+        view.escape_button.configure(command=self._escape.open)
+        self._view.add(view)
+
+    def teardown_surface(self, surface: SurfaceInfo) -> None:
+        """Forget the view for an output that went dark."""
+        self._view.discard(surface.output_name)
+
+    def on_focus_ready(self, surface: SurfaceInfo | None) -> None:
+        """Put keyboard focus on the dismiss-code entry once mapped.
+
+        ``surface`` is None when no output is live -- the alarm is armed
+        and audible with nothing to show, so there is nothing to focus.
+        """
+        if surface is None:
+            return
         with contextlib.suppress(tk.TclError):
             self._view.entry.focus_force()
 
@@ -217,8 +274,9 @@ class WakeAlarm:
         now_iso = datetime.now(tz=timezone.utc).isoformat()
         save_wake_state(dismissed_at=now_iso, skip_workout=earned_skip)
 
-        for widget in self._view.container.winfo_children():
-            widget.destroy()
+        for container in self._view.containers:
+            for widget in container.winfo_children():
+                widget.destroy()
 
         msg = (
             "Workout skip earned! Enjoy your morning."
@@ -228,13 +286,14 @@ class WakeAlarm:
         cfg = self._view.config
         color = cfg.success if earned_skip else cfg.warning
 
-        tk.Label(
-            self._view.container,
-            text=msg,
-            font=("Arial", 36, "bold"),
-            fg=color,
-            bg=cfg.bg,
-        ).pack(pady=30)
+        for container in self._view.containers:
+            tk.Label(
+                container,
+                text=msg,
+                font=("Arial", 36, "bold"),
+                fg=color,
+                bg=cfg.bg,
+            ).pack(pady=30)
 
         self.root.after(3000, self._lock.close)
 
@@ -283,7 +342,7 @@ class WakeAlarm:
         """Show the skip-window countdown, then a keep-going silence prompt."""
         if not self._active:
             return
-        elapsed = time.monotonic() - self._alarm_start
+        elapsed = time.monotonic() - self._progress.started_at
         window = DISMISS_WINDOW_MINUTES * 60 if not self.demo_mode else 30
         remaining = max(0, window - elapsed)
         if self._progress.skip_earnable and remaining > 0:
@@ -296,7 +355,13 @@ class WakeAlarm:
             self._view.timer_label.configure(
                 text="No skip available - type the code to stop the alarm",
             )
+        self._escape.maybe_offer(elapsed)
         self.root.after(1000, self._update_timer)
+
+    def _on_escape_granted(self) -> None:
+        """The hatch was earned: silence the alarm, grant no workout skip."""
+        _logger.warning("alarm dismissed via the escape hatch, no skip earned")
+        self._dismiss_alarm(earned_skip=False)
 
     def _start_beep_thread(self) -> None:
         """Start the background beep escalation thread."""
@@ -312,14 +377,21 @@ class WakeAlarm:
         if not self._active:
             return
         cfg = self._view.config
-        self.root.configure(bg=cfg.danger if self._progress.flash_on else cfg.bg)
+        colour = cfg.danger if self._progress.flash_on else cfg.bg
+        self.root.configure(bg=colour)
+        # The per-output surfaces sit on top of the backdrop, so flashing
+        # only the root would be invisible on every monitor.
+        for container in self._view.containers:
+            with contextlib.suppress(tk.TclError):
+                container.configure(bg=colour)
+                container.winfo_toplevel().configure(bg=colour)
         self._progress.flash_on = not self._progress.flash_on
         self.root.after(750, self._flash_step)
 
     def _beep_loop(self) -> None:
         """Escalating beep loop running in background thread."""
         while not self._stop_beep.is_set():
-            elapsed_minutes = (time.monotonic() - self._alarm_start) / 60.0
+            elapsed_minutes = (time.monotonic() - self._progress.started_at) / 60.0
 
             if elapsed_minutes < PHASE_SOFT_END:
                 _play_on_all_sinks(440)

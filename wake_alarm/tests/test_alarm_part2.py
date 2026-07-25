@@ -102,15 +102,12 @@ class TestWakeAlarmInit:
         assert alarm.demo_mode is True
         assert alarm.dismissed is False
         mock_root = mock_tk_module.Tk.return_value
-        # LockConfig(mode="soft") never sets overrideredirect (X11 focus bug);
-        # fullscreen+topmost are what take over the screen now.
-        mock_root.overrideredirect.assert_not_called()
-        fs_calls = [
-            c
-            for c in mock_root.attributes.call_args_list
-            if c.kwargs.get("fullscreen") is True
-        ]
-        assert fs_calls, "fullscreen attribute must be set"
+        # Since gatelock v0.2.0 even demo takes overrideredirect: a window
+        # manager rewrites a managed window's geometry, so per-output
+        # placement is impossible without it. attributes(fullscreen=True)
+        # is gone -- explicit per-output geometry replaces it.
+        mock_root.overrideredirect.assert_called_with(boolean=True)
+        assert alarm._view._views, "a surface must exist per live output"
         alarm._stop_beep.set()  # Stop beep thread
 
     def test_production_mode_fullscreen(
@@ -121,13 +118,11 @@ class TestWakeAlarmInit:
         alarm = WakeAlarm(demo_mode=False)
         assert alarm.demo_mode is False
         mock_root = mock_tk_module.Tk.return_value
-        mock_root.overrideredirect.assert_not_called()
-        fs_calls = [
-            c
-            for c in mock_root.attributes.call_args_list
-            if c.kwargs.get("fullscreen") is True
-        ]
-        assert fs_calls, "fullscreen attribute must be set"
+        mock_root.overrideredirect.assert_called_with(boolean=True)
+        # attributes(fullscreen=True) is deliberately gone: it is an EWMH
+        # request an override-redirect window is invisible to, and where
+        # it applies it snaps to one monitor or the whole bounding box.
+        assert alarm._view._views, "a surface must exist per live output"
         alarm._stop_beep.set()
 
 
@@ -142,13 +137,14 @@ class TestWakeAlarmDismiss:
         from wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
 
         alarm = WakeAlarm(demo_mode=True)
-        mock_entry = mock_tk_module.Entry.return_value
 
         with patch(
             "wake_alarm._alarm.save_wake_state",
         ) as mock_save:
             for _ in range(DISMISS_ROUNDS_REQUIRED):
-                mock_entry.get.return_value = alarm._progress.current_challenge.answer
+                alarm._view.entry_var.get.return_value = (
+                    alarm._progress.current_challenge.answer
+                )
                 alarm._on_submit()
 
         assert alarm.dismissed is True
@@ -162,8 +158,9 @@ class TestWakeAlarmDismiss:
     ) -> None:
         """A single correct entry is not enough — DISMISS_ROUNDS_REQUIRED is 2+."""
         alarm = WakeAlarm(demo_mode=True)
-        mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = alarm._progress.current_challenge.answer
+        alarm._view.entry_var.get.return_value = (
+            alarm._progress.current_challenge.answer
+        )
 
         alarm._on_submit()
 
@@ -179,8 +176,9 @@ class TestWakeAlarmDismiss:
         from wake_alarm._challenges import _Challenge
 
         alarm = WakeAlarm(demo_mode=True)
-        mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = alarm._progress.current_challenge.answer
+        alarm._view.entry_var.get.return_value = (
+            alarm._progress.current_challenge.answer
+        )
         next_math = _Challenge(kind="math", display="2 + 2 = ?", answer="4", hint="x")
         with patch("wake_alarm._alarm._make_challenge", return_value=next_math):
             alarm._on_submit()
@@ -201,8 +199,7 @@ class TestWakeAlarmDismiss:
         alarm._progress.current_challenge = _Challenge(
             kind="math", display="2 + 2 = ?", answer="4", hint="test"
         )
-        mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = "99"
+        alarm._view.entry_var.get.return_value = "99"
 
         alarm._on_submit()
 
@@ -228,7 +225,7 @@ class TestWakeAlarmDismiss:
         assert alarm.dismissed is False
         assert not alarm._stop_beep.is_set()
         mock_save.assert_not_called()
-        alarm._view.info_label.configure.assert_called()
+        alarm._view._views[0].labels.info.configure.assert_called()
         alarm._stop_beep.set()
 
     def test_skip_window_expired_noop_if_not_active(
@@ -255,13 +252,14 @@ class TestWakeAlarmDismiss:
 
         alarm = WakeAlarm(demo_mode=True)
         alarm._progress.skip_earnable = False
-        mock_entry = mock_tk_module.Entry.return_value
 
         with patch(
             "wake_alarm._alarm.save_wake_state",
         ) as mock_save:
             for _ in range(DISMISS_ROUNDS_REQUIRED):
-                mock_entry.get.return_value = alarm._progress.current_challenge.answer
+                alarm._view.entry_var.get.return_value = (
+                    alarm._progress.current_challenge.answer
+                )
                 alarm._on_submit()
 
         assert alarm.dismissed is True

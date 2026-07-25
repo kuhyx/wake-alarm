@@ -96,7 +96,7 @@ class TestBeepLoopPhases:
         # Set alarm start to make elapsed > PHASE_SOFT_END minutes
         import time as time_mod
 
-        alarm._alarm_start = time_mod.monotonic() - (PHASE_SOFT_END + 1) * 60
+        alarm._progress.started_at = time_mod.monotonic() - (PHASE_SOFT_END + 1) * 60
 
         call_count = 0
 
@@ -125,7 +125,7 @@ class TestBeepLoopPhases:
         alarm = WakeAlarm(demo_mode=True)
         import time as time_mod
 
-        alarm._alarm_start = time_mod.monotonic() - (PHASE_MEDIUM_END + 1) * 60
+        alarm._progress.started_at = time_mod.monotonic() - (PHASE_MEDIUM_END + 1) * 60
 
         call_count = 0
 
@@ -178,7 +178,7 @@ class TestUpdateTimerActive:
         del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
         alarm._update_timer()
-        text = alarm._view.timer_label.configure.call_args[1]["text"]
+        text = alarm._view._views[0].labels.timer.configure.call_args[1]["text"]
         assert text.startswith("Skip window:")
         alarm._stop_beep.set()
 
@@ -191,10 +191,10 @@ class TestUpdateTimerActive:
 
         alarm = WakeAlarm(demo_mode=True)
         # Far in the past so remaining == 0 -> the else branch.
-        alarm._alarm_start = time_mod.monotonic() - 60 * 60
+        alarm._progress.started_at = time_mod.monotonic() - 60 * 60
         alarm.root.after.reset_mock()
         alarm._update_timer()
-        text = alarm._view.timer_label.configure.call_args[1]["text"]
+        text = alarm._view._views[0].labels.timer.configure.call_args[1]["text"]
         assert "type the code" in text
         # The alarm keeps nagging: it always reschedules while active.
         alarm.root.after.assert_called_once()
@@ -208,9 +208,9 @@ class TestUpdateTimerActive:
         del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
         alarm._active = False
-        alarm._view.timer_label.configure.reset_mock()
+        alarm._view._views[0].labels.timer.configure.reset_mock()
         alarm._update_timer()
-        alarm._view.timer_label.configure.assert_not_called()
+        alarm._view._views[0].labels.timer.configure.assert_not_called()
         alarm._stop_beep.set()
 
 
@@ -232,11 +232,11 @@ class TestFlashChallenge:
             hint="Memorise",
         )
         alarm._progress.flash_remaining = 2
-        alarm._view.status_label.configure.reset_mock()
+        alarm._view._views[0].labels.status.configure.reset_mock()
 
         alarm._flash_tick()
         assert alarm._progress.flash_remaining == 1
-        alarm._view.status_label.configure.assert_called()
+        alarm._view._views[0].labels.status.configure.assert_called()
 
         alarm._flash_tick()
         assert alarm._progress.flash_remaining == 0
@@ -246,7 +246,7 @@ class TestFlashChallenge:
         # _code_label and _status_label share the same mock; inspect all calls.
         all_texts = [
             c.kwargs.get("text", "")
-            for c in alarm._view.code_label.configure.call_args_list
+            for c in alarm._view._views[0].labels.code.configure.call_args_list
         ]
         assert any("?" in t for t in all_texts)
         alarm._stop_beep.set()
@@ -259,11 +259,11 @@ class TestFlashChallenge:
         alarm = WakeAlarm(demo_mode=True)
         alarm._active = False
         alarm._progress.flash_remaining = 3
-        alarm._view.status_label.configure.reset_mock()
+        alarm._view._views[0].labels.status.configure.reset_mock()
 
         alarm._flash_tick()
 
-        alarm._view.status_label.configure.assert_not_called()
+        alarm._view._views[0].labels.status.configure.assert_not_called()
         alarm._stop_beep.set()
 
     def test_wrong_flash_answer_reshows_code(
@@ -280,15 +280,14 @@ class TestFlashChallenge:
             answer="TESTCODE",
             hint="Memorise",
         )
-        mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = "WRONGCODE"
-        alarm._view.code_label.configure.reset_mock()
+        alarm._view.entry_var.get.return_value = "WRONGCODE"
+        alarm._view._views[0].labels.code.configure.reset_mock()
 
         alarm._on_submit()
 
         assert alarm.dismissed is False
         # Code label should be reconfigured (code shown again + countdown restarted).
-        alarm._view.code_label.configure.assert_called()
+        alarm._view._views[0].labels.code.configure.assert_called()
         alarm._stop_beep.set()
 
     def test_next_round_flash_starts_countdown(
@@ -305,8 +304,7 @@ class TestFlashChallenge:
         next_flash = _Challenge(
             kind="flash", display="ABCDEFGH", answer="ABCDEFGH", hint="Memorise"
         )
-        mock_entry = mock_tk_module.Entry.return_value
-        mock_entry.get.return_value = "4"
+        alarm._view.entry_var.get.return_value = "4"
 
         with patch("wake_alarm._alarm._make_challenge", return_value=next_flash):
             alarm._on_submit()
@@ -327,7 +325,7 @@ class TestDismissWithoutSkip:
         del mock_tk_module
         alarm = WakeAlarm(demo_mode=True)
         mock_widget = MagicMock()
-        alarm._view.container.winfo_children.return_value = [mock_widget]
+        alarm._view._views[0].container.winfo_children.return_value = [mock_widget]
 
         with patch(
             "wake_alarm._alarm.save_wake_state",
@@ -354,7 +352,7 @@ class TestSkipWindowExpiredMessage:
 
         alarm._on_skip_window_expired()
 
-        alarm._view.status_label.configure.assert_called_with(
+        alarm._view._views[0].labels.status.configure.assert_called_with(
             text="No workout skip today.",
         )
         alarm._stop_beep.set()

@@ -68,6 +68,15 @@ WORKOUT_LOG_FILE: Path = (
 # hibernate fallback — keep the two readers in step if any of this changes.
 
 # GitHub token config, key "token" (PAT with "repo" scope: the repo is private).
+# The alarm's escape-hatch history. Lives beside the sync config rather
+# than in the package dir, so a reinstall cannot silently reset the budget.
+ESCAPE_HISTORY_FILE: Path = (
+    Path.home() / ".config" / "wake_alarm" / "escape_history.json"
+)
+# How long the alarm must have been up before the hatch is offered, so it
+# is never the easy first move.
+ESCAPE_OFFER_AFTER_SECONDS: int = 300
+
 SYNC_CONFIG_FILE: Path = Path.home() / ".config" / "wake_alarm" / "sync.json"
 
 # Fallback token locations, tried in order when SYNC_CONFIG_FILE is absent.
