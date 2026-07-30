@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import tkinter as tk
 from typing import TYPE_CHECKING
 
+from gatelock import bind_activate
+
 from wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
 
 if TYPE_CHECKING:
@@ -238,6 +240,11 @@ def _build_challenge(
         justify="center",
         width=12,
         textvariable=entry_var,
+        # Tk's default focus ring is 1px BLACK, invisible on bg (#211D1B). This
+        # field is already focused and Return-bound, so the ring is about
+        # confirming *where* keystrokes are going -- on a screen with no other
+        # window and a global grab, that is the only feedback available.
+        **config.focus_kwargs(),
     )
     entry.pack(pady=10)
     entry.focus_set()
@@ -303,7 +310,12 @@ def _build_alarm_view(
         font=(config.font_family, 14),
         bg=config.field_bg,
         fg=config.muted,
+        **config.focus_kwargs(),
     )
+    # Tk binds only <space> on Button on X11. The escape hatch is deliberately
+    # hard to reach (hidden until earned, budgeted) but must not additionally be
+    # hard to *press* once shown.
+    bind_activate(escape_button)
 
     return _AlarmView(
         container=container,

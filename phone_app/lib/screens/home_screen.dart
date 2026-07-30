@@ -85,19 +85,14 @@ class _HomeScreenState extends State<HomeScreen> {
         'android.intent.extra.alarm.MESSAGE': 'Wake Alarm',
       },
     );
-    await intent.launch().timeout(
-      const Duration(seconds: 3),
-      onTimeout: () {},
-    );
+    await intent.launch().timeout(const Duration(seconds: 3), onTimeout: () {});
   }
 
   Future<void> _syncAndSet() async {
     final settings = await SyncSettings.load();
     final service = _service;
     if (!settings.isConfigured || service == null) {
-      setState(
-        () => _status = 'Configure GitHub in Settings first.',
-      );
+      setState(() => _status = 'Configure GitHub in Settings first.');
       return;
     }
 
@@ -108,13 +103,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await service.setLocal(_hour, _minute);
       await service.push(settings.token);
-      setState(
-        () => _status = 'Synced ✓ — opening Clock app…',
-      );
+      setState(() => _status = 'Synced ✓ — opening Clock app…');
       await _setPhoneAlarm();
-      setState(
-        () => _status = 'Done! Confirm the alarm in the Clock app.',
-      );
+      setState(() => _status = 'Done! Confirm the alarm in the Clock app.');
     } on Exception catch (e) {
       setState(() => _status = 'Error: $e');
     } finally {
@@ -140,85 +131,95 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () async {
               await Navigator.push<void>(
                 context,
-                MaterialPageRoute<void>(
-                  builder: (_) => const SettingsScreen(),
-                ),
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
               );
               await _loadSavedTime();
             },
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Alarm time', style: TextStyle(fontSize: 16)),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: _pickTime,
-                child: Text(
-                  _fmt(_hour, _minute),
-                  style: Theme.of(context)
-                      .textTheme
-                      .displayLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: _pickTime,
-                child: const Text('Tap to change'),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _busy ? null : _syncAndSet,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Icon(Icons.alarm_add),
-                  label: const Text('Set Alarm & Sync to PC'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    textStyle: const TextStyle(fontSize: 18),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              if (_status.isNotEmpty)
-                Text(
-                  _status,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _status.contains('Error')
-                        ? Theme.of(context).colorScheme.error
-                        : Theme.of(
-                            context,
-                          ).extension<AppStatusColors>()!.success,
-                  ),
-                ),
-              if (!_configured) ...[
+      // SafeArea + scroll. This was a bare Center/Padding/Column, which
+      // cannot scroll, so the content simply overflowed with the black-and-
+      // yellow stripe pattern painted over the primary control. Two ways that
+      // happened: phone landscape leaves only ~360px of body height for ~405px
+      // of content, and the status line renders an unbounded raw
+      // `'Error: \$e'` with no maxLines, which overflows even in portrait.
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Alarm time', style: TextStyle(fontSize: 16)),
                 const SizedBox(height: 16),
-                Text(
-                  'Open Settings (gear icon) to connect GitHub.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).extension<AppStatusColors>()!.warning,
+                GestureDetector(
+                  onTap: _pickTime,
+                  child: Text(
+                    _fmt(_hour, _minute),
+                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _pickTime,
+                  child: const Text('Tap to change'),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _busy ? null : _syncAndSet,
+                    icon: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.alarm_add),
+                    label: const Text('Set Alarm & Sync to PC'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                if (_status.isNotEmpty)
+                  Text(
+                    _status,
+                    textAlign: TextAlign.center,
+                    // Bounded: _status can be a raw `'Error: $e'`, i.e. an
+                    // arbitrarily long exception toString(). Unbounded, that
+                    // alone added 100-150px and pushed this column past the
+                    // viewport even in portrait. The scroll view above makes
+                    // the overflow recoverable; this keeps it from happening.
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _status.contains('Error')
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(
+                              context,
+                            ).extension<AppStatusColors>()!.success,
+                    ),
+                  ),
+                if (!_configured) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Open Settings (gear icon) to connect GitHub.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(
+                        context,
+                      ).extension<AppStatusColors>()!.warning,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

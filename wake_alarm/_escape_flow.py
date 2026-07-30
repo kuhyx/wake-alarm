@@ -25,7 +25,14 @@ import logging
 import tkinter as tk
 from typing import TYPE_CHECKING
 
-from gatelock import EscapeDraft, EscapePolicy, EscapeTracker
+from gatelock import (
+    EscapeDraft,
+    EscapePolicy,
+    EscapeTracker,
+    bind_activate,
+    bind_cancel,
+    escape_text_tab_trap,
+)
 
 from wake_alarm._constants import ESCAPE_HISTORY_FILE, ESCAPE_OFFER_AFTER_SECONDS
 
@@ -132,7 +139,15 @@ class EscapeDialog:
             bg=config.field_bg,
             fg=config.fg,
             insertbackground=config.fg,
+            **config.focus_kwargs(),
         )
+        # Tk traps Tab inside a Text (inserts a literal tab and refocuses the
+        # widget) and binds Shift-Tab to nothing, so the only exits are the
+        # undocumented Ctrl+Tab / Ctrl+Shift+Tab. Unlike diet_guard's equivalent
+        # box, nothing here bound Return either -- so a keyboard-only user who
+        # tabbed into this justification field at 6am could not reach Submit,
+        # inside an alarm whose whole point is that it resists dismissal.
+        escape_text_tab_trap(description)
         self._fields = _FormFields(
             reason=self._field("What is wrong", config),
             onset=self._field("When did it start", config),
@@ -157,17 +172,30 @@ class EscapeDialog:
             bg=config.warning,
             fg=config.on_fill,
             command=self.submit,
+            **config.focus_kwargs(),
         )
         self._submit.pack(pady=6)
 
-        tk.Button(
+        back = tk.Button(
             self.frame,
             text="Back to the alarm",
             font=(config.font_family, 14),
             bg=config.field_bg,
             fg=config.fg,
             command=callbacks.on_cancel,
-        ).pack(pady=4)
+            **config.focus_kwargs(),
+        )
+        back.pack(pady=4)
+
+        # Tk binds only <space> on Button on X11, never <Return>, so Enter --
+        # the key a user reaches for to submit a form -- did nothing at all.
+        for button in (self._submit, back):
+            bind_activate(button)
+        # Escape returns to the alarm. This cancels the *escape-hatch form*, not
+        # the alarm: the alarm still has to be dismissed by solving a challenge
+        # or by spending the budgeted hatch. Making the sanctioned way back
+        # keyboard-reachable does not weaken that gating.
+        bind_cancel(self.frame, callbacks.on_cancel)
 
     def _field(self, label: str, config: LockConfig) -> tk.Entry:
         """Add a labelled single-line field and return its entry."""
@@ -178,7 +206,7 @@ class EscapeDialog:
             fg=config.muted,
             bg=config.bg,
         ).pack()
-        entry = tk.Entry(self.frame, width=40)
+        entry = tk.Entry(self.frame, width=40, **config.focus_kwargs())
         entry.pack(pady=2)
         return entry
 

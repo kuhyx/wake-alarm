@@ -37,9 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _connectGitHub() async {
-    final auth = GitHubDeviceAuth(
-      clientId: SyncSettings.defaultClientId,
-    );
+    final auth = GitHubDeviceAuth(clientId: SyncSettings.defaultClientId);
     try {
       final device = await auth.requestDeviceCode();
       if (!mounted) return;
@@ -90,63 +88,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isConnected = _settings.isConfigured;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _StatusCard(connected: isConnected),
-            const SizedBox(height: 16),
-            if (!isConnected)
-              ElevatedButton.icon(
-                onPressed: _busy ? null : _connectGitHub,
-                icon: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.link),
-                label: const Text('Connect GitHub'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  textStyle: const TextStyle(fontSize: 16),
+      // Scrollable: this screen carries a five-line explanatory paragraph and
+      // an unbounded `'Error: \$e'`, inside a Column that could not scroll.
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _StatusCard(connected: isConnected),
+              const SizedBox(height: 16),
+              if (!isConnected)
+                ElevatedButton.icon(
+                  onPressed: _busy ? null : _connectGitHub,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.link),
+                  label: const Text('Connect GitHub'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    textStyle: const TextStyle(fontSize: 16),
+                  ),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _disconnect,
+                  icon: const Icon(Icons.link_off),
+                  label: const Text('Disconnect'),
                 ),
-              )
-            else
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _disconnect,
-                icon: const Icon(Icons.link_off),
-                label: const Text('Disconnect'),
-              ),
-            const SizedBox(height: 16),
-            if (_status.isNotEmpty)
+              const SizedBox(height: 16),
+              if (_status.isNotEmpty)
+                Text(
+                  _status,
+                  style: TextStyle(
+                    color: _status.contains('Error')
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(
+                            context,
+                          ).extension<AppStatusColors>()!.success,
+                  ),
+                ),
+              const Divider(height: 32),
               Text(
-                _status,
+                'PC config — create this file:\n'
+                '~/.config/wake_alarm/sync.json\n\n'
+                '{ "token": "<same token>" }\n\n'
+                'The token needs "repo" scope so the PC can read '
+                'kuhyx/syncs at shutdown.',
+                // Was 12px/Colors.grey — below the 16px reading floor (rule
+                // 20) and off-palette (rule 4); this is real setup
+                // instructions, not decorative chrome.
                 style: TextStyle(
-                  color: _status.contains('Error')
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(
-                          context,
-                        ).extension<AppStatusColors>()!.success,
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-            const Divider(height: 32),
-            Text(
-              'PC config — create this file:\n'
-              '~/.config/wake_alarm/sync.json\n\n'
-              '{ "token": "<same token>" }\n\n'
-              'The token needs "repo" scope so the PC can read '
-              'kuhyx/syncs at shutdown.',
-              // Was 12px/Colors.grey — below the 16px reading floor (rule
-              // 20) and off-palette (rule 4); this is real setup
-              // instructions, not decorative chrome.
-              style: TextStyle(
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -170,14 +172,13 @@ class _StatusCard extends StatelessWidget {
             Icon(
               connected ? Icons.check_circle : Icons.cancel,
               // Dimmed relative to the adjacent label text (rule 28).
-              color: (connected ? success : colorScheme.error)
-                  .withValues(alpha: 0.8),
+              color: (connected ? success : colorScheme.error).withValues(
+                alpha: 0.8,
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                connected ? 'Connected to GitHub' : 'Not connected',
-              ),
+              child: Text(connected ? 'Connected to GitHub' : 'Not connected'),
             ),
           ],
         ),
@@ -216,9 +217,7 @@ class _DeviceCodeDialogState extends State<_DeviceCodeDialog> {
   }
 
   Future<void> _openPage() async {
-    await Clipboard.setData(
-      ClipboardData(text: widget.device.userCode),
-    );
+    await Clipboard.setData(ClipboardData(text: widget.device.userCode));
     await launchUrl(
       Uri.parse(widget.device.verificationUri),
       mode: LaunchMode.externalApplication,
@@ -249,9 +248,7 @@ class _DeviceCodeDialogState extends State<_DeviceCodeDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 12),
-                Expanded(
-                  child: Text('Waiting for authorization…'),
-                ),
+                Expanded(child: Text('Waiting for authorization…')),
               ],
             )
           else
