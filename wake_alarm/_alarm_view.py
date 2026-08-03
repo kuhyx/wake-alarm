@@ -197,46 +197,48 @@ def _build_challenge(
     title_label = tk.Label(
         parent,
         text="WAKE UP!",
-        font=("Arial", 48, "bold"),
+        font=config.font("display", bold=True, scale=1.5),
         fg=config.danger,
         bg=config.bg,
     )
-    title_label.pack(pady=20)
+    title_label.pack(pady=config.space("md"))
 
     round_label = tk.Label(
         parent,
         text=f"Round 1 / {DISMISS_ROUNDS_REQUIRED}",
-        font=("Arial", 24, "bold"),
+        font=config.font("title", bold=True),
         fg=config.warning,
         bg=config.bg,
     )
-    round_label.pack(pady=5)
+    round_label.pack(pady=config.space("xs"))
 
     info_label = tk.Label(
         parent,
         text=challenge.hint,
-        font=("Arial", 18),
+        font=config.font("body"),
         fg=config.fg,
         bg=config.bg,
     )
-    info_label.pack(pady=10)
+    info_label.pack(pady=config.space("sm"))
 
     # Non-flash types use a smaller font because their display text is wider.
-    code_font_size = (
-        48 if challenge.kind in ("math", "sort", "sequence", "reverse") else 72
+    # Multiples of the display token rather than raw sizes, so the challenge
+    # scales with the rest of the screen (and is sized in px, not points).
+    code_scale = (
+        1.5 if challenge.kind in ("math", "sort", "sequence", "reverse") else 2.25
     )
     code_label = tk.Label(
         parent,
         text=challenge.display,
-        font=("Courier", code_font_size, "bold"),
+        font=config.font("display", bold=True, family="Courier", scale=code_scale),
         fg=config.success,
         bg=config.bg,
     )
-    code_label.pack(pady=30)
+    code_label.pack(pady=config.space("lg"))
 
     entry = tk.Entry(
         parent,
-        font=("Courier", 36),
+        font=config.font("display", family="Courier"),
         justify="center",
         width=12,
         textvariable=entry_var,
@@ -246,27 +248,27 @@ def _build_challenge(
         # window and a global grab, that is the only feedback available.
         **config.focus_kwargs(),
     )
-    entry.pack(pady=10)
+    entry.pack(pady=config.space("sm"))
     entry.focus_set()
     entry.bind("<Return>", on_submit)
 
     status_label = tk.Label(
         parent,
         text="",
-        font=("Arial", 18),
+        font=config.font("body"),
         fg=config.danger,
         bg=config.bg,
     )
-    status_label.pack(pady=10)
+    status_label.pack(pady=config.space("sm"))
 
     timer_label = tk.Label(
         parent,
         text="",
-        font=("Arial", 14),
+        font=config.font("label"),
         fg=config.muted,
         bg=config.bg,
     )
-    timer_label.pack(pady=5)
+    timer_label.pack(pady=config.space("xs"))
 
     return (
         _AlarmLabels(
@@ -307,7 +309,7 @@ def _build_alarm_view(
     escape_button = tk.Button(
         challenge_frame,
         text="I can't do this right now",
-        font=(config.font_family, 14),
+        font=config.font("label"),
         bg=config.field_bg,
         fg=config.muted,
         **config.focus_kwargs(),

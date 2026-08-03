@@ -290,10 +290,10 @@ class WakeAlarm:
             tk.Label(
                 container,
                 text=msg,
-                font=("Arial", 36, "bold"),
+                font=cfg.font("display", bold=True),
                 fg=color,
                 bg=cfg.bg,
-            ).pack(pady=30)
+            ).pack(pady=cfg.space("lg"))
 
         self.root.after(3000, self._lock.close)
 

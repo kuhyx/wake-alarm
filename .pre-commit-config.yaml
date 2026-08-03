@@ -96,7 +96,7 @@ repos:
         additional_dependencies:
           - pytest
           - python-kasa
-          - gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.3.0#subdirectory=gatelock
+          - gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.4.0#subdirectory=gatelock
         # Test suites intentionally use patterns (protected-access, magic-value
         # comparisons) that don't belong in the source-code 10/10 gate.
         exclude: ^(\.venv/)|(^|/)(tests/|conftest\.py)
@@ -139,6 +139,13 @@ repos:
         entry: bash -c 'printf "%s\0" "$@" | xargs -0 -n 40 shellcheck --severity=warning' --
         language: system
         types: [shell]
+      - id: screens-fit
+        name: Every lock screen fits 1366x768 (no scrolling required)
+        entry: python3 scripts/verify_screen_fits.py
+        language: system
+        files: '^wake_alarm/.*\.py$'
+        pass_filenames: false
+        require_serial: true
       - id: max-file-length
         name: Max file length (500 lines)
         entry: python3 scripts/check_file_length.py

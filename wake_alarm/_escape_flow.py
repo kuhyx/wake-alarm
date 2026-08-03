@@ -108,28 +108,28 @@ class EscapeDialog:
         self._status = tk.Label(
             self.frame,
             text=tracker.budget_summary(),
-            font=(config.font_family, 16),
+            font=config.font("body"),
             fg=config.muted,
             bg=config.bg,
         )
-        self._status.pack(pady=6)
+        self._status.pack(pady=config.space("xs"))
 
         tk.Label(
             self.frame,
             text="Why can you not do this right now?",
-            font=(config.font_family, 22, "bold"),
+            font=config.font("subtitle", bold=True),
             fg=config.fg,
             bg=config.bg,
-        ).pack(pady=8)
+        ).pack(pady=config.space("sm"))
 
         tk.Label(
             self.frame,
             text=tracker.format_recent(),
-            font=("Courier", 11),
+            font=config.font("caption", family="Courier"),
             fg=config.muted,
             bg=config.bg,
             justify="left",
-        ).pack(pady=6)
+        ).pack(pady=config.space("xs"))
 
         description = tk.Text(
             self.frame,
@@ -154,38 +154,38 @@ class EscapeDialog:
             severity=self._field("Severity 1-10", config),
             description=description,
         )
-        description.pack(pady=6)
+        description.pack(pady=config.space("xs"))
 
         self._complaint = tk.Label(
             self.frame,
             text="",
-            font=(config.font_family, 14),
+            font=config.font("label"),
             fg=config.danger,
             bg=config.bg,
         )
-        self._complaint.pack(pady=4)
+        self._complaint.pack(pady=config.space("xs"))
 
         self._submit = tk.Button(
             self.frame,
             text="Submit",
-            font=(config.font_family, 16, "bold"),
+            font=config.font("body", bold=True),
             bg=config.warning,
             fg=config.on_fill,
             command=self.submit,
             **config.focus_kwargs(),
         )
-        self._submit.pack(pady=6)
+        self._submit.pack(pady=config.space("xs"))
 
         back = tk.Button(
             self.frame,
             text="Back to the alarm",
-            font=(config.font_family, 14),
+            font=config.font("label"),
             bg=config.field_bg,
             fg=config.fg,
             command=callbacks.on_cancel,
             **config.focus_kwargs(),
         )
-        back.pack(pady=4)
+        back.pack(pady=config.space("xs"))
 
         # Tk binds only <space> on Button on X11, never <Return>, so Enter --
         # the key a user reaches for to submit a form -- did nothing at all.
@@ -202,12 +202,12 @@ class EscapeDialog:
         tk.Label(
             self.frame,
             text=label,
-            font=(config.font_family, 13),
+            font=config.font("caption"),
             fg=config.muted,
             bg=config.bg,
         ).pack()
         entry = tk.Entry(self.frame, width=40, **config.focus_kwargs())
-        entry.pack(pady=2)
+        entry.pack(pady=config.space("xs"))
         return entry
 
     def _draft(self) -> EscapeDraft:
@@ -284,7 +284,7 @@ class EscapeHatch:
             return
         for button in self._views.escape_buttons:
             with contextlib.suppress(tk.TclError):
-                button.pack(pady=8)
+                button.pack(pady=self._views.config.space("sm"))
 
     def open(self) -> None:
         """Swap every surface over to the justification form."""
