@@ -95,6 +95,12 @@ color_output = true
 exclude = [".venv/"]
 
 [tool.pylint.main]
+# The repo root on the path, so a file outside the package (scripts/) can be
+# linted on its own. pylint otherwise infers the path from the files it is
+# given, so a script resolved its package imports only when a package file
+# happened to be in the same batch -- passing or failing by what else was
+# staged.
+init-hook = "import sys; sys.path.insert(0, '.')"
 analyse-fallback-blocks = true
 persistent = true
 jobs = 0

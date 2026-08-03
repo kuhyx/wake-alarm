@@ -141,7 +141,7 @@ repos:
         types: [shell]
       - id: screens-fit
         name: Every lock screen fits 1366x768 (no scrolling required)
-        entry: python3 scripts/verify_screen_fits.py
+        entry: python3 -m scripts.verify_screen_fits
         language: system
         files: '^wake_alarm/.*\.py$'
         pass_filenames: false

@@ -12,7 +12,12 @@ Runs the real builders against a real (throwaway) X display, because widget
 heights come from the font engine and nothing short of rendering can answer
 this honestly:
 
-    python3 ~/wake-alarm/scripts/verify_screen_fits.py
+    cd ~/wake-alarm && python3 -m scripts.verify_screen_fits
+
+Run as a *module*, not a path: ``-m`` puts the repo root on
+``sys.path`` so ``wake_alarm`` resolves from the checkout. Running it as a
+path only works where the package happens to be pip-installed, which is
+why it passed locally and died in CI.
 """
 
 from __future__ import annotations
@@ -71,9 +76,11 @@ def reexec_under_xvfb() -> int:
             "-s",
             "-screen 0 1600x1200x24",
             sys.executable,
-            str(Path(__file__).resolve()),
+            "-m",
+            "scripts.verify_screen_fits",
         ],
         check=False,
+        cwd=Path(__file__).resolve().parent.parent,
         env=env,
     ).returncode
 
