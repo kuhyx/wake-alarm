@@ -44,9 +44,18 @@ the same synced alarm, and sets `rtcwake`. `sleep-hook.sh` (in
 If you change `WAKE_AFTER_HOURS` in `_constants.py`, you must also update the
 duplicate constant in `shutdown-wrapper.sh` (`WAKE_AFTER_HOURS=8`) — they are
 not wired together, by design (the shell wrapper has no Python runtime
-available at the point it intercepts `shutdown`). The same duplication applies
-to the token search order: `SYNC_CONFIG_FILE` / `SYNC_TOKEN_FALLBACK_FILES` in
-`_constants.py` are mirrored by `read_sync_token()` in the wrapper.
+available at the point it intercepts `shutdown`).
+
+**The wrapper no longer talks to the network or handles a token.** It reads
+`~/.config/wake_alarm/alarm_cache.json` — the cache `_sync.py` already
+refreshes every minute — and falls back to `WAKE_AFTER_HOURS` if that file is
+absent, malformed, or more than 2 days old. This removed the duplicated token
+search order (`read_sync_token()` used to mirror `SYNC_CONFIG_FILE` /
+`SYNC_TOKEN_FALLBACK_FILES`), and it is what makes the wrapper survive the
+move to Firebase unchanged: an ID token expires in about an hour, and a shell
+script at shutdown time has no safe way to refresh one. The only coupling left
+is the cache's `{"hour","minute","fetched_at"}` shape — keep the reader in the
+wrapper in step with `_write_cache()` in `_sync.py`.
 
 ## `wake-alarm.service` must never auto-start
 
@@ -63,20 +72,36 @@ auto-start.
 
 ## Reading the phone's alarm
 
-`_sync.py` is the Python reader; `shutdown-wrapper.sh` is a second, jq-based
-reader of the **same file**. Keep their parse and token order in step.
+`_sync.py` is the only reader of the remote alarm. `shutdown-wrapper.sh` reads
+`_sync.py`'s local cache instead of the remote file, so there is no second
+remote reader to keep in step.
 
-- Source of truth: `wake-alarm-sync/devices/phone/alarm.json` in the private
-  `kuhyx/syncs` repo, written by `phone_app/` as a `crdt_sync` log. The value
-  lives at `.alarm.fields.alarm_hour[0]` / `.alarm_minute[0]`.
-- Token: `~/.config/wake_alarm/sync.json` key `token`, else a sibling app's
-  raw `~/.config/{diet_guard,screen_locker}/sync_token`. Needs `repo` scope —
-  the repo is private, and a token without access returns **404, not 403**.
-- `_sync` is **stdlib-only** (`urllib.request`) on purpose: the service runs
-  `/usr/bin/python`, so every dependency is a production install-path hazard.
+- Source of truth: `wake-alarm-sync/devices/phone/alarm.json`, written by
+  `phone_app/` as a `crdt_sync` log. The value lives at
+  `.alarm.fields.alarm_hour[0]` / `.alarm_minute[0]`. **The same logical path
+  on both backends** — Firebase's namespace mirrors the repo layout — so only
+  the transport differs, never the parse.
+- **Firebase first, GitHub as the cutover mirror** (`fetch_remote_alarm()` is
+  just `_fetch_firebase_alarm() or _fetch_github_alarm()`). Retiring the
+  mirror is deleting the GitHub branch plus `SYNC_API_BASE`/`SYNC_REPO_*`.
+- Firebase config: the shared `~/.config/crdt-sync/firebase.json`; the
+  refresh token is cached per app under `SYNC_APP_NAME` (`wake_alarm`), so
+  this app's credential is separate from its siblings'. The config file is
+  checked **before** anything is constructed, so an unconfigured machine
+  never touches the network.
+- GitHub token (fallback path only): `~/.config/wake_alarm/sync.json` key
+  `token`, else a sibling app's raw
+  `~/.config/{diet_guard,screen_locker}/sync_token`. Needs `repo` scope — the
+  repo is private, and a token without access returns **404, not 403**.
+- `crdt_sync` is imported at module scope but **guarded by
+  `try/except ImportError`**, exactly like `python-kasa` in `_smart_plug.py`:
+  the service runs `/usr/bin/python`, not a venv, so a dependency that failed
+  to install must degrade the read to the GitHub path rather than crash the
+  per-minute trigger. The GitHub path stays stdlib-only for that reason.
+  Verify with `/usr/bin/python3 -c "import crdt_sync"`, not the dev venv.
 - Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch →
   stale cache → `FALLBACK_ALARM_HOUR`. The cache
-  (`~/.config/wake_alarm/alarm_cache.json`) is what bounds GitHub reads to
+  (`~/.config/wake_alarm/alarm_cache.json`) is what bounds remote reads to
   ~288/day despite the per-minute tick, and what keeps a network blip from
   costing a wake-up.
 - **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute,
@@ -177,8 +202,10 @@ Note the dev venv lacks `gatelock`, so anything importing `_state` (including
 ## Do NOT
 
 - Don't add a dependency without doing the production install-path check
-  above. `_sync.py` is stdlib-only for exactly this reason — don't "improve"
-  it to `requests`.
+  above. `_sync.py`'s **GitHub** path is stdlib-only for exactly this reason —
+  don't "improve" it to `requests`, and don't make the `crdt_sync` import
+  unconditional: the `try/except ImportError` guard is what keeps a failed
+  install from killing the trigger.
 - Don't forget the orchestrator when changing this package's module path or
   invocation — see "The morning_routine orchestrator lives elsewhere" above.
 - Don't give `wake-alarm.service` an `[Install]` section or enable it. It

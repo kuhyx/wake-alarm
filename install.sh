@@ -17,6 +17,20 @@
 
 set -euo pipefail
 
+# Refuse to run under sudo. This script must run as the logged-in user: it
+# installs *user* systemd units and calls `sudo` itself for the few root-owned
+# pieces. Under sudo, XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS are stripped,
+# so `systemctl --user` fails at step 3 and every later step -- including the
+# shutdown wrapper at step 6 -- is silently skipped while the earlier pip output
+# still looks like success. It also runs pip as root, which leaves root-owned
+# files in ~/.cache/pip. Failing loudly here beats a half-finished install.
+if [[ -n "${SUDO_USER:-}" || $EUID -eq 0 ]]; then
+    echo "Error: do not run this script with sudo." >&2
+    echo "Run it as your normal user:  bash $0" >&2
+    echo "It will prompt for sudo itself where root is actually needed." >&2
+    exit 1
+fi
+
 # Split declare/assign so the command-substitution exit code is not masked (SC2155).
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 readonly SCRIPT_DIR

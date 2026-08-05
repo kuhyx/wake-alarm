@@ -5,14 +5,19 @@ in a ``crdt_sync`` ``LogStore`` and pushes that log to a fixed path in the
 private ``kuhyx/syncs`` repo. This module is the PC-side reader used by the
 per-minute trigger (see ``_trigger.py``).
 
-``shutdown-wrapper.sh`` reads the **same file** with ``jq`` for the hibernate
-fallback path. The parse here mirrors it exactly (``.alarm.fields.alarm_hour``
-and ``.alarm.fields.alarm_minute``, first tuple element) so the two readers
-cannot drift.
+``shutdown-wrapper.sh`` no longer reads the remote file at all — it reads the
+local cache this module writes, so there is only one remote reader to keep in
+step (see ``CLAUDE.md``).
 
-Deliberately stdlib-only (``urllib.request`` + ``json``): the alarm runs under
-``/usr/bin/python``, not a venv, so every added dependency is a production
-install-path hazard (see ``CLAUDE.md``). A read is not worth that risk.
+**Backends.** Firebase is preferred and GitHub is the cutover fallback, the
+same order every other app in the fleet uses. Firebase needs ``crdt_sync``
+(hence ``requests``), which is a real dependency declared in
+``pyproject.toml``; the GitHub path stays stdlib-only (``urllib.request`` +
+``json``) so that if the import is somehow missing on the production
+interpreter, the alarm still resolves rather than crashing the trigger. That
+is why the import below is guarded rather than top-level: this module runs
+under ``/usr/bin/python``, not a venv, and a wake-up is not worth an
+ImportError.
 """
 
 from __future__ import annotations
@@ -37,6 +42,7 @@ from wake_alarm._constants import (
     MIN_MINUTE,
     SYNC_ALARM_PATH,
     SYNC_API_BASE,
+    SYNC_APP_NAME,
     SYNC_CONFIG_FILE,
     SYNC_HTTP_TIMEOUT_SECONDS,
     SYNC_REPO_NAME,
@@ -46,6 +52,20 @@ from wake_alarm._constants import (
 from wake_alarm._logging_setup import configure_logging
 
 _logger = logging.getLogger(__name__)
+
+# Optional at runtime, exactly like python-kasa in _smart_plug.py: the trigger
+# runs every minute under /usr/bin/python, so a dependency that failed to
+# install must degrade this read to the GitHub path, not raise.
+try:
+    from crdt_sync import ConfigError, firebase_client_for
+    from crdt_sync._config import CONFIG_FILE as FIREBASE_CONFIG_FILE
+    from crdt_sync._firebase_auth import FirebaseAuthError
+    from crdt_sync._remote import RemoteSyncError
+
+    _FIREBASE_AVAILABLE = True
+except ImportError:
+    _FIREBASE_AVAILABLE = False
+    _logger.info("crdt_sync is not installed; reading the alarm from GitHub")
 
 # Keys inside the crdt_sync log the phone writes.
 _RECORD_ID = "alarm"
@@ -199,7 +219,39 @@ def _parse_log(raw: str) -> tuple[int, int] | None:
     return hour, minute
 
 
-def fetch_remote_alarm() -> tuple[int, int] | None:
+def _fetch_firebase_alarm() -> tuple[int, int] | None:
+    """Fetch the alarm the phone last pushed to Firebase.
+
+    Returns None — never raises — for every failure mode, including
+    ``crdt_sync`` not being importable on this interpreter, so the caller can
+    fall back to GitHub and then to the cache.
+
+    Returns:
+        The (hour, minute) pair, or None if unconfigured or unreadable.
+    """
+    if not _FIREBASE_AVAILABLE:
+        return None
+
+    # Checked before constructing anything, so an unconfigured machine never
+    # touches the network (and a socket-blocking test suite stays quiet).
+    if not FIREBASE_CONFIG_FILE.is_file():
+        _logger.info("Firebase not configured at %s", FIREBASE_CONFIG_FILE)
+        return None
+
+    try:
+        client = firebase_client_for(SYNC_APP_NAME)
+        raw = client.get_file_text(SYNC_ALARM_PATH)
+    except (ConfigError, FirebaseAuthError, RemoteSyncError, OSError) as exc:
+        _logger.info("Cannot fetch the alarm from Firebase: %s", exc)
+        return None
+
+    if raw is None:
+        _logger.info("No alarm published to Firebase yet")
+        return None
+    return _parse_log(raw)
+
+
+def _fetch_github_alarm() -> tuple[int, int] | None:
     """Fetch the alarm the phone last pushed to GitHub.
 
     Uses the raw media type so the Contents API returns the file body directly
@@ -249,6 +301,19 @@ def fetch_remote_alarm() -> tuple[int, int] | None:
         return None
 
     return _parse_log(raw)
+
+
+def fetch_remote_alarm() -> tuple[int, int] | None:
+    """Fetch the alarm the phone last pushed, Firebase first.
+
+    GitHub is tried only when Firebase yields nothing, which covers both the
+    not-yet-migrated machine and a Firebase outage. Once every device has
+    moved, deleting the GitHub branch is the whole retirement.
+
+    Returns:
+        The (hour, minute) pair, or None if no backend has a usable answer.
+    """
+    return _fetch_firebase_alarm() or _fetch_github_alarm()
 
 
 def _read_cache() -> tuple[int, int, float] | None:

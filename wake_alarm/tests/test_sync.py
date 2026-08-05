@@ -12,13 +12,13 @@ import pytest
 from wake_alarm._sync import (
     Alarm,
     _extract_field,
+    _fetch_github_alarm,
     _parse_args,
     _parse_log,
     _read_cache,
     _read_token,
     _read_token_fallback,
     _write_cache,
-    fetch_remote_alarm,
     get_alarm,
     main,
 )
@@ -208,11 +208,11 @@ class TestParseLog:
 
 
 class TestFetchRemoteAlarm:
-    """Tests for fetch_remote_alarm."""
+    """Tests for the GitHub backend behind fetch_remote_alarm."""
 
     def test_no_token(self) -> None:
         """Without a token there is nothing to fetch."""
-        assert fetch_remote_alarm() is None
+        assert _fetch_github_alarm() is None
 
     def _with_token(self, config_file: Path) -> None:
         config_file.write_text(json.dumps({"token": "ghp_x"}))
@@ -224,7 +224,7 @@ class TestFetchRemoteAlarm:
         response.read.return_value = _log(6, 15).encode()
         response.__enter__.return_value = response
         with patch("urllib.request.urlopen", return_value=response):
-            assert fetch_remote_alarm() == (6, 15)
+            assert _fetch_github_alarm() == (6, 15)
 
     def test_sends_raw_media_type_and_auth(self, config_file: Path) -> None:
         """The request carries the token and the raw Accept header."""
@@ -233,7 +233,7 @@ class TestFetchRemoteAlarm:
         response.read.return_value = _log().encode()
         response.__enter__.return_value = response
         with patch("urllib.request.urlopen", return_value=response) as urlopen:
-            fetch_remote_alarm()
+            _fetch_github_alarm()
         request = urlopen.call_args[0][0]
         assert request.get_header("Authorization") == "token ghp_x"
         assert request.get_header("Accept") == "application/vnd.github.raw"
@@ -246,7 +246,7 @@ class TestFetchRemoteAlarm:
             patch("wake_alarm._sync.SYNC_API_BASE", "http://api.github.com"),
             patch("urllib.request.urlopen") as urlopen,
         ):
-            assert fetch_remote_alarm() is None
+            assert _fetch_github_alarm() is None
         urlopen.assert_not_called()
 
     @pytest.mark.parametrize(
@@ -263,7 +263,7 @@ class TestFetchRemoteAlarm:
         """Every transport failure degrades to None, never raises."""
         self._with_token(config_file)
         with patch("urllib.request.urlopen", side_effect=exc):
-            assert fetch_remote_alarm() is None
+            assert _fetch_github_alarm() is None
 
 
 class TestCache:

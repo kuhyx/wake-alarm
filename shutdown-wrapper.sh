@@ -12,12 +12,25 @@
 # minute on the always-on machine and fires at the phone's alarm time without
 # any rtcwake involvement (see wake_alarm/_trigger.py).
 #
-# Wake time is taken from the alarm the phone app pushes to the private
-# kuhyx/syncs repo via the shared crdt_sync transport (see phone_app/). Falls
-# back to WAKE_AFTER_HOURS if sync is not configured or unreachable. Token:
-# ~/.config/wake_alarm/sync.json key "token", else a sibling app's
-# ~/.config/{diet_guard,screen_locker}/sync_token. Needs "repo" scope, since
-# the Contents API must read a private repo.
+# Wake time is read from ~/.config/wake_alarm/alarm_cache.json, the on-disk
+# cache that wake-alarm-trigger.timer refreshes every minute from the alarm
+# the phone app pushes. Falls back to WAKE_AFTER_HOURS if that cache is
+# missing or unusable.
+#
+# Deliberately a *local file read*, with no network call and no credentials.
+# This script runs as /usr/local/bin/shutdown, at the one moment the machine
+# is going down; a remote fetch there can block on a dying network, and under
+# Firebase it could not work at all, because an ID token lasts about an hour
+# and refreshing one is beyond what a shell script should be doing with a
+# secret. The Python side already holds the credentials and already keeps this
+# cache fresh, so the backend it syncs against is now invisible here: this
+# wrapper needs no changes when GitHub is retired.
+#
+# The trade-off is bounded and acceptable: a cache older than the trigger's
+# refresh interval still reflects the last alarm the phone published, and the
+# alarm changes far more rarely than once a minute. MAX_CACHE_AGE_SECONDS
+# below only rejects a cache so old it suggests the trigger has been dead for
+# days, in which case the fixed fallback is the safer answer.
 
 set -euo pipefail
 
@@ -36,66 +49,42 @@ for arg in "$@"; do
     esac
 done
 
-# Resolve the GitHub token, preferring wake_alarm's own JSON config and falling
-# back to the sibling companion apps' raw single-line token files (one
-# repo-scoped PAT covers every app syncing through kuhyx/syncs).
-# Mirrors SYNC_CONFIG_FILE / SYNC_TOKEN_FALLBACK_FILES in
-# wake_alarm/_constants.py — keep the two readers in step.
-read_sync_token() {
-    local cfg="$HOME/.config/wake_alarm/sync.json"
-    local token fallback
+ALARM_CACHE="$HOME/.config/wake_alarm/alarm_cache.json"
+# Reject a cache this old as evidence the trigger itself has stopped running.
+# Generous on purpose (2 days): the alarm rarely changes, so a merely stale
+# cache is still a far better answer than the fixed +8h fallback. Mirrors
+# ALARM_CACHE_FILE in wake_alarm/_constants.py.
+MAX_CACHE_AGE_SECONDS=$(( 2 * 24 * 3600 ))
 
-    if [[ -f "$cfg" ]]; then
-        token=$(jq -r '.token // empty' "$cfg" 2>/dev/null) || token=""
-        if [[ -n "$token" ]]; then
-            printf '%s' "$token"
-            return 0
-        fi
-    fi
-
-    for fallback in \
-        "$HOME/.config/diet_guard/sync_token" \
-        "$HOME/.config/screen_locker/sync_token"; do
-        [[ -f "$fallback" ]] || continue
-        token=$(tr -d '[:space:]' < "$fallback") || continue
-        if [[ -n "$token" ]]; then
-            printf '%s' "$token"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-# Read the alarm time the phone pushed to kuhyx/syncs via crdt_sync.
-# Returns the Unix epoch (seconds) of the next occurrence of the stored H:M.
-# Exits non-zero if sync is not configured, unreachable, or malformed.
+# Read the alarm the phone published, from the local cache the trigger keeps
+# fresh. Returns the Unix epoch (seconds) of the next occurrence of that H:M.
+# Exits non-zero if the cache is absent, malformed, or older than
+# MAX_CACHE_AGE_SECONDS, so the caller can fall back.
 #
-# The phone is the sole writer, under the fixed device id "phone", so a single
-# Contents-API read of its alarm.json is enough (no device discovery / HLC
-# ordering needed here — that would only matter with multiple writers). The
-# stored payload is a crdt_sync Log: {"alarm": {"fields": {"alarm_hour":
-# [H, "<hlc>"], "alarm_minute": [M, "<hlc>"]}, ...}}. The raw media type makes
-# the Contents API return that JSON directly, so no base64 decode is needed.
+# The cache is written by wake_alarm/_sync.py as
+# {"hour": H, "minute": M, "fetched_at": <unix seconds>} — keep this reader in
+# step with _write_cache() there. Storing H/M rather than the raw crdt_sync log
+# means this script no longer needs to understand the sync payload format at
+# all, which is what makes it backend-agnostic.
 get_synced_alarm_epoch() {
-    local token log_json hour minute target_epoch now_epoch
-    token=$(read_sync_token) || return 1
+    local hour minute fetched_at now_epoch age target_epoch
 
-    local url="https://api.github.com/repos/kuhyx/syncs/contents"
-    url="$url/wake-alarm-sync/devices/phone/alarm.json"
-    log_json=$(curl -sf --max-time 10 \
-        -H "Authorization: token $token" \
-        -H "Accept: application/vnd.github.raw" \
-        "$url") || return 1
-    [[ -n "$log_json" ]] || return 1
+    [[ -f "$ALARM_CACHE" ]] || return 1
 
-    hour=$(printf '%s' "$log_json" \
-        | jq -r '.alarm.fields.alarm_hour[0]' 2>/dev/null) || return 1
-    minute=$(printf '%s' "$log_json" \
-        | jq -r '.alarm.fields.alarm_minute[0]' 2>/dev/null) || return 1
+    # One jq call for all three fields: -e fails on null, and the fixed field
+    # order lets a single read destructure them.
+    read -r hour minute fetched_at < <(
+        jq -er '"\(.hour) \(.minute) \(.fetched_at)"' "$ALARM_CACHE" 2>/dev/null
+    ) || return 1
+
     [[ "$hour" =~ ^[0-9]+$ && "$minute" =~ ^[0-9]+$ ]] || return 1
+    (( hour <= 23 && minute <= 59 )) || return 1
 
     printf -v now_epoch '%(%s)T' -1
+    # fetched_at is a float; strip the fraction rather than pulling in bc.
+    age=$(( now_epoch - ${fetched_at%%.*} ))
+    (( age >= 0 && age <= MAX_CACHE_AGE_SECONDS )) || return 1
+
     target_epoch=$(date -d "today $hour:$minute" +%s)
     if (( target_epoch <= now_epoch )); then
         target_epoch=$(date -d "tomorrow $hour:$minute" +%s)
@@ -109,11 +98,11 @@ case "$tomorrow_dow" in
     1|2|3|4|5|6|7)
         if wake_epoch=$(get_synced_alarm_epoch 2>/dev/null); then
             logger -t shutdown-wrapper \
-                "crdt_sync: waking at $(date -d "@$wake_epoch") (epoch $wake_epoch)"
+                "alarm cache: waking at $(date -d "@$wake_epoch") (epoch $wake_epoch)"
         else
             wake_epoch=$(( $(printf '%(%s)T' -1) + WAKE_AFTER_HOURS * 3600 ))
             logger -t shutdown-wrapper \
-                "sync unavailable — fallback +${WAKE_AFTER_HOURS}h (epoch $wake_epoch)"
+                "alarm cache unusable — fallback +${WAKE_AFTER_HOURS}h (epoch $wake_epoch)"
         fi
         sudo "$RTCWAKE" -m no -t "$wake_epoch"
         exec /usr/bin/systemctl hibernate

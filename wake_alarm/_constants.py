@@ -92,13 +92,22 @@ SYNC_TOKEN_FALLBACK_FILES: tuple[Path, ...] = (
 # Where a successful read is cached, so a network blip can't cost a wake-up.
 ALARM_CACHE_FILE: Path = Path.home() / ".config" / "wake_alarm" / "alarm_cache.json"
 
-# The shared private repo every companion app syncs through, and the phone's
-# path within it. The phone is the sole writer under a fixed device id, so one
-# read of its alarm.json is enough — no device discovery or HLC ordering here.
+# The phone's path to its published alarm. Deliberately the *same* logical
+# path on both backends — Firebase's namespace mirrors the repo layout — so
+# only the transport changes, never the parse. The phone is the sole writer
+# under a fixed device id, so one read of its alarm.json is enough: no device
+# discovery or HLC ordering here.
+SYNC_ALARM_PATH: str = "wake-alarm-sync/devices/phone/alarm.json"
+
+# Names this app's credential cache under ~/.local/share/crdt-sync/, keeping
+# its Firebase refresh token separate from the sibling apps'.
+SYNC_APP_NAME: str = "wake_alarm"
+
+# The shared private repo, used only by the GitHub fallback path. Retiring the
+# mirror means deleting these three and _fetch_github_alarm() together.
 SYNC_API_BASE: str = "https://api.github.com"
 SYNC_REPO_OWNER: str = "kuhyx"
 SYNC_REPO_NAME: str = "syncs"
-SYNC_ALARM_PATH: str = "wake-alarm-sync/devices/phone/alarm.json"
 
 # Valid ranges for a wall-clock alarm, used to reject a malformed sync payload
 # or a corrupted cache before it can become a fire time.

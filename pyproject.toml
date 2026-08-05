@@ -9,6 +9,10 @@ description = "Phone-driven wake alarm with fan ramp and smart-plug control"
 requires-python = ">=3.10"
 dependencies = [
     "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.4.0#subdirectory=gatelock",
+    # Firebase transport for the alarm read. _sync.py imports it lazily and
+    # falls back to its stdlib GitHub path if the import fails, so a broken
+    # install degrades the read instead of killing the per-minute trigger.
+    "crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.5.1#subdirectory=crdt-sync",
     "python-kasa>=0.7",
 ]
 
