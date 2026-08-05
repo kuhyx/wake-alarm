@@ -12,7 +12,7 @@ dependencies:
   crdt_sync:
     git:
       url: https://github.com/kuhyx/utils
-      ref: crdt_sync_dart-v0.2.0
+      ref: crdt_sync_dart-v0.6.0
       path: crdt_sync_dart
   cupertino_icons: ^1.0.8
   flutter:
