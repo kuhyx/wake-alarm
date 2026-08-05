@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
+import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
@@ -43,9 +44,15 @@ class _HomeScreenState extends State<HomeScreen> {
       // hiccup): keep the on-screen defaults rather than crashing.
       return;
     }
+    // Either backend counts: a device connected only to Firebase is fully
+    // configured, and gating on the GitHub token alone would lock it out of
+    // syncing entirely once the mirror is retired.
+    final firebaseAccount = await loadAccount();
     if (!mounted) return;
     _service = service;
-    setState(() => _configured = settings.isConfigured);
+    setState(
+      () => _configured = settings.isConfigured || firebaseAccount != null,
+    );
 
     final alarm = service.currentAlarm;
     if (alarm != null && mounted) {
@@ -91,8 +98,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _syncAndSet() async {
     final settings = await SyncSettings.load();
     final service = _service;
-    if (!settings.isConfigured || service == null) {
-      setState(() => _status = 'Configure GitHub in Settings first.');
+    // syncBackend() falls back to GitHub alone, or pushes to Firebase alone
+    // via the mirror, so either credential is enough to proceed.
+    final hasFirebase = await loadAccount() != null;
+    if ((!settings.isConfigured && !hasFirebase) || service == null) {
+      setState(() => _status = 'Connect a sync backend in Settings first.');
       return;
     }
 
@@ -209,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (!_configured) ...[
                   const SizedBox(height: 16),
                   Text(
-                    'Open Settings (gear icon) to connect GitHub.',
+                    'Open Settings (gear icon) to connect Firebase.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Theme.of(
