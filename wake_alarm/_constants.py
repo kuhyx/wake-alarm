@@ -94,10 +94,22 @@ ALARM_CACHE_FILE: Path = Path.home() / ".config" / "wake_alarm" / "alarm_cache.j
 
 # The phone's path to its published alarm. Deliberately the *same* logical
 # path on both backends — Firebase's namespace mirrors the repo layout — so
-# only the transport changes, never the parse. The phone is the sole writer
-# under a fixed device id, so one read of its alarm.json is enough: no device
-# discovery or HLC ordering here.
+# only the transport changes, never the parse.
+#
+# This is the *legacy* path: the phone used to be the sole writer under the
+# fixed device id "phone". It still is in practice, but the id is migrating
+# to a per-install uuid, so the reader discovers device directories under
+# SYNC_DEVICES_PREFIX and falls back to this path for a phone that has not
+# yet published under its uuid. Keep reading it until every install has
+# migrated; deleting it early means a stale phone's alarm silently stops
+# being seen, and the trigger falls back to FALLBACK_ALARM_HOUR.
 SYNC_ALARM_PATH: str = "wake-alarm-sync/devices/phone/alarm.json"
+
+# The directory holding one subdirectory per publishing device.
+SYNC_DEVICES_PREFIX: str = "wake-alarm-sync/devices"
+
+# The file each device publishes its alarm as, inside its own directory.
+SYNC_ALARM_FILENAME: str = "alarm.json"
 
 # Names this app's credential cache under ~/.local/share/crdt-sync/, keeping
 # its Firebase refresh token separate from the sibling apps'.

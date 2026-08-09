@@ -23,6 +23,7 @@ dependencies:
   path_provider: ^2.1.0
   shared_preferences: ^2.3.0
   url_launcher: ^6.3.0
+  uuid: ^4.6.0
 
 dev_dependencies:
   # Generates the Android launcher icons from assets/icon/ (see

@@ -28,22 +28,20 @@ import json
 import logging
 import sys
 import time
-from typing import Any
 import urllib.error
 import urllib.request
 
+from wake_alarm._alarm_payload import in_range, newest_alarm, parse_log
 from wake_alarm._constants import (
     ALARM_CACHE_FILE,
     ALARM_CACHE_MAX_AGE_SECONDS,
     FALLBACK_ALARM_HOUR,
-    MAX_HOUR,
-    MAX_MINUTE,
-    MIN_HOUR,
-    MIN_MINUTE,
+    SYNC_ALARM_FILENAME,
     SYNC_ALARM_PATH,
     SYNC_API_BASE,
     SYNC_APP_NAME,
     SYNC_CONFIG_FILE,
+    SYNC_DEVICES_PREFIX,
     SYNC_HTTP_TIMEOUT_SECONDS,
     SYNC_REPO_NAME,
     SYNC_REPO_OWNER,
@@ -67,11 +65,6 @@ except ImportError:
     _FIREBASE_AVAILABLE = False
     _logger.info("crdt_sync is not installed; reading the alarm from GitHub")
 
-# Keys inside the crdt_sync log the phone writes.
-_RECORD_ID = "alarm"
-_HOUR_FIELD = "alarm_hour"
-_MINUTE_FIELD = "alarm_minute"
-
 
 @dataclass(frozen=True)
 class Alarm:
@@ -92,22 +85,6 @@ class Alarm:
     def __str__(self) -> str:
         """Render as ``HH:MM (source)``."""
         return f"{self.hour:02d}:{self.minute:02d} ({self.source})"
-
-
-def _in_range(hour: int, minute: int) -> bool:
-    """Check that an (hour, minute) pair is a real wall-clock time.
-
-    Guards both readers: a malformed sync payload and a corrupted cache must
-    never become a fire time.
-
-    Args:
-        hour: Candidate hour.
-        minute: Candidate minute.
-
-    Returns:
-        True if both values are within a 24-hour clock.
-    """
-    return MIN_HOUR <= hour <= MAX_HOUR and MIN_MINUTE <= minute <= MAX_MINUTE
 
 
 def _read_token_config() -> str | None:
@@ -162,65 +139,15 @@ def _read_token() -> str | None:
     return _read_token_config() or _read_token_fallback()
 
 
-def _extract_field(log: dict[str, Any], field: str) -> int | None:
-    """Pull one integer field out of the phone's crdt_sync log.
-
-    The stored shape is ``{"alarm": {"fields": {"<field>": [value, "<hlc>"]}}}``
-    — each field is a (value, HLC) pair, so the value is element 0.
-
-    Args:
-        log: The parsed log JSON.
-        field: Field name to extract (e.g. ``alarm_hour``).
-
-    Returns:
-        The integer value, or None if anything about the shape is unexpected.
-    """
-    record = log.get(_RECORD_ID)
-    if not isinstance(record, dict):
-        return None
-    fields = record.get("fields")
-    if not isinstance(fields, dict):
-        return None
-    pair = fields.get(field)
-    # bool is an int subclass; an alarm hour of True would be nonsense.
-    if not isinstance(pair, list) or not pair:
-        return None
-    value = pair[0]
-    if isinstance(value, bool) or not isinstance(value, int):
-        return None
-    return value
-
-
-def _parse_log(raw: str) -> tuple[int, int] | None:
-    """Parse the phone's log into an (hour, minute) pair.
-
-    Args:
-        raw: The raw JSON text returned by the Contents API.
-
-    Returns:
-        The (hour, minute) pair, or None if the payload is malformed or the
-        values are out of range.
-    """
-    try:
-        log = json.loads(raw)
-    except json.JSONDecodeError:
-        _logger.warning("Synced alarm is not valid JSON")
-        return None
-    if not isinstance(log, dict):
-        return None
-    hour = _extract_field(log, _HOUR_FIELD)
-    minute = _extract_field(log, _MINUTE_FIELD)
-    if hour is None or minute is None:
-        _logger.warning("Synced alarm is missing hour/minute fields")
-        return None
-    if not _in_range(hour, minute):
-        _logger.warning("Synced alarm out of range: %d:%d", hour, minute)
-        return None
-    return hour, minute
-
-
 def _fetch_firebase_alarm() -> tuple[int, int] | None:
-    """Fetch the alarm the phone last pushed to Firebase.
+    """Fetch the newest alarm any device has pushed to Firebase.
+
+    Discovers device directories rather than reading one fixed path: the
+    phone's device id is migrating from the constant "phone" to a per-install
+    uuid, and a reader pinned to the old path would stop seeing the alarm the
+    moment the phone migrated — falling back to FALLBACK_ALARM_HOUR, i.e.
+    waking the user at the wrong time. Listing covers both ids, and
+    SYNC_ALARM_PATH remains as a last resort for a backend that cannot list.
 
     Returns None — never raises — for every failure mode, including
     ``crdt_sync`` not being importable on this interpreter, so the caller can
@@ -240,15 +167,26 @@ def _fetch_firebase_alarm() -> tuple[int, int] | None:
 
     try:
         client = firebase_client_for(SYNC_APP_NAME)
-        raw = client.get_file_text(SYNC_ALARM_PATH)
+        published: list[tuple[str, str]] = []
+        for device_id in client.list_directory(SYNC_DEVICES_PREFIX):
+            raw = client.get_file_text(
+                f"{SYNC_DEVICES_PREFIX}/{device_id}/{SYNC_ALARM_FILENAME}"
+            )
+            if raw is not None:
+                published.append((device_id, raw))
+        if not published:
+            # No directories listed (or none held a file): still try the
+            # legacy fixed path, so a phone that has not migrated is read.
+            raw = client.get_file_text(SYNC_ALARM_PATH)
+            if raw is None:
+                _logger.info("No alarm published to Firebase yet")
+                return None
+            published.append(("phone", raw))
     except (ConfigError, FirebaseAuthError, RemoteSyncError, OSError) as exc:
         _logger.info("Cannot fetch the alarm from Firebase: %s", exc)
         return None
 
-    if raw is None:
-        _logger.info("No alarm published to Firebase yet")
-        return None
-    return _parse_log(raw)
+    return newest_alarm(published)
 
 
 def _fetch_github_alarm() -> tuple[int, int] | None:
@@ -300,7 +238,7 @@ def _fetch_github_alarm() -> tuple[int, int] | None:
         _logger.info("Cannot fetch synced alarm: %s", exc)
         return None
 
-    return _parse_log(raw)
+    return parse_log(raw)
 
 
 def fetch_remote_alarm() -> tuple[int, int] | None:
@@ -337,7 +275,7 @@ def _read_cache() -> tuple[int, int, float] | None:
         return None
     if not isinstance(fetched_at, (int, float)):
         return None
-    if not _in_range(hour, minute):
+    if not in_range(hour, minute):
         return None
     return hour, minute, float(fetched_at)
 

@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from wake_alarm._constants import SYNC_ALARM_PATH
+from wake_alarm._constants import (
+    SYNC_ALARM_FILENAME,
+    SYNC_ALARM_PATH,
+    SYNC_DEVICES_PREFIX,
+)
 from wake_alarm._sync import _fetch_firebase_alarm, fetch_remote_alarm
 
 if TYPE_CHECKING:
@@ -31,14 +35,14 @@ class _FakeRemoteError(Exception):
     """Stand-in for crdt_sync's RemoteSyncError."""
 
 
-def _log(hour: object = 7, minute: object = 30) -> str:
+def _log(hour: object = 7, minute: object = 30, hlc: str = "hlc-1") -> str:
     """Build a crdt_sync log payload shaped like the phone's."""
     return json.dumps(
         {
             "alarm": {
                 "fields": {
-                    "alarm_hour": [hour, "hlc-1"],
-                    "alarm_minute": [minute, "hlc-1"],
+                    "alarm_hour": [hour, hlc],
+                    "alarm_minute": [minute, hlc],
                 }
             }
         }
@@ -86,6 +90,7 @@ class TestFetchFirebaseAlarm:
     def test_success(self) -> None:
         """A published alarm parses to its (hour, minute) pair."""
         client = MagicMock()
+        client.list_directory.return_value = []
         client.get_file_text.return_value = _log(6, 15)
         with self._patched(client=client):
             assert _fetch_firebase_alarm() == (6, 15)
@@ -94,9 +99,62 @@ class TestFetchFirebaseAlarm:
     def test_absent_value_yields_none(self) -> None:
         """Nothing published yet is a miss, not a crash."""
         client = MagicMock()
+        client.list_directory.return_value = []
         client.get_file_text.return_value = None
         with self._patched(client=client):
             assert _fetch_firebase_alarm() is None
+
+    def test_reads_a_discovered_device_directory(self) -> None:
+        """A phone publishing under a uuid is found by listing, not by path."""
+        client = MagicMock()
+        client.list_directory.return_value = ["7f3c-uuid"]
+        client.get_file_text.return_value = _log(6, 45)
+        with self._patched(client=client):
+            assert _fetch_firebase_alarm() == (6, 45)
+        client.get_file_text.assert_called_once_with(
+            f"{SYNC_DEVICES_PREFIX}/7f3c-uuid/{SYNC_ALARM_FILENAME}"
+        )
+
+    def test_newest_device_wins_across_several(self) -> None:
+        """The alarm set most recently wins, whatever order devices list in.
+
+        This is the migration case: the phone's old "phone" directory still
+        holds a stale alarm while its new uuid directory holds the current
+        one. Ranking by HLC rather than listing order is what stops the PC
+        waking at the abandoned time.
+        """
+        client = MagicMock()
+        client.list_directory.return_value = ["new-uuid", "phone"]
+        client.get_file_text.side_effect = lambda path: {
+            f"{SYNC_DEVICES_PREFIX}/new-uuid/{SYNC_ALARM_FILENAME}": _log(
+                5, 30, hlc="2026-08-09T10:00:00.000Z-0000-new-uuid"
+            ),
+            f"{SYNC_DEVICES_PREFIX}/phone/{SYNC_ALARM_FILENAME}": _log(
+                9, 0, hlc="2026-07-01T10:00:00.000Z-0000-phone"
+            ),
+        }[path]
+        with self._patched(client=client):
+            assert _fetch_firebase_alarm() == (5, 30)
+
+    def test_falls_back_to_the_legacy_path_when_nothing_lists(self) -> None:
+        """A backend that lists nothing still reads the un-migrated phone."""
+        client = MagicMock()
+        client.list_directory.return_value = ["phone"]
+        client.get_file_text.side_effect = [None, _log(8, 5)]
+        with self._patched(client=client):
+            assert _fetch_firebase_alarm() == (8, 5)
+        assert client.get_file_text.call_args_list[-1].args[0] == SYNC_ALARM_PATH
+
+    def test_a_device_publishing_garbage_does_not_win(self) -> None:
+        """One unparsable device must not shadow a healthy one."""
+        client = MagicMock()
+        client.list_directory.return_value = ["broken", "good"]
+        client.get_file_text.side_effect = lambda path: {
+            f"{SYNC_DEVICES_PREFIX}/broken/{SYNC_ALARM_FILENAME}": "{not json",
+            f"{SYNC_DEVICES_PREFIX}/good/{SYNC_ALARM_FILENAME}": _log(7, 20),
+        }[path]
+        with self._patched(client=client):
+            assert _fetch_firebase_alarm() == (7, 20)
 
     @pytest.mark.parametrize(
         "exc",

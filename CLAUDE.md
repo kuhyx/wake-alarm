@@ -76,11 +76,28 @@ auto-start.
 `_sync.py`'s local cache instead of the remote file, so there is no second
 remote reader to keep in step.
 
-- Source of truth: `wake-alarm-sync/devices/phone/alarm.json`, written by
-  `phone_app/` as a `crdt_sync` log. The value lives at
+- Source of truth: a `crdt_sync` log written by `phone_app/` under
+  `wake-alarm-sync/devices/<device-id>/alarm.json`. The value lives at
   `.alarm.fields.alarm_hour[0]` / `.alarm_minute[0]`. **The same logical path
   on both backends** — Firebase's namespace mirrors the repo layout — so only
   the transport differs, never the parse.
+- **The Firebase reader discovers device directories; it is not pinned to
+  `devices/phone/`.** The phone's device id is migrating from the fixed
+  constant `phone` to a per-install uuid, and a reader pinned to the old path
+  would silently stop seeing the alarm the moment the phone migrated — then
+  fall back to `FALLBACK_ALARM_HOUR`, i.e. wake at the wrong time. So
+  `_fetch_firebase_alarm()` lists `SYNC_DEVICES_PREFIX`, reads every device's
+  `alarm.json`, and picks the newest by the hour field's **HLC** (not by
+  listing order), with `device_id` breaking exact ties so two devices stamped
+  in the same millisecond don't alternate between ticks. A device whose
+  payload doesn't parse is skipped rather than allowed to win.
+  `SYNC_ALARM_PATH` remains as a last-resort read for a backend that lists
+  nothing — keep it until every install has migrated. The **GitHub** fallback
+  still reads the single fixed path; it is the mirror, not the primary.
+- Payload parsing/ranking lives in `_alarm_payload.py`, split out of `_sync.py`
+  so the wire format is testable without network or disk (and to keep both
+  files under the 500-line cap). `_sync.py` owns fetching, caching and
+  fallback; `_alarm_payload.py` owns "what did the phone actually say".
 - **Firebase first, GitHub as the cutover mirror** (`fetch_remote_alarm()` is
   just `_fetch_firebase_alarm() or _fetch_github_alarm()`). Retiring the
   mirror is deleting the GitHub branch plus `SYNC_API_BASE`/`SYNC_REPO_*`.

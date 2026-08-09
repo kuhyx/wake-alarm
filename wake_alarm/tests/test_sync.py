@@ -9,12 +9,11 @@ import urllib.error
 
 import pytest
 
+from wake_alarm._alarm_payload import extract_field, parse_log
 from wake_alarm._sync import (
     Alarm,
-    _extract_field,
     _fetch_github_alarm,
     _parse_args,
-    _parse_log,
     _read_cache,
     _read_token,
     _read_token_fallback,
@@ -156,7 +155,7 @@ class TestTokenFallback:
 
 
 class TestExtractField:
-    """Tests for _extract_field's tolerance of malformed logs."""
+    """Tests for extract_field's tolerance of malformed logs."""
 
     @pytest.mark.parametrize(
         "log",
@@ -174,37 +173,37 @@ class TestExtractField:
     )
     def test_malformed_shapes_yield_none(self, log: dict[str, Any]) -> None:
         """Every unexpected shape degrades to None rather than raising."""
-        assert _extract_field(log, "alarm_hour") is None
+        assert extract_field(log, "alarm_hour") is None
 
     def test_extracts_value(self) -> None:
         """The value is element 0 of the (value, HLC) pair."""
         log = {"alarm": {"fields": {"alarm_hour": [6, "hlc"]}}}
-        assert _extract_field(log, "alarm_hour") == 6
+        assert extract_field(log, "alarm_hour") == 6
 
 
 class TestParseLog:
-    """Tests for _parse_log."""
+    """Tests for parse_log."""
 
     def test_valid(self) -> None:
         """A well-formed log parses to an (hour, minute) pair."""
-        assert _parse_log(_log(7, 30)) == (7, 30)
+        assert parse_log(_log(7, 30)) == (7, 30)
 
     def test_invalid_json(self) -> None:
         """Unparsable JSON yields None."""
-        assert _parse_log("{nope") is None
+        assert parse_log("{nope") is None
 
     def test_not_a_dict(self) -> None:
         """A JSON array is not a log."""
-        assert _parse_log("[]") is None
+        assert parse_log("[]") is None
 
     def test_missing_fields(self) -> None:
         """A log without the alarm fields yields None."""
-        assert _parse_log(json.dumps({"alarm": {"fields": {}}})) is None
+        assert parse_log(json.dumps({"alarm": {"fields": {}}})) is None
 
     @pytest.mark.parametrize(("hour", "minute"), [(24, 0), (-1, 0), (7, 60), (7, -1)])
     def test_out_of_range(self, hour: int, minute: int) -> None:
         """Values outside 0-23 / 0-59 are rejected."""
-        assert _parse_log(_log(hour, minute)) is None
+        assert parse_log(_log(hour, minute)) is None
 
 
 class TestFetchRemoteAlarm:
