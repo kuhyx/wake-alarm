@@ -134,6 +134,14 @@ repos:
 
   - repo: local
     hooks:
+      # Fails a commit that still points crdt_sync at a local path. Local
+      # tests would go green against a library CI has never seen, silently.
+      - id: crdt-sync-override
+        name: no local crdt_sync dependency_override
+        entry: bash scripts/check_no_crdt_sync_override.sh phone_app/pubspec.yaml
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: shellcheck
         name: shellcheck
         entry: bash -c 'printf "%s\0" "$@" | xargs -0 -n 40 shellcheck --severity=warning' --
