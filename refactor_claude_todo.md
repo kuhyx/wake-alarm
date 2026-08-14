@@ -13,14 +13,15 @@ enforced by a gate that fails the commit, not by a note anyone can ignore.
 Why: a file that cannot be read in one piece forces re-reads and partial edits,
 which is the single largest avoidable cost in an LLM-assisted workflow. Aim by
 churn, not size alone — refactoring pays where code is read and changed often
-(Fowler, *refactoring economic benefit*).
+(Fowler, _refactoring economic benefit_).
 
 ## Scope in this repo
 
-- **18 files** currently exceed 250 lines (of 74 eligible files).
+- **18 files** currently exceed 250 lines (of 73 eligible files).
 - **6,553 lines** sit in violation; longest file is **478 lines**.
 
 Exempt (do NOT split these):
+
 - generated files — `*.g.dart`, `*.freezed.dart`, `*.gr.dart`, `**/l10n/generated/**`,
   anything with a `GENERATED` header
 - markup — `.html`, `.css`, `.scss`
@@ -32,23 +33,23 @@ Exempt (do NOT split these):
 ROI = lines x commits in the last year. Work top-down; a long file nobody edits
 has near-zero payoff and should not be first.
 
-| lines | commits/yr | kind | file |
-|------:|-----------:|:-----|:-----|
-| 478 | 15 | code | `wake_alarm/_alarm.py` |
-| 438 | 12 | code | `wake_alarm/tests/test_alarm_part2.py` |
-| 435 | 12 | code | `wake_alarm/tests/test_alarm.py` |
-| 358 | 8 | code | `wake_alarm/tests/test_alarm_part3.py` |
-| 457 | 4 | code | `wake_alarm/tests/test_alarm_sinks.py` |
-| 283 | 6 | code | `wake_alarm/tests/test_alarm_part4.py` |
-| 329 | 4 | code | `wake_alarm/_alarm_view.py` |
-| 405 | 3 | code | `wake_alarm/_audio.py` |
-| 386 | 3 | code | `wake_alarm/tests/test_sync.py` |
-| 371 | 3 | code | `wake_alarm/_sync.py` |
-| 317 | 3 | code | `wake_alarm/_escape_flow.py` |
-| 314 | 3 | code | `wake_alarm/tests/test_state.py` |
-| 420 | 2 | code | `wake_alarm/tests/test_alarm_audio.py` |
-| 351 | 2 | code | `wake_alarm/tests/test_smart_plug.py` |
-| 341 | 2 | code | `wake_alarm/_sinks.py` |
+| lines | commits/yr | kind | file                                   |
+| ----: | ---------: | :--- | :------------------------------------- |
+|   478 |         15 | code | `wake_alarm/_alarm.py`                 |
+|   438 |         12 | code | `wake_alarm/tests/test_alarm_part2.py` |
+|   435 |         12 | code | `wake_alarm/tests/test_alarm.py`       |
+|   358 |          8 | code | `wake_alarm/tests/test_alarm_part3.py` |
+|   457 |          4 | code | `wake_alarm/tests/test_alarm_sinks.py` |
+|   283 |          6 | code | `wake_alarm/tests/test_alarm_part4.py` |
+|   329 |          4 | code | `wake_alarm/_alarm_view.py`            |
+|   405 |          3 | code | `wake_alarm/_audio.py`                 |
+|   386 |          3 | code | `wake_alarm/tests/test_sync.py`        |
+|   371 |          3 | code | `wake_alarm/_sync.py`                  |
+|   317 |          3 | code | `wake_alarm/_escape_flow.py`           |
+|   314 |          3 | code | `wake_alarm/tests/test_state.py`       |
+|   420 |          2 | code | `wake_alarm/tests/test_alarm_audio.py` |
+|   351 |          2 | code | `wake_alarm/tests/test_smart_plug.py`  |
+|   341 |          2 | code | `wake_alarm/_sinks.py`                 |
 
 _(3 further files over 250 lines not listed — re-run the survey for the full set.)_
 
