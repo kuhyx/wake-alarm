@@ -26,6 +26,15 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.0
   shared_preferences: ^2.3.0
+
+  # Shared "Sync settings" screen (Firebase + optional local backup), reused
+  # across every kuhy app that syncs. GitHub mirror stays app-local (see
+  # lib/screens/github_mirror_screen.dart).
+  sync_settings_ui:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: sync_settings_ui-v0.1.0
+      path: sync_settings_ui
   url_launcher: ^6.3.0
   uuid: ^4.6.0
 
