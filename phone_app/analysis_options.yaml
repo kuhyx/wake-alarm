@@ -10,6 +10,14 @@ analyzer:
     unnecessary_null_comparison: error
     dead_code: error
     invalid_annotation_target: error
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 
 linter:
   rules:
