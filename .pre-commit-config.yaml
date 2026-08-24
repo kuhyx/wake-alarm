@@ -154,8 +154,20 @@ repos:
         files: '^wake_alarm/.*\.py$'
         pass_filenames: false
         require_serial: true
-      - id: max-file-length
-        name: Max file length (500 lines)
-        entry: python3 scripts/check_file_length.py
+      # The shared 250-line cap. This repo used to run a local script with a
+      # higher limit under this same hook id, so it looked gated while letting
+      # through files every other repo rejects.
+      - id: file-length
+        name: file length <= 250 lines
+        entry: scripts/check_file_length.sh
         language: system
-        types_or: [python, shell]
+
+      # Four markdown namespaces (README / CLAUDE* / DOCS* / TODO*), plus the
+      # rule that a TODO carries "REMOVE ME AFTER FINISH" and nothing else may.
+      # Shared gate in ~/utils owns the namespaces and the exemption list, so
+      # one repo's idea of a valid name cannot drift from every other repo's.
+      - id: md-naming
+        name: markdown naming convention
+        entry: scripts/check_md_naming.sh
+        language: system
+        files: \.(md|markdown)$
