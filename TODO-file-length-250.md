@@ -94,3 +94,19 @@ A refactor without a gate silently regrows. Before this task is done:
 ## Verify
 
 Run the suite, then the alarm entry point. The phone_app companion needs `phone-deploy` verification if touched.
+
+## Why this sat untouched (added 2026-08-24)
+
+This repo ran a LOCAL `scripts/check_file_length.py` with `MAX_LINES = 500`,
+under a hook named "Max file length (500 lines)". It reported "gated" while
+permitting files every other repo rejects -- so the cap looked enforced and
+nothing ever failed. The hook now delegates to the shared 250-line gate in
+`~/utils`, which reports 17 real violations.
+
+Done condition is now an exit code, not a count:
+
+```
+bash scripts/check_file_length.sh --all   # must exit 0
+```
+
+REMOVE ME AFTER FINISH
