@@ -27,7 +27,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.kuhy.wake_alarm_sync"
         // flutter_secure_storage requires API 23+ (Android Keystore).
         minSdk = flutter.minSdkVersion
