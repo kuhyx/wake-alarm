@@ -92,6 +92,16 @@ SYNC_TOKEN_FALLBACK_FILES: tuple[Path, ...] = (
 # Where a successful read is cached, so a network blip can't cost a wake-up.
 ALARM_CACHE_FILE: Path = Path.home() / ".config" / "wake_alarm" / "alarm_cache.json"
 
+# Structured logs live under XDG state, not .config: they are churning runtime
+# data, not configuration. The JSONL file is additive -- the journal keeps
+# receiving the same records via stderr.
+LOG_STATE_DIR: Path = Path.home() / ".local" / "state" / "wake_alarm"
+LOG_JSONL_FILE: Path = LOG_STATE_DIR / "events.jsonl"
+
+# Fingerprint of the last emitted event, so consecutive duplicates can be
+# suppressed across separate per-minute trigger processes.
+LOG_DEDUPE_FILE: Path = LOG_STATE_DIR / "last_event.json"
+
 # The phone's path to its published alarm. Deliberately the *same* logical
 # path on both backends — Firebase's namespace mirrors the repo layout — so
 # only the transport changes, never the parse.

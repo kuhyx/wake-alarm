@@ -164,7 +164,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main() -> None:
     """Entry point for one timer tick."""
-    configure_logging()
+    configure_logging(component="trigger")
     args = _parse_args(sys.argv[1:])
 
     now = _now()
