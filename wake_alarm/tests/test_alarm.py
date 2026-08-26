@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pathlib
-import subprocess
 import tkinter as tk
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -13,17 +11,10 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-from wake_alarm._alarm import (
-    _is_alarm_day,
-    _should_run_alarm,
-)
 from wake_alarm._audio import (
     _beep_loud,
     _beep_medium,
     _beep_soft,
-    _find_fan_hwmon,
-    _max_fans,
-    _restore_fans,
     _speaker_test_path,
 )
 from wake_alarm._challenges import (
@@ -32,6 +23,9 @@ from wake_alarm._challenges import (
 )
 from wake_alarm._constants import (
     DISMISS_CODE_LENGTH,
+)
+from wake_alarm._gating import (
+    is_alarm_day as _is_alarm_day,
 )
 
 # ---------------------------------------------------------------------------
@@ -60,6 +54,7 @@ def _block_real_tk() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
@@ -75,6 +70,7 @@ def mock_tk_module() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
@@ -232,204 +228,3 @@ class TestBeepFunctions:
         with patch("wake_alarm._audio._play_tone") as mock_play:
             _beep_loud(frequency=1200)
             mock_play.assert_called_once_with(1200)
-
-
-class TestShouldRunAlarm:
-    """Tests for _should_run_alarm."""
-
-    def test_returns_false_on_non_alarm_day(self) -> None:
-        """Return False when today is not an alarm day."""
-        with patch(
-            "wake_alarm._alarm._is_alarm_day",
-            return_value=False,
-        ):
-            assert _should_run_alarm() is False
-
-    def test_returns_false_when_already_dismissed(self) -> None:
-        """Return False when alarm was already dismissed today."""
-        with (
-            patch(
-                "wake_alarm._alarm._is_alarm_day",
-                return_value=True,
-            ),
-            patch(
-                "wake_alarm._alarm.was_alarm_dismissed_today",
-                return_value=True,
-            ),
-        ):
-            assert _should_run_alarm() is False
-
-    def test_returns_true_when_alarm_day_and_not_dismissed(self) -> None:
-        """Return True when today is alarm day and not yet dismissed."""
-        with (
-            patch(
-                "wake_alarm._alarm._is_alarm_day",
-                return_value=True,
-            ),
-            patch(
-                "wake_alarm._alarm.was_alarm_dismissed_today",
-                return_value=False,
-            ),
-            patch(
-                "wake_alarm._alarm.was_workout_logged_today",
-                return_value=False,
-            ),
-        ):
-            assert _should_run_alarm() is True
-
-    def test_returns_false_when_workout_already_logged(self) -> None:
-        """Return False when workout was already logged today."""
-        with (
-            patch(
-                "wake_alarm._alarm._is_alarm_day",
-                return_value=True,
-            ),
-            patch(
-                "wake_alarm._alarm.was_alarm_dismissed_today",
-                return_value=False,
-            ),
-            patch(
-                "wake_alarm._alarm.was_workout_logged_today",
-                return_value=True,
-            ),
-        ):
-            assert _should_run_alarm() is False
-
-
-class TestFindFanHwmon:
-    """Tests for _find_fan_hwmon."""
-
-    def test_returns_none_when_no_hwmon(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """No hwmon entries → returns None."""
-        monkeypatch.setattr(pathlib.Path, "glob", lambda _s, _p: iter([]))
-        assert _find_fan_hwmon() is None
-
-    def test_returns_none_for_unknown_chip(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Non-NCT chip name → returns None."""
-        name_file = tmp_path / "name"
-        name_file.write_text("unknown_chip\n")
-        monkeypatch.setattr(pathlib.Path, "glob", lambda _s, _p: iter([name_file]))
-        assert _find_fan_hwmon() is None
-
-    def test_returns_hwmon_dir_for_nct_chip(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """NCT chip name → returns the hwmon directory path."""
-        name_file = tmp_path / "name"
-        name_file.write_text("nct6799\n")
-        monkeypatch.setattr(pathlib.Path, "glob", lambda _s, _p: iter([name_file]))
-        result = _find_fan_hwmon()
-        assert result == str(tmp_path)
-
-    def test_skips_unreadable_name_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """OSError on read → skips and returns None."""
-        bad_path = MagicMock(spec=pathlib.Path)
-        bad_path.read_text.side_effect = OSError("unreadable")
-        monkeypatch.setattr(pathlib.Path, "glob", lambda _s, _p: iter([bad_path]))
-        assert _find_fan_hwmon() is None
-
-
-class TestMaxFans:
-    """Tests for _max_fans."""
-
-    def test_returns_false_when_no_hwmon(self) -> None:
-        """No fan controller → returns False immediately."""
-        with patch("wake_alarm._audio._find_fan_hwmon", return_value=None):
-            assert _max_fans() is False
-
-    def test_returns_false_on_script_oserror(self, tmp_path: pathlib.Path) -> None:
-        """OSError running fan script → returns False."""
-        with (
-            patch(
-                "wake_alarm._audio._find_fan_hwmon",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "wake_alarm._audio.subprocess.run",
-                side_effect=OSError("not found"),
-            ),
-        ):
-            assert _max_fans() is False
-
-    def test_returns_false_on_script_timeout(self, tmp_path: pathlib.Path) -> None:
-        """TimeoutExpired running fan script → returns False."""
-        with (
-            patch(
-                "wake_alarm._audio._find_fan_hwmon",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "wake_alarm._audio.subprocess.run",
-                side_effect=subprocess.TimeoutExpired("fan", 5),
-            ),
-        ):
-            assert _max_fans() is False
-
-    def test_returns_false_on_nonzero_returncode(self, tmp_path: pathlib.Path) -> None:
-        """Fan script exits non-zero → returns False."""
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        with (
-            patch(
-                "wake_alarm._audio._find_fan_hwmon",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "wake_alarm._audio.subprocess.run",
-                return_value=mock_result,
-            ),
-        ):
-            assert _max_fans() is False
-
-    def test_returns_true_on_success(self, tmp_path: pathlib.Path) -> None:
-        """Successful run → returns True (state is saved by the helper)."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        with (
-            patch(
-                "wake_alarm._audio._find_fan_hwmon",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "wake_alarm._audio.subprocess.run",
-                return_value=mock_result,
-            ),
-        ):
-            assert _max_fans() is True
-
-
-class TestRestoreFans:
-    """Tests for _restore_fans."""
-
-    def test_noop_when_inactive(self) -> None:
-        """False state → subprocess.run is never called."""
-        with patch("wake_alarm._audio.subprocess.run") as mock_run:
-            _restore_fans(active=False)
-            mock_run.assert_not_called()
-
-    def test_calls_fan_script_restore(self) -> None:
-        """Active state → fan script called with restore (no args)."""
-        with patch("wake_alarm._audio.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
-            _restore_fans(active=True)
-            mock_run.assert_called_once()
-            args = mock_run.call_args[0][0]
-            assert "restore" in args
-
-    def test_ignores_oserror_on_restore(self) -> None:
-        """OSError from fan script is silently suppressed."""
-        with patch(
-            "wake_alarm._audio.subprocess.run",
-            side_effect=OSError("no script"),
-        ):
-            _restore_fans(active=True)  # must not raise
-
-    def test_ignores_timeout_on_restore(self) -> None:
-        """TimeoutExpired from fan script is silently suppressed."""
-        with patch(
-            "wake_alarm._audio.subprocess.run",
-            side_effect=subprocess.TimeoutExpired("fan", 5),
-        ):
-            _restore_fans(active=True)  # must not raise

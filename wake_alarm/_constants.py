@@ -89,6 +89,12 @@ ESCAPE_HISTORY_FILE: Path = (
 # exactly when the alarm had just stopped being annoying.
 ESCAPE_OFFER_AFTER_SECONDS: int = 900
 
+# Pause between powering the smart plug and the first beep. A powered
+# speaker's soft-start / mute relay typically delays output 1-5 s after mains
+# is applied, so firing the plug and the first tone together loses the opening
+# of the alarm. Costs nothing when no plug is configured.
+PLUG_PREROLL_SECONDS: float = 4.0
+
 # When the failsafe silences the alarm. Audio ONLY: the lock, the typed
 # challenge and the workout gate all persist past this point, so waiting it
 # out in bed is not a way to escape the alarm. It exists so a ring nobody is

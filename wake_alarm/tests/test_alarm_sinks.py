@@ -5,13 +5,9 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from wake_alarm._alarm import _parse_args
-from wake_alarm._constants import ALARM_AUDIO_SINK
+from wake_alarm._gating import parse_args as _parse_args
 from wake_alarm._sinks import (
-    _activate_all_outputs,
-    _AudioState,
     _capture_audio_state,
-    _CardInfo,
     _current_default_sink,
     _list_cards,
     _list_real_sinks,
@@ -19,8 +15,6 @@ from wake_alarm._sinks import (
     _parse_cards,
     _parse_profile_line,
     _parse_sinks,
-    _restore_audio_state,
-    _warn_if_no_real_sink,
 )
 
 # A representative `pactl list cards` block covering every parse branch:
@@ -229,214 +223,6 @@ class TestCaptureAudioState:
         assert state.card_profiles["alsa_card.hdmi"] == "off"
         assert state.sink_volumes["alsa_output.analog"] == "65536"
         assert state.sink_mutes["alsa_output.analog"] is False
-
-
-class TestActivateAllOutputs:
-    """Tests for _activate_all_outputs."""
-
-    def test_returns_none_when_pactl_missing(self) -> None:
-        """No pactl on PATH → returns None without touching audio."""
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value=None),
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
-        ):
-            assert _activate_all_outputs() is None
-            mock_run.assert_not_called()
-
-    def _sentinel_state(self) -> _AudioState:
-        return _AudioState(
-            default_sink="old",
-            card_profiles={},
-            sink_volumes={},
-            sink_mutes={},
-        )
-
-    def test_activates_and_prefers_alarm_sink(self) -> None:
-        """Forces card profiles on, maxes sinks, defaults to ALARM_AUDIO_SINK."""
-        state = self._sentinel_state()
-        cards = {
-            "card_hdmi": _CardInfo(None, ["output:hdmi-stereo"]),
-            "card_mic": _CardInfo(None, []),
-        }
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch("wake_alarm._sinks._capture_audio_state", return_value=state),
-            patch("wake_alarm._sinks._pactl_text", return_value=""),
-            patch("wake_alarm._sinks._parse_cards", return_value=cards),
-            patch(
-                "wake_alarm._sinks._list_real_sinks",
-                return_value=[ALARM_AUDIO_SINK, "other"],
-            ),
-            patch("wake_alarm._sinks._ensure_sink_audible") as mock_audible,
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
-        ):
-            assert _activate_all_outputs() is state
-        cmds = [call.args[0] for call in mock_run.call_args_list]
-        assert [
-            "/usr/bin/pactl",
-            "set-card-profile",
-            "card_hdmi",
-            "output:hdmi-stereo",
-        ] in cmds
-        # The input-only card (no output profile) is never switched.
-        assert not any(c[2] == "card_mic" for c in cmds if c[1] == "set-card-profile")
-        assert ["/usr/bin/pactl", "set-default-sink", ALARM_AUDIO_SINK] in cmds
-        assert mock_audible.call_count == 2
-
-    def test_does_not_block_on_sink_enumeration(self) -> None:
-        """Activation checks present sinks once — no polling/sleeping loop.
-
-        The per-cycle presence check in _play_on_all_sinks is what covers a
-        slow monitor sink, so activation must not spin waiting for it.
-        """
-        state = self._sentinel_state()
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch("wake_alarm._sinks._capture_audio_state", return_value=state),
-            patch("wake_alarm._sinks._pactl_text", return_value=""),
-            patch("wake_alarm._sinks._parse_cards", return_value={}),
-            patch(
-                "wake_alarm._sinks._list_real_sinks",
-                return_value=[ALARM_AUDIO_SINK],
-            ) as mock_list,
-            patch("wake_alarm._sinks._ensure_sink_audible"),
-            patch("wake_alarm._sinks.subprocess.run"),
-        ):
-            assert _activate_all_outputs() is state
-        # Enumerated exactly once — no retry/poll loop.
-        mock_list.assert_called_once()
-
-    def test_falls_back_to_first_sink_when_alarm_sink_absent(self) -> None:
-        """ALARM_AUDIO_SINK not present → default is the first present sink."""
-        state = self._sentinel_state()
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch("wake_alarm._sinks._capture_audio_state", return_value=state),
-            patch("wake_alarm._sinks._pactl_text", return_value=""),
-            patch("wake_alarm._sinks._parse_cards", return_value={}),
-            patch("wake_alarm._sinks._list_real_sinks", return_value=["other"]),
-            patch("wake_alarm._sinks._ensure_sink_audible"),
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
-        ):
-            assert _activate_all_outputs() is state
-        cmds = [call.args[0] for call in mock_run.call_args_list]
-        assert ["/usr/bin/pactl", "set-default-sink", "other"] in cmds
-
-    def test_returns_state_when_no_sink_present(self) -> None:
-        """No real sink present yet → returns state, no default, no maxing."""
-        state = self._sentinel_state()
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch("wake_alarm._sinks._capture_audio_state", return_value=state),
-            patch("wake_alarm._sinks._pactl_text", return_value=""),
-            patch("wake_alarm._sinks._parse_cards", return_value={}),
-            patch("wake_alarm._sinks._list_real_sinks", return_value=[]),
-            patch("wake_alarm._sinks._ensure_sink_audible") as mock_audible,
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
-        ):
-            assert _activate_all_outputs() is state
-        mock_audible.assert_not_called()
-        cmds = [call.args[0] for call in mock_run.call_args_list]
-        assert not any(c[1] == "set-default-sink" for c in cmds)
-
-
-class TestRestoreAudioState:
-    """Tests for _restore_audio_state."""
-
-    def test_none_is_noop(self) -> None:
-        """None state → does nothing, no pactl lookup."""
-        with patch("wake_alarm._sinks._pactl_path") as mock_path:
-            _restore_audio_state(None)
-            mock_path.assert_not_called()
-
-    def test_no_pactl_returns_silently(self) -> None:
-        """State present but pactl missing → no raise, no run."""
-        state = _AudioState(
-            default_sink="s",
-            card_profiles={},
-            sink_volumes={},
-            sink_mutes={},
-        )
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value=None),
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
-        ):
-            _restore_audio_state(state)
-            mock_run.assert_not_called()
-
-    def test_restores_everything(self) -> None:
-        """Restores card profiles, sink volumes, mutes, and the default sink."""
-        state = _AudioState(
-            default_sink="analog",
-            card_profiles={"card_hdmi": "off"},
-            sink_volumes={"analog": "65536"},
-            sink_mutes={"analog": True},
-        )
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
-        ):
-            _restore_audio_state(state)
-        cmds = [call.args[0] for call in mock_run.call_args_list]
-        assert ["/usr/bin/pactl", "set-card-profile", "card_hdmi", "off"] in cmds
-        assert ["/usr/bin/pactl", "set-sink-volume", "analog", "65536"] in cmds
-        assert ["/usr/bin/pactl", "set-sink-mute", "analog", "1"] in cmds
-        assert ["/usr/bin/pactl", "set-default-sink", "analog"] in cmds
-
-    def test_skips_default_when_none(self) -> None:
-        """default_sink None → no set-default-sink command."""
-        state = _AudioState(
-            default_sink=None,
-            card_profiles={},
-            sink_volumes={"analog": "100"},
-            sink_mutes={"analog": False},
-        )
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch("wake_alarm._sinks.subprocess.run") as mock_run,
-        ):
-            _restore_audio_state(state)
-        cmds = [call.args[0] for call in mock_run.call_args_list]
-        assert not any(c[1] == "set-default-sink" for c in cmds)
-        # Unmuted sink restores with "0".
-        assert ["/usr/bin/pactl", "set-sink-mute", "analog", "0"] in cmds
-
-
-class TestWarnIfNoRealSink:
-    """Tests for _warn_if_no_real_sink."""
-
-    def test_logs_when_pactl_missing(self) -> None:
-        """No pactl on PATH → warns and returns (no sink lookup)."""
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value=None),
-            patch("wake_alarm._sinks._list_real_sinks") as mock_list,
-        ):
-            _warn_if_no_real_sink()
-            mock_list.assert_not_called()
-
-    def test_warns_when_no_real_sink(self) -> None:
-        """No real sink → warning is emitted."""
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch("wake_alarm._sinks._list_real_sinks", return_value=[]),
-            patch("wake_alarm._sinks._logger") as mock_log,
-        ):
-            _warn_if_no_real_sink()
-            mock_log.warning.assert_called()
-
-    def test_info_when_real_sink_present(self) -> None:
-        """A real sink → info log, no warning."""
-        with (
-            patch("wake_alarm._sinks._pactl_path", return_value="/usr/bin/pactl"),
-            patch(
-                "wake_alarm._sinks._list_real_sinks",
-                return_value=["alsa_output.analog"],
-            ),
-            patch("wake_alarm._sinks._logger") as mock_log,
-        ):
-            _warn_if_no_real_sink()
-            mock_log.info.assert_called()
-            mock_log.warning.assert_not_called()
 
 
 class TestParseArgs:

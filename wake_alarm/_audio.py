@@ -1,31 +1,26 @@
-"""Audio playback, fan control, and PipeWire sink management for the wake alarm."""
+"""Audio playback and PipeWire sink management for the wake alarm."""
 
 from __future__ import annotations
 
 import logging
-import math
 from pathlib import Path
 import shutil
 import struct
 import subprocess
 import sys
-import tempfile
 import time
-import wave
 
 from wake_alarm._sinks import (
     _ensure_sink_audible,
     _list_real_sinks,
     _pactl_path,
 )
+from wake_alarm._tone import _ensure_tone_wav
 
 _logger = logging.getLogger(__name__)
 
-_TONE_CACHE: dict[int, Path] = {}
 _TONE_TIMEOUT_SECONDS: float = 6.0
 _TONE_DURATION_SECONDS: float = 1.5
-_TONE_FRAMERATE: int = 48000
-_TONE_AMPLITUDE: int = 32760  # near s16 max for the loudest sine we can emit
 
 # Number of back-to-back PC-speaker beeps per _play_tone call.
 # pcspkr volume is hardware-fixed, so we lean on repetition + duration to be
@@ -41,26 +36,6 @@ _PCSPKR_EV_SND: int = 0x12
 _PCSPKR_SND_TONE: int = 0x02
 # struct input_event: timeval (long sec, long usec), u16 type, u16 code, s32 val
 _PCSPKR_EVENT_FMT: str = "llHHi"
-
-# NCT Super I/O chip names that expose a single pwm1 fan control channel.
-_NCT_CHIP_NAMES: frozenset[str] = frozenset(
-    {
-        "nct6775",
-        "nct6779",
-        "nct6791",
-        "nct6792",
-        "nct6793",
-        "nct6795",
-        "nct6796",
-        "nct6797",
-        "nct6798",
-        "nct6799",
-    }
-)
-
-# Installed by install.sh, controlled via sudoers NOPASSWD entry.
-_FAN_SCRIPT: str = "/usr/local/bin/wake-alarm-fans.sh"
-_SUDO_BIN: str = "/usr/bin/sudo"
 
 
 def _beep_soft() -> None:
@@ -115,29 +90,6 @@ def _beep_pcspkr(frequency: int, duration_seconds: float) -> None:
             _PCSPKR_DEVICE,
             exc_info=True,
         )
-
-
-def _ensure_tone_wav(frequency: int) -> Path:
-    """Generate (and cache) a mono 48 kHz sine WAV at *frequency* Hz."""
-    cached = _TONE_CACHE.get(frequency)
-    if cached is not None and cached.exists():
-        return cached
-    path = Path(tempfile.gettempdir()) / f"wake_alarm_tone_{frequency}.wav"
-    n_frames = int(_TONE_FRAMERATE * _TONE_DURATION_SECONDS)
-    with wave.open(str(path), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(_TONE_FRAMERATE)
-        frames = bytearray()
-        for i in range(n_frames):
-            sample = int(
-                _TONE_AMPLITUDE
-                * math.sin(2 * math.pi * frequency * i / _TONE_FRAMERATE),
-            )
-            frames.extend(struct.pack("<h", sample))
-        wav.writeframesraw(bytes(frames))
-    _TONE_CACHE[frequency] = path
-    return path
 
 
 def _try_player(binary: str, wav: Path) -> bool:
@@ -286,113 +238,6 @@ def _reap_player(proc: subprocess.Popen[bytes]) -> None:
         _logger.warning("paplay hung; killing pid %d", proc.pid)
         proc.kill()
         proc.wait()
-
-
-def _find_fan_hwmon() -> str | None:
-    """Return the hwmon directory for an NCT fan controller, or None."""
-    for name_path in Path("/sys/class/hwmon").glob("hwmon*/name"):
-        try:
-            chip = name_path.read_text().strip()
-        except OSError:
-            _logger.warning("Could not read %s", name_path, exc_info=True)
-            continue
-        if chip in _NCT_CHIP_NAMES:
-            return str(name_path.parent)
-    _logger.warning(
-        "No NCT super-I/O hwmon entry found; fan ramp will be skipped",
-    )
-    return None
-
-
-def _max_fans() -> bool:
-    """Ramp every NCT pwm channel to 100% speed via the helper script.
-
-    The helper records prior state under /run/wake-alarm-fans.state so
-    _restore_fans() can put things back without arguments. Safe: higher fan
-    speed only lowers temperatures, never damages hardware.
-
-    Returns:
-        True when the ramp script ran successfully, False otherwise.
-    """
-    if _find_fan_hwmon() is None:
-        return False
-    try:
-        result = subprocess.run(
-            [_SUDO_BIN, "-n", _FAN_SCRIPT, "max"],
-            check=False,
-            capture_output=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning(
-            "Fan script %s not runnable; skipping fan ramp",
-            _FAN_SCRIPT,
-            exc_info=True,
-        )
-        return False
-    if result.returncode != 0:
-        _logger.warning(
-            "Fan script %s exited %d: %s",
-            _FAN_SCRIPT,
-            result.returncode,
-            result.stderr.decode(errors="replace").strip(),
-        )
-        return False
-    return True
-
-
-def _restore_fans(*, active: bool) -> None:
-    """Restore fan speed if _max_fans() previously succeeded."""
-    if not active:
-        return
-    try:
-        subprocess.run(
-            [_SUDO_BIN, "-n", _FAN_SCRIPT, "restore"],
-            check=False,
-            capture_output=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning(
-            "Failed to restore fan state via %s",
-            _FAN_SCRIPT,
-            exc_info=True,
-        )
-
-
-def _set_max_brightness() -> None:
-    """Set all connected monitors to maximum brightness via xrandr."""
-    xrandr = shutil.which("xrandr")
-    if xrandr is None:
-        _logger.warning("xrandr not on PATH; skipping max-brightness")
-        return
-    try:
-        result = subprocess.run(
-            [xrandr, "--query"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        _logger.warning("xrandr --query failed; skipping max-brightness", exc_info=True)
-        return
-    for line in result.stdout.splitlines():
-        if " connected" in line:
-            output = line.split()[0]
-            try:
-                subprocess.run(
-                    [xrandr, "--output", output, "--brightness", "1.0"],
-                    check=False,
-                    capture_output=True,
-                    timeout=5,
-                )
-            except (OSError, subprocess.TimeoutExpired):
-                _logger.warning(
-                    "Failed to set brightness on %s",
-                    output,
-                    exc_info=True,
-                )
 
 
 def _beep_medium(frequency: int = 1000) -> None:

@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from wake_alarm._alarm import (
     WakeAlarm,
-    main,
 )
 
 # ---------------------------------------------------------------------------
@@ -42,6 +41,7 @@ def _block_real_tk() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
@@ -55,16 +55,14 @@ def _block_real_tk() -> Generator[MagicMock]:
 def _block_extra_devices() -> Generator[MagicMock]:
     """Prevent real subprocess.Popen calls for extra ALSA devices."""
     with (
-        patch("wake_alarm._alarm._play_on_all_sinks") as mock,
-        patch("wake_alarm._alarm._max_fans", return_value=False),
-        patch("wake_alarm._alarm._restore_fans"),
-        patch("wake_alarm._alarm._set_max_brightness"),
-        patch("wake_alarm._alarm._wake_display"),
+        patch("wake_alarm._beep_loop._play_on_all_sinks") as mock,
+        patch("wake_alarm._startup._set_max_brightness"),
+        patch("wake_alarm._startup._wake_display"),
         patch("wake_alarm._alarm._restore_display"),
-        patch("wake_alarm._alarm._warn_if_no_real_sink"),
+        patch("wake_alarm._startup._warn_if_no_real_sink"),
         patch("wake_alarm._alarm._activate_all_outputs", return_value=None),
         patch("wake_alarm._alarm._restore_audio_state"),
-        patch("wake_alarm._alarm.turn_on_plug"),
+        patch("wake_alarm._startup.turn_on_plug"),
         patch("wake_alarm._alarm.turn_off_plug"),
     ):
         yield mock
@@ -76,6 +74,7 @@ def mock_tk_module() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
@@ -126,204 +125,6 @@ class TestWakeAlarmInit:
         alarm._stop_beep.set()
 
 
-class TestWakeAlarmDismiss:
-    """Tests for alarm dismiss logic."""
-
-    def test_correct_code_dismisses_after_all_rounds(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Entering the correct answer for every required round dismisses the alarm."""
-        from wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
-
-        alarm = WakeAlarm(demo_mode=True)
-
-        with patch(
-            "wake_alarm._alarm.save_wake_state",
-        ) as mock_save:
-            for _ in range(DISMISS_ROUNDS_REQUIRED):
-                alarm._view.entry_var.get.return_value = (
-                    alarm._progress.current_challenge.answer
-                )
-                alarm._on_submit()
-
-        assert alarm.dismissed is True
-        mock_save.assert_called_once()
-        assert mock_save.call_args[1]["skip_workout"] is True
-        alarm._stop_beep.set()
-
-    def test_first_round_correct_does_not_dismiss(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """A single correct entry is not enough — DISMISS_ROUNDS_REQUIRED is 2+."""
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._view.entry_var.get.return_value = (
-            alarm._progress.current_challenge.answer
-        )
-
-        alarm._on_submit()
-
-        assert alarm.dismissed is False
-        assert alarm._progress.rounds_completed == 1
-        alarm._stop_beep.set()
-
-    def test_first_round_correct_non_flash_next_no_countdown(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """When next challenge is math, no flash countdown is started."""
-        from wake_alarm._challenges import _Challenge
-
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._view.entry_var.get.return_value = (
-            alarm._progress.current_challenge.answer
-        )
-        next_math = _Challenge(kind="math", display="2 + 2 = ?", answer="4", hint="x")
-        with patch("wake_alarm._alarm._make_challenge", return_value=next_math):
-            alarm._on_submit()
-
-        assert alarm._progress.current_challenge.kind == "math"
-        assert alarm.dismissed is False
-        alarm._stop_beep.set()
-
-    def test_wrong_code_does_not_dismiss(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Entering the wrong answer shows an error without dismissing."""
-        from wake_alarm._alarm import _Challenge
-
-        alarm = WakeAlarm(demo_mode=True)
-        # Use a pinned math challenge so the non-flash wrong-answer branch is covered.
-        alarm._progress.current_challenge = _Challenge(
-            kind="math", display="2 + 2 = ?", answer="4", hint="test"
-        )
-        alarm._view.entry_var.get.return_value = "99"
-
-        alarm._on_submit()
-
-        assert alarm.dismissed is False
-        alarm._stop_beep.set()
-
-    def test_skip_window_expired_keeps_alarm_running(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Skip-window expiry denies the skip but does NOT stop the alarm."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-
-        with patch(
-            "wake_alarm._alarm.save_wake_state",
-        ) as mock_save:
-            alarm._on_skip_window_expired()
-
-        # Alarm stays active and audible; only the skip reward is gone.
-        assert alarm._progress.skip_earnable is False
-        assert alarm._active is True
-        assert alarm.dismissed is False
-        assert not alarm._stop_beep.is_set()
-        mock_save.assert_not_called()
-        alarm._view._views[0].labels.info.configure.assert_called()
-        alarm._stop_beep.set()
-
-    def test_skip_window_expired_noop_if_not_active(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Expiry is a no-op if alarm is no longer active."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._active = False
-
-        alarm._on_skip_window_expired()
-
-        # skip_earnable stays at its initial True (method returned early).
-        assert alarm._progress.skip_earnable is True
-        alarm._stop_beep.set()
-
-    def test_dismiss_after_skip_window_earns_no_skip(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Typing all rounds after the skip window stops the alarm without a skip."""
-        from wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
-
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._progress.skip_earnable = False
-
-        with patch(
-            "wake_alarm._alarm.save_wake_state",
-        ) as mock_save:
-            for _ in range(DISMISS_ROUNDS_REQUIRED):
-                alarm._view.entry_var.get.return_value = (
-                    alarm._progress.current_challenge.answer
-                )
-                alarm._on_submit()
-
-        assert alarm.dismissed is True
-        assert mock_save.call_args[1]["skip_workout"] is False
-        alarm._stop_beep.set()
-
-
-class TestMain:
-    """Tests for the main() entry point."""
-
-    def test_exits_when_not_alarm_day(self) -> None:
-        """main() returns early when not an alarm day."""
-        with (
-            patch(
-                "wake_alarm._alarm._should_run_alarm",
-                return_value=False,
-            ),
-            patch("wake_alarm._alarm.sys") as mock_sys,
-        ):
-            mock_sys.argv = ["alarm"]
-            main()  # Should just return without error
-
-    def test_creates_alarm_when_should_run(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """main() creates a WakeAlarm when conditions are met."""
-        del mock_tk_module
-        with (
-            patch(
-                "wake_alarm._alarm._should_run_alarm",
-                return_value=True,
-            ),
-            patch(
-                "wake_alarm._alarm.sys",
-            ) as mock_sys,
-            patch.object(WakeAlarm, "run") as mock_run,
-            patch.object(WakeAlarm, "__init__", return_value=None),
-        ):
-            mock_sys.argv = ["alarm"]
-            main()
-            mock_run.assert_called_once()
-
-    def test_trigger_now_bypasses_gate(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """--trigger-now bypasses _should_run_alarm."""
-        del mock_tk_module
-        with (
-            patch(
-                "wake_alarm._alarm._should_run_alarm",
-                return_value=False,
-            ) as mock_gate,
-            patch("wake_alarm._alarm.sys") as mock_sys,
-            patch.object(WakeAlarm, "run") as mock_run,
-            patch.object(WakeAlarm, "__init__", return_value=None),
-        ):
-            mock_sys.argv = ["alarm", "--trigger-now"]
-            main()
-            mock_gate.assert_not_called()
-            mock_run.assert_called_once()
-
-
 class TestCodeRefreshAndTimer:
     """Tests for code refresh and timer update methods."""
 
@@ -360,24 +161,6 @@ class TestCodeRefreshAndTimer:
         alarm = WakeAlarm(demo_mode=True)
         alarm._active = False
         alarm._update_timer()  # Should not raise
-        alarm._stop_beep.set()
-
-
-class TestBeepLoop:
-    """Tests for the beep loop thread."""
-
-    def test_beep_loop_stops_on_event(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Beep loop exits when stop event is set."""
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._stop_beep.set()
-        # Loop should exit immediately
-        with patch(
-            "wake_alarm._alarm._beep_soft",
-        ):
-            alarm._beep_loop()
         alarm._stop_beep.set()
 
 

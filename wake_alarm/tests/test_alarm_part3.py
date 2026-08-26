@@ -37,6 +37,7 @@ def _block_real_tk() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
@@ -50,16 +51,14 @@ def _block_real_tk() -> Generator[MagicMock]:
 def _block_extra_devices() -> Generator[MagicMock]:
     """Prevent real subprocess calls for extra ALSA devices and hardware."""
     with (
-        patch("wake_alarm._alarm._play_on_all_sinks") as mock,
-        patch("wake_alarm._alarm._max_fans", return_value=False),
-        patch("wake_alarm._alarm._restore_fans"),
-        patch("wake_alarm._alarm._set_max_brightness"),
-        patch("wake_alarm._alarm._wake_display"),
+        patch("wake_alarm._beep_loop._play_on_all_sinks") as mock,
+        patch("wake_alarm._startup._set_max_brightness"),
+        patch("wake_alarm._startup._wake_display"),
         patch("wake_alarm._alarm._restore_display"),
-        patch("wake_alarm._alarm._warn_if_no_real_sink"),
+        patch("wake_alarm._startup._warn_if_no_real_sink"),
         patch("wake_alarm._alarm._activate_all_outputs", return_value=None),
         patch("wake_alarm._alarm._restore_audio_state"),
-        patch("wake_alarm._alarm.turn_on_plug"),
+        patch("wake_alarm._startup.turn_on_plug"),
         patch("wake_alarm._alarm.turn_off_plug"),
     ):
         yield mock
@@ -71,6 +70,7 @@ def mock_tk_module() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",

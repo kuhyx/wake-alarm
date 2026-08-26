@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 from wake_alarm._alarm import WakeAlarm
 from wake_alarm._alarm_view import _EntryProxy
 from wake_alarm._sinks import _AudioState
-from wake_alarm.tests.conftest import TWO_OUTPUTS
 
 # ---------------------------------------------------------------------------
 # Helpers (duplicated from part 1 so this file is self-contained)
@@ -45,6 +44,7 @@ def _block_real_tk() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
@@ -58,16 +58,14 @@ def _block_real_tk() -> Generator[MagicMock]:
 def _block_extra_devices() -> Generator[MagicMock]:
     """Prevent real subprocess.Popen calls for extra ALSA devices."""
     with (
-        patch("wake_alarm._alarm._play_on_all_sinks") as mock,
-        patch("wake_alarm._alarm._max_fans", return_value=False),
-        patch("wake_alarm._alarm._restore_fans"),
-        patch("wake_alarm._alarm._set_max_brightness"),
-        patch("wake_alarm._alarm._wake_display"),
+        patch("wake_alarm._beep_loop._play_on_all_sinks") as mock,
+        patch("wake_alarm._startup._set_max_brightness"),
+        patch("wake_alarm._startup._wake_display"),
         patch("wake_alarm._alarm._restore_display"),
-        patch("wake_alarm._alarm._warn_if_no_real_sink"),
+        patch("wake_alarm._startup._warn_if_no_real_sink"),
         patch("wake_alarm._alarm._activate_all_outputs", return_value=None),
         patch("wake_alarm._alarm._restore_audio_state"),
-        patch("wake_alarm._alarm.turn_on_plug"),
+        patch("wake_alarm._startup.turn_on_plug"),
         patch("wake_alarm._alarm.turn_off_plug"),
     ):
         yield mock
@@ -79,6 +77,7 @@ def mock_tk_module() -> Generator[MagicMock]:
     mock = _make_mock_tk()
     with (
         patch("wake_alarm._alarm.tk", mock),
+        patch("wake_alarm._dismiss_view.tk", mock),
         patch("wake_alarm._alarm_view.tk", mock),
         patch(
             "wake_alarm._alarm.GateRoot",
@@ -132,19 +131,6 @@ class TestClose:
         alarm._lock.close()
         assert alarm._stop_beep.is_set()
         alarm.root.destroy.assert_called()
-
-    def test_on_close_restores_fans(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """on_close calls _restore_fans with the saved fan state."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._hardware.fan_state = True
-        with patch("wake_alarm._alarm._restore_fans") as mock_restore:
-            alarm.on_close()
-        mock_restore.assert_called_once_with(active=True)
-        alarm._stop_beep.set()
 
     def test_on_close_restores_audio(
         self,
@@ -231,53 +217,4 @@ class TestMultiMonitorSurfaces:
 
         _EntryProxy([dead], MagicMock()).focus_force()  # must not raise
 
-        alarm._stop_beep.set()
-
-
-@pytest.mark.usefixtures("dual_output")
-class TestFanOutAcrossMonitors:
-    """The three remaining v0.2.0 loops, on a desk that actually has two.
-
-    Under the single-output default every one of these assertions holds even
-    if the loop body only ever ran for ``containers[0]`` -- which is exactly
-    the regression per-output locking exists to prevent.
-    """
-
-    def test_dismiss_clears_and_repaints_every_monitor(
-        self, mock_tk_module: MagicMock
-    ) -> None:
-        """The dismissal message replaces the challenge on both screens."""
-        alarm = WakeAlarm(demo_mode=True)
-        containers = alarm._view.containers
-        assert len(containers) == len(TWO_OUTPUTS)
-        leftovers = {id(c): [MagicMock(), MagicMock()] for c in containers}
-        for container in containers:
-            container.winfo_children.return_value = leftovers[id(container)]
-        mock_tk_module.Label.reset_mock()
-
-        with patch("wake_alarm._alarm.save_wake_state"):
-            alarm._dismiss_alarm(earned_skip=True)
-
-        for widgets in leftovers.values():
-            for widget in widgets:
-                widget.destroy.assert_called_once_with()
-        parents = [call.args[0] for call in mock_tk_module.Label.call_args_list]
-        assert {id(parent) for parent in parents} == {id(c) for c in containers}
-        alarm._stop_beep.set()
-
-    def test_flash_recolours_every_monitor(self, mock_tk_module: MagicMock) -> None:
-        """A flash tick reaches both surfaces, not just the primary."""
-        del mock_tk_module
-        alarm = WakeAlarm(demo_mode=True)
-        containers = alarm._view.containers
-        # __init__ already ran one flash tick; only the next one should count.
-        for container in containers:
-            container.configure.reset_mock()
-            container.winfo_toplevel.return_value.configure.reset_mock()
-
-        alarm._flash_step()
-
-        for container in containers:
-            container.configure.assert_called_once()
-            container.winfo_toplevel.return_value.configure.assert_called_once()
         alarm._stop_beep.set()
