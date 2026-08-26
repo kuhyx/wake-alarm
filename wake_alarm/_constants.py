@@ -21,14 +21,21 @@ DISMISS_WINDOW_MINUTES: int = 30
 # all — no network *and* no cached read ever written. Minute is implicitly 0.
 FALLBACK_ALARM_HOUR: int = 13
 
-# Alarm escalation phase boundaries (minutes from alarm start)
-PHASE_SOFT_END: int = 5
-PHASE_MEDIUM_END: int = 15
-# After PHASE_MEDIUM_END: continuous sine tone until dismiss window closes
+# Alarm escalation phase boundaries (minutes from alarm start).
+#
+# Compressed to fit INSIDE the 5-minute failsafe window. They used to be 5 and
+# 15, which -- once the failsafe was added at 300 s -- meant the alarm was
+# silenced before it ever left the softest rung, and the medium and loud
+# phases became unreachable code. The alarm has to reach its most annoying
+# setting well before it goes quiet, or waiting out five minutes in bed is a
+# winning strategy.
+PHASE_SOFT_END: int = 1
+PHASE_MEDIUM_END: int = 2
+# After PHASE_MEDIUM_END: alternating loud tones until the failsafe silences.
 
 # Beep intervals per phase (seconds)
-SOFT_BEEP_INTERVAL: float = 10.0
-MEDIUM_BEEP_INTERVAL: float = 5.0
+SOFT_BEEP_INTERVAL: float = 5.0
+MEDIUM_BEEP_INTERVAL: float = 3.0
 LOUD_TOGGLE_INTERVAL: float = 2.0
 
 # Dismiss challenge: length of the random code
@@ -75,7 +82,18 @@ ESCAPE_HISTORY_FILE: Path = (
 )
 # How long the alarm must have been up before the hatch is offered, so it
 # is never the easy first move.
-ESCAPE_OFFER_AFTER_SECONDS: int = 300
+#
+# Deliberately NOT equal to FAILSAFE_SILENCE_SECONDS. Both used to sit at 300,
+# which meant the sound stopped and the escape hatch appeared in the same
+# instant -- making the hatch far more attractive than it was designed to be,
+# exactly when the alarm had just stopped being annoying.
+ESCAPE_OFFER_AFTER_SECONDS: int = 900
+
+# When the failsafe silences the alarm. Audio ONLY: the lock, the typed
+# challenge and the workout gate all persist past this point, so waiting it
+# out in bed is not a way to escape the alarm. It exists so a ring nobody is
+# present to dismiss does not sound indefinitely.
+FAILSAFE_SILENCE_SECONDS: float = 300.0
 
 SYNC_CONFIG_FILE: Path = Path.home() / ".config" / "wake_alarm" / "sync.json"
 

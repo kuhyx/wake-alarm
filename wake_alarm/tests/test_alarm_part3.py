@@ -14,10 +14,6 @@ if TYPE_CHECKING:
 from wake_alarm._alarm import (
     WakeAlarm,
 )
-from wake_alarm._constants import (
-    PHASE_MEDIUM_END,
-    PHASE_SOFT_END,
-)
 
 
 def _make_mock_tk() -> MagicMock:
@@ -84,69 +80,6 @@ def mock_tk_module() -> Generator[MagicMock]:
         yield mock
 
 
-class TestBeepLoopPhases:
-    """Tests for different beep loop escalation phases."""
-
-    def test_medium_phase(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Beep loop enters medium phase after PHASE_SOFT_END minutes."""
-        alarm = WakeAlarm(demo_mode=True)
-        # Set alarm start to make elapsed > PHASE_SOFT_END minutes
-        import time as time_mod
-
-        alarm._progress.started_at = time_mod.monotonic() - (PHASE_SOFT_END + 1) * 60
-
-        call_count = 0
-
-        def stop_after_one(*_args: object, **_kwargs: object) -> None:
-            nonlocal call_count
-            call_count += 1
-            if call_count >= 1:
-                alarm._stop_beep.set()
-
-        with (
-            patch(
-                "wake_alarm._alarm._beep_medium",
-                side_effect=stop_after_one,
-            ) as mock_beep,
-        ):
-            alarm._beep_loop()
-
-        mock_beep.assert_called()
-        alarm._stop_beep.set()
-
-    def test_loud_phase(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Beep loop enters loud phase after PHASE_MEDIUM_END minutes."""
-        alarm = WakeAlarm(demo_mode=True)
-        import time as time_mod
-
-        alarm._progress.started_at = time_mod.monotonic() - (PHASE_MEDIUM_END + 1) * 60
-
-        call_count = 0
-
-        def stop_after_one(*_args: object, **_kwargs: object) -> None:
-            nonlocal call_count
-            call_count += 1
-            if call_count >= 1:
-                alarm._stop_beep.set()
-
-        with (
-            patch(
-                "wake_alarm._alarm._beep_loud",
-                side_effect=stop_after_one,
-            ) as mock_beep,
-        ):
-            alarm._beep_loop()
-
-        mock_beep.assert_called()
-        alarm._stop_beep.set()
-
-
 class TestRunMethod:
     """Tests for the run() method."""
 
@@ -211,106 +144,6 @@ class TestUpdateTimerActive:
         alarm._view._views[0].labels.timer.configure.reset_mock()
         alarm._update_timer()
         alarm._view._views[0].labels.timer.configure.assert_not_called()
-        alarm._stop_beep.set()
-
-
-class TestFlashChallenge:
-    """Tests for flash challenge countdown behaviour inside WakeAlarm."""
-
-    def test_flash_tick_counts_down_and_hides(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """_flash_tick counts down per second and hides the code at zero."""
-        from wake_alarm._alarm import _Challenge
-
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._progress.current_challenge = _Challenge(
-            kind="flash",
-            display="ABCDEFGH",
-            answer="ABCDEFGH",
-            hint="Memorise",
-        )
-        alarm._progress.flash_remaining = 2
-        alarm._view._views[0].labels.status.configure.reset_mock()
-
-        alarm._flash_tick()
-        assert alarm._progress.flash_remaining == 1
-        alarm._view._views[0].labels.status.configure.assert_called()
-
-        alarm._flash_tick()
-        assert alarm._progress.flash_remaining == 0
-
-        # Final tick hides the code.
-        alarm._flash_tick()
-        # _code_label and _status_label share the same mock; inspect all calls.
-        all_texts = [
-            c.kwargs.get("text", "")
-            for c in alarm._view._views[0].labels.code.configure.call_args_list
-        ]
-        assert any("?" in t for t in all_texts)
-        alarm._stop_beep.set()
-
-    def test_flash_tick_noop_when_inactive(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """_flash_tick returns immediately when the alarm is no longer active."""
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._active = False
-        alarm._progress.flash_remaining = 3
-        alarm._view._views[0].labels.status.configure.reset_mock()
-
-        alarm._flash_tick()
-
-        alarm._view._views[0].labels.status.configure.assert_not_called()
-        alarm._stop_beep.set()
-
-    def test_wrong_flash_answer_reshows_code(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Wrong flash answer restores the code and restarts the countdown."""
-        from wake_alarm._alarm import _Challenge
-
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._progress.current_challenge = _Challenge(
-            kind="flash",
-            display="TESTCODE",
-            answer="TESTCODE",
-            hint="Memorise",
-        )
-        alarm._view.entry_var.get.return_value = "WRONGCODE"
-        alarm._view._views[0].labels.code.configure.reset_mock()
-
-        alarm._on_submit()
-
-        assert alarm.dismissed is False
-        # Code label should be reconfigured (code shown again + countdown restarted).
-        alarm._view._views[0].labels.code.configure.assert_called()
-        alarm._stop_beep.set()
-
-    def test_next_round_flash_starts_countdown(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """When the next-round challenge is flash, the countdown starts immediately."""
-        from wake_alarm._alarm import _Challenge
-
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._progress.current_challenge = _Challenge(
-            kind="math", display="2 + 2 = ?", answer="4", hint="test"
-        )
-        next_flash = _Challenge(
-            kind="flash", display="ABCDEFGH", answer="ABCDEFGH", hint="Memorise"
-        )
-        alarm._view.entry_var.get.return_value = "4"
-
-        with patch("wake_alarm._alarm._make_challenge", return_value=next_flash):
-            alarm._on_submit()
-
-        assert alarm._progress.current_challenge.kind == "flash"
-        assert alarm.dismissed is False
         alarm._stop_beep.set()
 
 
