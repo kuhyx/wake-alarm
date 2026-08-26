@@ -92,6 +92,13 @@ SYNC_TOKEN_FALLBACK_FILES: tuple[Path, ...] = (
 # Where a successful read is cached, so a network blip can't cost a wake-up.
 ALARM_CACHE_FILE: Path = Path.home() / ".config" / "wake_alarm" / "alarm_cache.json"
 
+# Delays between card-profile reactivation passes while the alarm rings.
+# The G27Q's HDMI sink takes ~15 s to enumerate after the monitor wakes, and
+# until its card profile is switched on the sink does not exist at all -- so
+# re-enumerating sinks alone can never find it. Decaying schedule: dense early
+# (when outputs are still arriving), sparse later, stopping at ~2 minutes.
+REACTIVATE_ATTEMPT_DELAYS: tuple[float, ...] = (3.0, 5.0, 7.0, 10.0, 15.0, 20.0, 30.0)
+
 # Structured logs live under XDG state, not .config: they are churning runtime
 # data, not configuration. The JSONL file is additive -- the journal keeps
 # receiving the same records via stderr.
