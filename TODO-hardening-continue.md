@@ -2,7 +2,7 @@
 
 REMOVE ME AFTER FINISH
 
-Phases 0–6 are committed (`4286fcb`..`97d32c8`). This file is the entry point
+Phases 0–7 are committed (`4286fcb`..`f5eb7fc`). This file is the entry point
 for the rest. **Full plan, with every measured finding:**
 `~/.claude/plans/wake-alarm-still-does-witty-toucan.md` — read it before
 starting; this file deliberately does not duplicate it.
@@ -19,14 +19,16 @@ starting; this file deliberately does not duplicate it.
 | 14 fans | Gone: code, script, sudoers entry, installed state. Three stale doc/message references cleaned up in phase 6. |
 | 2 power button | **Done.** `_inhibit.py` (logind block, self-terminating, stale cleanup by pid via `/proc`) + `_alarm_session.py` fire-time record, re-fired by `_trigger` outside the catch-up window. |
 | 10 vmbox | **Done.** `scripts/vmbox/harness.sh` + `DOCS-vmbox.md`. 8 cases, fails closed. Found 2 live bugs the host could not reach. |
+| 5 curtains | **Done.** `_curtains.py` driver protocol + no-op default, called from `prepare_hardware()`. `DOCS-curtains-hardware.md` has the buy list. |
 
 ## Remaining, in order
 
 1. **Items 4/3/1, phone.** Biggest chunk by far. Own session. Everything here
    is new — the app has zero alarm capability today, only a time picker.
-2. **Item 8, mutual gating.** Needs 1 done first.
-3. **Item 5 curtains**, then **item 13 black screen** (different repo,
-   host-only).
+2. **Item 8, mutual gating.** Needs 1 done first. This is the phase that
+   legitimately touches `_sync.py`, so it carries that split (see below).
+3. **Item 13, black screen.** Different repo (`~/testsAndMisc/
+   linux_configuration`), host-only, blocks nothing.
 
 ## Decisions already made — do not re-litigate
 
@@ -82,6 +84,16 @@ starting; this file deliberately does not duplicate it.
   for any dismissal between 00:00 and 02:00 local. `_alarm_session.py` shows
   the way around it: carry an aware `fired_at`, compare elapsed time, no date
   key at all.
+- **Do not split a file the current change does not already have to touch.**
+  The gate fires on *staged* files, so an oversized file only becomes your
+  problem once you edit it. Editing `_sync.py` merely to repoint an import
+  pulled its 371 lines into the changeset and cascaded into five new modules
+  and a broken tree before being reverted. Prefer putting a new constant in
+  its single consumer (as `_curtains.py` does) over touching `_constants.py`.
+- **A `__main__` CLI extracted to a new module breaks its documented command
+  silently.** `python -m wake_alarm._sync --show` printed nothing and exited
+  0 — invisible to ruff, mypy, pylint and the suite alike. If a later phase
+  moves that CLI, run the documented command and check the *output*.
 - **Ruff's autofix will gut a function** whose results are only printed —
   it stripped both the assignments and the `print` from a vmbox check, and
   every linter stayed green. Grep the file for its output call after any
