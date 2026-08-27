@@ -34,7 +34,21 @@ class AlarmActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         AlarmChannel.register(this, flutterEngine)
-        alarmChannel = channel(flutterEngine)
+        val channel = channel(flutterEngine)
+        alarmChannel = channel
+        // AlarmChannel deliberately holds applicationContext, so it cannot
+        // finish an activity. Without this the dismiss screen stays up over
+        // the lockscreen forever after a correct answer — back is disabled,
+        // and the live instance would carry _inRoom=true and the solved
+        // answer into the next ring.
+        channel.setMethodCallHandler { call, result ->
+            if (call.method == "closeRingScreen") {
+                finishAndRemoveTask()
+                result.success(null)
+            } else {
+                AlarmChannel.handleCall(applicationContext, call, result)
+            }
+        }
     }
 
     override fun onResume() {

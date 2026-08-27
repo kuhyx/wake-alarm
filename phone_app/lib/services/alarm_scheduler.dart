@@ -65,6 +65,28 @@ class AlarmScheduler {
     });
   }
 
+  /// Starts reader mode so the next tag tapped can be registered.
+  ///
+  /// Returns false when the device has no NFC or it is switched off, so the
+  /// UI can say so rather than waiting on a tap that cannot come.
+  Future<bool> startTagRegistration() async =>
+      await _channel.invokeMethod<bool>('startTagRegistration') ?? false;
+
+  /// Stops reader mode after registration.
+  Future<void> stopTagRegistration() =>
+      _channel.invokeMethod<void>('stopTagRegistration');
+
+  /// Stops listening for NFC taps.
+  void clearNfcListener() => _channel.setMethodCallHandler(null);
+
+  /// Closes the ring screen after a successful dismiss.
+  ///
+  /// Without this the dismiss screen stays up over the lockscreen forever —
+  /// back is disabled by design — and the live instance would carry a
+  /// satisfied room proof and the solved answer into the next ring.
+  Future<void> closeRingScreen() =>
+      _channel.invokeMethod<void>('closeRingScreen');
+
   /// Starts the ring immediately, without waiting for the alarm instant.
   ///
   /// Exists so the foreground-service and full-screen-intent path can be

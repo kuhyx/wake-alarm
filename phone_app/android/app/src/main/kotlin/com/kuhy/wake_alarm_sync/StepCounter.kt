@@ -29,6 +29,9 @@ object StepCounter {
     @Volatile
     private var latest: Long? = null
 
+    /** The single registered listener; kept so rings do not accumulate them. */
+    private var listener: SensorEventListener? = null
+
     /**
      * Starts listening and records the first reading as this ring's baseline.
      *
@@ -70,22 +73,25 @@ object StepCounter {
      * the ring screen polls repeatedly, and re-registering per read would cost
      * a fresh sensor warm-up each time.
      */
+    @Synchronized
     private fun listen(context: Context, onFirst: (Long) -> Unit) {
         val manager =
             context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return
         val sensor = manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) ?: return
-        manager.registerListener(
-            object : SensorEventListener {
-                override fun onSensorChanged(event: SensorEvent) {
-                    val total = event.values.firstOrNull()?.toLong() ?: return
-                    latest = total
-                    onFirst(total)
-                }
+        // One registration per process: markRingStart runs on every ring, and
+        // an unregistered listener per ring would accumulate for the lifetime
+        // of the app.
+        listener?.let { manager.unregisterListener(it) }
+        val fresh = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                val total = event.values.firstOrNull()?.toLong() ?: return
+                latest = total
+                onFirst(total)
+            }
 
-                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
-            },
-            sensor,
-            SensorManager.SENSOR_DELAY_NORMAL,
-        )
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        listener = fresh
+        manager.registerListener(fresh, sensor, SensorManager.SENSOR_DELAY_NORMAL)
     }
 }

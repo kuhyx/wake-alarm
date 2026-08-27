@@ -18,10 +18,10 @@ object AlarmChannel {
     fun register(context: Context, engine: FlutterEngine) {
         val app = context.applicationContext
         MethodChannel(engine.dartExecutor.binaryMessenger, AlarmActivity.CHANNEL)
-            .setMethodCallHandler { call, result -> handle(app, call, result) }
+            .setMethodCallHandler { call, result -> handleCall(app, call, result) }
     }
 
-    private fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
+    fun handleCall(context: Context, call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "schedule" -> schedule(context, call, result)
             "cancel" -> {
@@ -49,6 +49,9 @@ object AlarmChannel {
                 result.success(null)
             }
             "hasNfc" -> result.success(NfcReader.isAvailable(context))
+            // Handled by AlarmActivity, which owns the window; reaching here
+            // means the picker asked, where there is no ring screen to close.
+            "closeRingScreen" -> result.success(null)
             "stepCount" -> result.success(StepCounter.stepsSinceRingStart(context))
             "beginStepCount" -> {
                 StepCounter.markRingStart(context)

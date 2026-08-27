@@ -90,6 +90,7 @@ class _RingScreenState extends State<RingScreen> {
 
   @override
   void dispose() {
+    _scheduler.clearNfcListener();
     _flashTimer?.cancel();
     _input.dispose();
     _elapsed.stop();
@@ -124,8 +125,16 @@ class _RingScreenState extends State<RingScreen> {
       _startFlashTimerIfNeeded();
       return;
     }
-    unawaited(_scheduler.dismiss());
     setState(() => _status = 'Dismissed');
+    unawaited(_finishDismiss());
+  }
+
+  /// Stops the ring, then closes this screen.
+  ///
+  /// Ordered: the sound must stop even if closing the window fails.
+  Future<void> _finishDismiss() async {
+    await _scheduler.dismiss();
+    await _scheduler.closeRingScreen();
   }
 
   @override

@@ -7,6 +7,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 
 /**
  * The normal app entry point (the time picker).
@@ -51,9 +52,43 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    /** Kept so NFC reader mode can push tag ids back to the Settings screen. */
+    private var alarmChannel: MethodChannel? = null
+
+    /** True while Settings is waiting for a tag to register. */
+    private var registeringTag = false
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         AlarmChannel.register(this, flutterEngine)
+        val channel = AlarmActivity.channel(flutterEngine)
+        alarmChannel = channel
+        // Registration needs an Activity for reader mode, which the shared
+        // channel handler cannot supply — it holds applicationContext.
+        channel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startTagRegistration" -> {
+                    registeringTag = NfcReader.start(this, channel)
+                    result.success(registeringTag)
+                }
+                "stopTagRegistration" -> {
+                    registeringTag = false
+                    NfcReader.stop(this)
+                    result.success(null)
+                }
+                else -> AlarmChannel.handleCall(applicationContext, call, result)
+            }
+        }
+    }
+
+    override fun onPause() {
+        if (registeringTag) NfcReader.stop(this)
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (registeringTag) alarmChannel?.let { NfcReader.start(this, it) }
     }
 
     private companion object {

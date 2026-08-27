@@ -190,9 +190,29 @@ to it, so steps only accrue after pickup and can be faked by shaking it in
 bed. Steps are accepted only together with elapsed time, as the fallback for
 when both other mechanisms fail.
 
+**`ringNow` + `lib/main_ring_probe.dart` are a deliberate manual test
+handle**, the phone-side equivalent of `wake-alarm.service` on the PC: the
+normal arm path needs a sync backend connected, so there is no other way to
+fire the ring on an emulator. The probe runs the **real** app widget and
+pushes `/ring` — an earlier version rendered its own UI and so proved nothing
+about the route. `flutter build apk` uses `lib/main.dart`, so the probe is
+never the shipped entrypoint; `ringNow` is reachable only over this app's own
+channel and arms nothing. Do not "clean these up" without replacing the
+capability.
+
 Emulator: `wake_alarm_api36` (Pixel 6a profile, API 36). The SDK tools are at
 `~/Android/Sdk` but **not on PATH** — export `ANDROID_HOME` and add
-`cmdline-tools/latest/bin`, `emulator` and `platform-tools` yourself.
+`cmdline-tools/latest/bin`, `emulator` and `platform-tools` yourself. The
+phone (Pixel 6a, `23181JEGR08034`) holds a **release-signed** build, so
+`phone_deploy.sh` needs `--release` or the install fails with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+
+**The ring screen must close itself on dismiss.** `AlarmActivity` handles
+`closeRingScreen` (the shared `AlarmChannel` holds `applicationContext` and
+cannot finish an activity). Without it the dismiss screen stays up over the
+lockscreen forever — back is disabled by design in both halves — and the live
+instance would carry a satisfied room proof and the solved answer into the
+next ring.
 
 ## Module map
 

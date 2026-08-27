@@ -7,7 +7,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AlarmScheduler scheduler;
-  int steps = 0;
+  var steps = 0;
 
   setUp(() {
     const channel = MethodChannel(AlarmScheduler.channelName);
