@@ -18,7 +18,10 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.kuhy.wake_alarm_sync"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned explicitly rather than delegated to the Flutter Gradle plugin:
+    // full-screen-intent and foreground-service semantics both changed at
+    // API 34/35, and the alarm path cannot be reasoned about without a floor.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -28,9 +31,13 @@ android {
 
     defaultConfig {
         applicationId = "com.kuhy.wake_alarm_sync"
-        // flutter_secure_storage requires API 23+ (Android Keystore).
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // 28 is the floor for android:showWhenLocked / android:turnScreenOn as
+        // plain manifest attributes, which the ring activity relies on; it also
+        // clears flutter_secure_storage's API 23 (Android Keystore) requirement
+        // and Flutter's own default of 24.
+        minSdk = 28
+        // Matches the target phone. Keep in step with compileSdk above.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
