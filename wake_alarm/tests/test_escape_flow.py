@@ -143,7 +143,7 @@ class TestEscapeDialog:
         self, tracker: EscapeTracker
     ) -> tuple[EscapeDialog, MagicMock, MagicMock]:
         granted, cancelled = MagicMock(), MagicMock()
-        with patch("wake_alarm._escape_flow.tk") as fake_tk:
+        with patch("wake_alarm._escape_dialog.tk") as fake_tk:
             # Distinct entries, or all three fields are one mock and a test
             # setting reason/onset/severity separately would only be setting
             # the last of them three times over.
