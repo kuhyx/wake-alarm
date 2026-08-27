@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
+from wake_alarm import _correlation
 from wake_alarm._correlation import correlation_id, correlation_id_for
+from wake_alarm._sync import Alarm
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def _local(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
@@ -41,3 +47,23 @@ def test_correlation_id_for_ignores_the_time_of_now() -> None:
     early = correlation_id_for(6, 0, now=_local(2026, 8, 26, 1, 2))
     late = correlation_id_for(6, 0, now=_local(2026, 8, 26, 23, 58))
     assert early == late == "wake-20260826-0600"
+
+
+def test_today_id_comes_from_the_alarm_not_the_start_instant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A late start must not shift the id away from the phone's.
+
+    The alarm can begin a full catch-up window late, or hours late on a
+    re-fire. Both halves derive the id independently with no handshake, so
+    deriving the PC's from *now* rather than from the resolved alarm time
+    would silently stop the two log streams joining.
+    """
+    monkeypatch.setattr(_correlation, "get_alarm", lambda: Alarm(6, 45, "remote"))
+    today = datetime.now().astimezone()
+
+    # Started at 07:35 -- 50 minutes into the catch-up window.
+    assert _correlation.correlation_id_for_today() == correlation_id_for(
+        6, 45, now=today
+    )
+    assert _correlation.correlation_id_for_today().endswith("-0645")

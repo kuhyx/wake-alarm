@@ -153,6 +153,29 @@ class TestClose:
         mock_restore.assert_called_once_with(state)
         alarm._stop_beep.set()
 
+    def test_on_close_releases_the_inhibitor_and_closes_the_session(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """Both are released here, not in _dismiss_alarm.
+
+        on_close() is the one path that runs on *every* exit -- dismissal, the
+        escape hatch and SIGTERM alike -- so an alarm killed by systemd still
+        gives the power button back and still marks its session finished.
+        """
+        del mock_tk_module
+        alarm = WakeAlarm(demo_mode=True)
+        sentinel = object()
+        alarm._hardware.inhibitor = sentinel
+        with (
+            patch("wake_alarm._alarm.release_power_key_inhibitor") as release,
+            patch("wake_alarm._alarm.finish_session") as finish,
+        ):
+            alarm.on_close()
+        release.assert_called_once_with(sentinel)
+        finish.assert_called_once_with()
+        alarm._stop_beep.set()
+
 
 class TestMultiMonitorSurfaces:
     """Per-output behaviour added in the gatelock v0.2.0 migration."""

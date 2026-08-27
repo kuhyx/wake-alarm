@@ -11,6 +11,8 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import subprocess
+
     from wake_alarm._challenges import _Challenge
     from wake_alarm._sinks import _AudioState
 
@@ -29,6 +31,12 @@ class _AlarmProgress:
 
 @dataclass
 class _AlarmHardware:
-    """Hardware state captured at alarm start, restored when it closes."""
+    """Machine state the alarm takes at start and gives back when it closes.
+
+    Both fields are released together in ``on_close()``, so they live together:
+    the audio routing the alarm rewrote, and the logind inhibitor holding the
+    power button down while it rings.
+    """
 
     audio_restore: _AudioState | None
+    inhibitor: subprocess.Popen[bytes] | None = None

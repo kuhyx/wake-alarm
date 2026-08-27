@@ -26,6 +26,7 @@ import logging
 import subprocess
 import sys
 
+from wake_alarm._alarm_session import should_refire
 from wake_alarm._constants import (
     ALARM_DAYS,
     TRIGGER_CATCHUP_MINUTES,
@@ -137,6 +138,15 @@ def _decide(now: datetime, alarm: Alarm) -> tuple[bool, str]:
     skip = _skip_reason(now)
     if skip is not None:
         return False, skip
+
+    # An alarm that was cut short -- almost always a power-button press or a
+    # hard power-off -- left a "ringing" session record that nothing cleared.
+    # It re-fires regardless of the catch-up window, because the whole point is
+    # that the machine may have been off for the rest of that window. The day /
+    # dismissed / workout gates above still apply, and the record itself is
+    # age-bounded, so this cannot loop forever on a crashed alarm.
+    if should_refire(now=now):
+        return True, "an earlier alarm was cut short and never dismissed"
 
     fire_at, window_end = _fire_window(alarm, now)
     if now < fire_at:

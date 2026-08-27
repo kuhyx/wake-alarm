@@ -21,6 +21,7 @@ from gatelock import (
 
 from wake_alarm._alarm_display import _restore_display
 from wake_alarm._alarm_flash import AlarmFlashMixin
+from wake_alarm._alarm_session import finish_session, start_session
 from wake_alarm._alarm_state import _AlarmHardware, _AlarmProgress
 from wake_alarm._alarm_timers import AlarmTimersMixin
 from wake_alarm._alarm_view import _build_alarm_view, _ViewGroup
@@ -29,8 +30,13 @@ from wake_alarm._challenges import (
     _make_challenge,
 )
 from wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
+from wake_alarm._correlation import correlation_id, correlation_id_for_today
 from wake_alarm._escape_flow import EscapeHatch, build_tracker
 from wake_alarm._gating import parse_args, should_run_alarm
+from wake_alarm._inhibit import (
+    release_power_key_inhibitor,
+    take_power_key_inhibitor,
+)
 from wake_alarm._lock_setup import build_config, claim_arbiter
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._reactivate import start_alarm_reactivation
@@ -58,11 +64,16 @@ _logger = logging.getLogger(__name__)
 class WakeAlarm(AlarmTimersMixin, AlarmFlashMixin):
     """Fullscreen wake alarm with escalating beep and dismiss challenge."""
 
-    def __init__(self, *, demo_mode: bool = False) -> None:
+    def __init__(
+        self, *, demo_mode: bool = False, correlation: str | None = None
+    ) -> None:
         """Initialize the wake alarm.
 
         Args:
             demo_mode: If True, use a smaller window and shorter timers.
+            correlation: The morning's correlation id, derived from the
+                *resolved alarm instant* by the caller. Defaults to one
+                derived from now, which is only right for a demo run.
         """
         self.demo_mode = demo_mode
         self.dismissed = False
@@ -91,7 +102,15 @@ class WakeAlarm(AlarmTimersMixin, AlarmFlashMixin):
         self._schedule_code_refresh()
         self._schedule_skip_window_close()
         start_beep_thread(self._stop_beep, self._progress.started_at)
-        self._hardware = _AlarmHardware(audio_restore=_activate_all_outputs())
+        # Taken while the alarm is audible, released in on_close(). A short
+        # power-button press would otherwise end the alarm in one tap.
+        inhibitor = take_power_key_inhibitor()
+        # Written before anything can go wrong: a power cut from here on
+        # leaves a "ringing" record for _trigger to re-fire from on boot.
+        start_session(correlation or correlation_id(datetime.now().astimezone()))
+        self._hardware = _AlarmHardware(
+            audio_restore=_activate_all_outputs(), inhibitor=inhibitor
+        )
         # The first activation above runs before the monitor has finished its
         # HDMI handshake, so the sink that matters most may not exist yet.
         # Keep retrying in the background until the alarm is dismissed -- only
@@ -145,6 +164,11 @@ class WakeAlarm(AlarmTimersMixin, AlarmFlashMixin):
     def on_close(self) -> None:
         """Restore audio/display/plug; runs on every exit path, even SIGTERM."""
         self._stop_beep.set()
+        # Closing the session here, not in _dismiss_alarm, so the escape hatch
+        # and a SIGTERM close it too. The one path that cannot reach this is
+        # the power cut it exists to catch.
+        finish_session()
+        release_power_key_inhibitor(self._hardware.inhibitor)
         _restore_audio_state(self._hardware.audio_restore)
         _restore_display()
         turn_off_plug()
@@ -217,7 +241,7 @@ def main() -> None:
         args.trigger_now,
     )
     prepare_hardware()
-    alarm = WakeAlarm(demo_mode=args.demo)
+    alarm = WakeAlarm(demo_mode=args.demo, correlation=correlation_id_for_today())
     alarm.run()
 
 

@@ -12,10 +12,9 @@ UTC, which is a separate known mismatch tracked in the hardening plan).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import datetime
 
-if TYPE_CHECKING:
-    from datetime import datetime
+from wake_alarm._sync import get_alarm
 
 # ``wake-YYYYMMDD-HHMM``. Stable across processes and across devices.
 _CORRELATION_FORMAT = "wake-%Y%m%d-%H%M"
@@ -49,3 +48,20 @@ def correlation_id_for(hour: int, minute: int, *, now: datetime) -> str:
         The correlation id string.
     """
     return correlation_id(now.replace(hour=hour, minute=minute))
+
+
+def correlation_id_for_today() -> str:
+    """Derive this morning's correlation id from the *resolved alarm time*.
+
+    Not from "now": the alarm can start up to a full catch-up window late, and
+    a re-fire after a power-off can start hours later still. The phone derives
+    its id from the alarm time it was set to, with no handshake between the
+    two, so deriving the PC's from the start instant would silently stop the
+    two log streams joining -- ``wake-20260827-0735`` against
+    ``wake-20260827-0700``.
+
+    Returns:
+        The correlation id both halves compute independently.
+    """
+    alarm = get_alarm()
+    return correlation_id_for(alarm.hour, alarm.minute, now=datetime.now().astimezone())

@@ -95,6 +95,43 @@ ESCAPE_OFFER_AFTER_SECONDS: int = 900
 # of the alarm. Costs nothing when no plug is configured.
 PLUG_PREROLL_SECONDS: float = 4.0
 
+# The fire-time session record. Beside the sync config rather than in the
+# package dir, so a reinstall cannot erase evidence that an alarm was cut
+# short. Distinct from WAKE_STATE_FILE, which records only *dismissal* and is
+# also read cross-repo by screen_locker/_wake_state.py.
+ALARM_SESSION_FILE: Path = Path.home() / ".config" / "wake_alarm" / "alarm_session.json"
+
+# How long after fire time an unfinished session still re-fires the alarm.
+# Bounded because nothing clears the record when the alarm process dies before
+# dismissal: unbounded, a crash at startup would restart the alarm every minute
+# forever. Long enough to survive a power-off plus a boot, short enough that a
+# session can never leak into the following night.
+REFIRE_MAX_AGE_SECONDS: float = 5400.0
+
+# How far a session record may be stamped in the *future* and still count as
+# ringing. A backward clock jump (NTP correcting after a resume, RTC skew at
+# boot) is routine on a machine that hibernates nightly, and discarding such a
+# record would fail open on exactly the power-off escape the record closes.
+# Bounded so a wildly wrong RTC still cannot create an endless re-fire.
+CLOCK_SKEW_TOLERANCE_SECONDS: float = 900.0
+
+# --- Power-button inhibitor (item 2) --------------------------------------
+# What logind is asked to block while the alarm rings. handle-power-key stops
+# the short press; shutdown and idle stop a scripted poweroff and the idle
+# timer from doing the same job by another route.
+INHIBIT_WHAT: str = "handle-power-key:shutdown:idle"
+
+# The --who string. Also the pkill pattern used to clear a stale blocker from a
+# crashed alarm, so it must stay distinctive.
+INHIBIT_WHO: str = "wake-alarm"
+INHIBIT_WHY: str = "Wake alarm is ringing and must be dismissed, not switched off"
+
+# The inhibitor child self-terminates after this long even if nobody releases
+# it. An orphaned block-mode inhibitor holding handle-power-key would leave the
+# power button dead until reboot -- a worse failure than the one being fixed --
+# so it is never `sleep infinity`. Comfortably longer than any real alarm.
+INHIBIT_MAX_SECONDS: float = 7200.0
+
 # When the failsafe silences the alarm. Audio ONLY: the lock, the typed
 # challenge and the workout gate all persist past this point, so waiting it
 # out in bed is not a way to escape the alarm. It exists so a ring nobody is

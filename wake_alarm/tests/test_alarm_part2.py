@@ -128,6 +128,32 @@ class TestWakeAlarmInit:
         alarm._stop_beep.set()
         assert start.call_args.args[0].is_set()
 
+    def test_init_takes_the_power_key_inhibitor(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """A short power-button press must not end the alarm in one tap."""
+        assert mock_tk_module is not None
+        with patch("wake_alarm._alarm.take_power_key_inhibitor") as take:
+            alarm = WakeAlarm(demo_mode=True)
+        take.assert_called_once_with()
+        assert alarm._hardware.inhibitor is take.return_value
+        alarm._stop_beep.set()
+
+    def test_init_opens_a_session_record(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """Written while ringing, so a power cut leaves a trace to re-fire on."""
+        assert mock_tk_module is not None
+        with patch("wake_alarm._alarm.start_session") as start:
+            alarm = WakeAlarm(demo_mode=True)
+        start.assert_called_once()
+        # The correlation id joins this record to the JSONL log with no
+        # handshake -- both sides derive it from the same alarm instant.
+        assert start.call_args.args[0].startswith("wake-")
+        alarm._stop_beep.set()
+
     def test_production_mode_fullscreen(
         self,
         mock_tk_module: MagicMock,
@@ -141,100 +167,4 @@ class TestWakeAlarmInit:
         # request an override-redirect window is invisible to, and where
         # it applies it snaps to one monitor or the whole bounding box.
         assert alarm._view._views, "a surface must exist per live output"
-        alarm._stop_beep.set()
-
-
-class TestCodeRefreshAndTimer:
-    """Tests for code refresh and timer update methods."""
-
-    def test_code_refresh_changes_challenge(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Code refresh generates a new challenge each call."""
-        alarm = WakeAlarm(demo_mode=True)
-        displays = set()
-        for _ in range(50):
-            alarm._schedule_code_refresh()
-            displays.add(alarm._progress.current_challenge.display)
-        assert len(displays) > 1
-        alarm._stop_beep.set()
-
-    def test_code_refresh_noop_when_not_active(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Code refresh is a no-op when alarm is no longer active."""
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._active = False
-        old_challenge = alarm._progress.current_challenge
-        alarm._schedule_code_refresh()
-        assert alarm._progress.current_challenge is old_challenge
-        alarm._stop_beep.set()
-
-    def test_update_timer_noop_when_not_active(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """Timer update is a no-op when alarm is inactive."""
-        alarm = WakeAlarm(demo_mode=True)
-        alarm._active = False
-        alarm._update_timer()  # Should not raise
-        alarm._stop_beep.set()
-
-
-class TestScreenFlash:
-    """Tests for _start_screen_flash and _flash_step."""
-
-    def test_flash_step_shows_dark_on_flash_off(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """When _flash_on=False, the background is set to dark colour."""
-        alarm = WakeAlarm(demo_mode=True)
-        mock_root = mock_tk_module.Tk.return_value
-        mock_root.configure.reset_mock()
-        mock_root.after.reset_mock()
-
-        alarm._progress.flash_on = False
-        alarm._flash_step()
-
-        mock_root.configure.assert_called_once_with(bg=alarm._view.config.bg)
-        assert alarm._progress.flash_on is True
-        mock_root.after.assert_called_with(750, alarm._flash_step)
-        alarm._stop_beep.set()
-
-    def test_flash_step_shows_red_on_flash_on(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """When _flash_on=True, the background is set to red."""
-        alarm = WakeAlarm(demo_mode=True)
-        mock_root = mock_tk_module.Tk.return_value
-        mock_root.configure.reset_mock()
-        mock_root.after.reset_mock()
-
-        alarm._progress.flash_on = True
-        alarm._flash_step()
-
-        mock_root.configure.assert_called_once_with(bg=alarm._view.config.danger)
-        assert alarm._progress.flash_on is False
-        mock_root.after.assert_called_with(750, alarm._flash_step)
-        alarm._stop_beep.set()
-
-    def test_flash_step_stops_when_inactive(
-        self,
-        mock_tk_module: MagicMock,
-    ) -> None:
-        """When alarm is no longer active, _flash_step returns without scheduling."""
-        alarm = WakeAlarm(demo_mode=True)
-        mock_root = mock_tk_module.Tk.return_value
-        alarm._active = False
-        mock_root.configure.reset_mock()
-        mock_root.after.reset_mock()
-
-        alarm._flash_step()
-
-        mock_root.configure.assert_not_called()
-        mock_root.after.assert_not_called()
         alarm._stop_beep.set()

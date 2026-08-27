@@ -12,8 +12,14 @@ output. Two consequences for tests, both of which bite silently:
 
 Sink reactivation adds a fourth: ``WakeAlarm.__init__`` starts a background
 thread that really shells out to ``pactl set-card-profile`` and would reshape
-the *host's* audio routing mid-test. It is stubbed here and re-patched
-explicitly by the tests that assert the wiring.
+the *host's* audio routing mid-test.
+
+The power-key inhibitor and the session record add a fifth and a sixth: an
+unstubbed run really spawns ``systemd-inhibit`` (blocking the machine's power
+button for as long as the test process lives) and really writes the
+*production* ``alarm_session.json``, which the next real trigger tick would
+then act on. All three are stubbed here and re-patched explicitly by the tests
+that assert the wiring.
 
 The escape hatch adds a third: ``WakeAlarm.__init__`` builds its tracker over
 the real ``ESCAPE_HISTORY_FILE``, so an unpatched run both reads a *production*
@@ -93,6 +99,10 @@ def _hermetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None
             tmp_path / "escape_history.json",
         ),
         patch("wake_alarm._alarm.start_alarm_reactivation"),
+        patch("wake_alarm._alarm.take_power_key_inhibitor", return_value=None),
+        patch("wake_alarm._alarm.release_power_key_inhibitor"),
+        patch("wake_alarm._alarm.start_session"),
+        patch("wake_alarm._alarm.finish_session"),
         patch("gatelock._surfaces.tk.Toplevel", side_effect=make_toplevel),
         patch("gatelock._outputs.RandrBackend.create", return_value=None),
         patch("gatelock._outputs.scan_xrandr", return_value=FAKE_OUTPUTS),

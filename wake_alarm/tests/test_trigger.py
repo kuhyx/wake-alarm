@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+from wake_alarm import _alarm_session
 from wake_alarm._sync import Alarm
 from wake_alarm._trigger import (
     _decide,
     _fire_window,
     _now,
-    _parse_args,
     _skip_reason,
-    _start_target_unit,
-    main,
 )
 
 
@@ -31,10 +33,16 @@ def _at(hour: int, minute: int) -> datetime:
 
 @pytest.fixture(autouse=True)
 def _ungated() -> None:
-    """Open both "already handled today" gates unless a test closes them."""
+    """Open every gate unless a test closes one.
+
+    ``should_refire`` is stubbed here too: unstubbed it reads the *real*
+    session record on the host, so a test run started while an alarm was
+    actually ringing would silently invert half these assertions.
+    """
     with (
         patch("wake_alarm._trigger.was_alarm_dismissed_today", return_value=False),
         patch("wake_alarm._trigger.was_workout_logged_today", return_value=False),
+        patch("wake_alarm._trigger.should_refire", return_value=False),
     ):
         yield
 
@@ -155,98 +163,69 @@ class TestDecide:
         assert fire
 
 
-class TestStartTargetUnit:
-    """Tests for the systemctl invocation."""
+class TestRefireOnAnUnfinishedSession:
+    """A power-off mid-alarm must not be a way out."""
 
-    def test_starts_the_orchestrator_not_the_alarm(self) -> None:
-        """The trigger must start morning-routine, never wake-alarm."""
-        completed = MagicMock(returncode=0)
-        with patch("subprocess.run", return_value=completed) as run:
-            assert _start_target_unit()
-        assert run.call_args[0][0] == [
-            "systemctl",
-            "--user",
-            "start",
-            "morning-routine.service",
-        ]
+    def test_refires_long_after_the_window_closed(self) -> None:
+        """The whole point: the machine may have been off for the window.
 
-    def test_nonzero_exit_is_reported(self) -> None:
-        """A systemctl failure returns False rather than raising."""
-        completed = MagicMock(returncode=1, stderr=b"no such unit")
-        with patch("subprocess.run", return_value=completed):
-            assert not _start_target_unit()
+        Without this, holding the power button ends the alarm for good --
+        the catch-up window closes while the PC is down and nothing on disk
+        ever said an alarm was ringing.
+        """
+        with patch("wake_alarm._trigger.should_refire", return_value=True):
+            fire, reason = _decide(_at(20, 0), Alarm(6, 45, "remote"))
+        assert fire
+        assert "cut short" in reason
 
-    def test_missing_systemctl_is_swallowed(self) -> None:
-        """An OSError (no systemctl) returns False rather than raising."""
-        with patch("subprocess.run", side_effect=OSError("not found")):
-            assert not _start_target_unit()
-
-    def test_does_not_raise_on_failure(self) -> None:
-        """check=False: a failing start never raises CalledProcessError."""
-        completed = MagicMock(returncode=1, stderr=b"")
-        with patch("subprocess.run", return_value=completed) as run:
-            _start_target_unit()
-        assert run.call_args.kwargs["check"] is False
-
-
-class TestMain:
-    """Tests for the tick entry point."""
-
-    def test_parse_args_default(self) -> None:
-        """--dry-run defaults to off."""
-        assert not _parse_args([]).dry_run
-
-    def _run_main(self, argv: list[str], now: datetime, alarm: Alarm) -> MagicMock:
+    def test_dismissed_gate_still_beats_a_refire(self) -> None:
+        """The ordinary gates are checked first and still win."""
         with (
-            patch("sys.argv", ["_trigger", *argv]),
-            patch("wake_alarm._trigger._now", return_value=now),
-            patch("wake_alarm._trigger.get_alarm", return_value=alarm),
-            patch("wake_alarm._trigger._start_target_unit") as start,
+            patch("wake_alarm._trigger.should_refire", return_value=True),
+            patch(
+                "wake_alarm._trigger.was_alarm_dismissed_today",
+                return_value=True,
+            ),
         ):
-            main()
-        return start
+            fire, reason = _decide(_at(20, 0), Alarm(6, 45, "remote"))
+        assert not fire
+        assert reason == "alarm already dismissed today"
 
-    def test_fires_at_the_alarm_minute(self) -> None:
-        """On the alarm minute the target unit is started."""
-        start = self._run_main([], _at(6, 45), Alarm(6, 45, "remote"))
-        start.assert_called_once()
-
-    def test_does_not_fire_early(self) -> None:
-        """Before the alarm nothing is started."""
-        start = self._run_main([], _at(5, 0), Alarm(6, 45, "remote"))
-        start.assert_not_called()
-
-    def test_dry_run_never_starts_anything(
-        self, capsys: pytest.CaptureFixture[str]
+    def test_end_to_end_through_a_real_session_record(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """--dry-run reports WOULD FIRE without touching systemd."""
-        start = self._run_main(["--dry-run"], _at(6, 45), Alarm(6, 45, "remote"))
-        start.assert_not_called()
-        assert "WOULD FIRE" in capsys.readouterr().out
+        """_decide against a real record, with should_refire NOT patched.
 
-    def test_dry_run_reports_not_firing(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        """--dry-run explains why it is not firing."""
-        self._run_main(["--dry-run"], _at(5, 0), Alarm(6, 45, "remote"))
-        out = capsys.readouterr().out
-        assert "not firing" in out
-        assert "still ahead" in out
+        Every other test here stubs ``should_refire``, so the wiring between
+        the record on disk and the decision was untested -- and a manual run
+        found it broken while the whole suite stayed green. This is the
+        deterministic version of that manual check.
+        """
+        monkeypatch.setattr(
+            _alarm_session, "ALARM_SESSION_FILE", tmp_path / "session.json"
+        )
+        now = _at(20, 0)
+        # The record is stamped by the alarm process, which ran at fire time --
+        # not at this tick. Pin its clock to the same fictional morning as the
+        # tick, or the two dates are years apart and the age check is
+        # meaningless.
+        monkeypatch.setattr(_alarm_session, "_now", lambda: _at(19, 30))
+        alarm = Alarm(6, 45, "remote")
 
-    @pytest.mark.parametrize("source", ["fallback", "stale-cache"])
-    def test_warns_when_firing_on_a_degraded_source(
-        self, caplog: pytest.LogCaptureFixture, source: str
-    ) -> None:
-        """Firing on a non-phone alarm time is logged loudly."""
-        with caplog.at_level("WARNING"):
-            self._run_main([], _at(6, 45), Alarm(6, 45, source))
-        assert "degraded alarm source" in caplog.text
+        with patch("wake_alarm._trigger.should_refire", _alarm_session.should_refire):
+            assert _decide(now, alarm)[0] is False  # window closed, no record
 
-    @pytest.mark.parametrize("source", ["remote", "cache"])
-    def test_quiet_when_firing_on_the_phone_alarm(
-        self, caplog: pytest.LogCaptureFixture, source: str
-    ) -> None:
-        """A normal fire does not emit the degraded-source warning."""
-        with caplog.at_level("WARNING"):
-            self._run_main([], _at(6, 45), Alarm(6, 45, source))
-        assert "degraded alarm source" not in caplog.text
+            _alarm_session.start_session("wake-20260719-0645")
+            fire, reason = _decide(now, alarm)
+            assert fire, "a cut-short alarm must ring again"
+            assert "cut short" in reason
+
+            _alarm_session.finish_session()
+            assert _decide(now, alarm)[0] is False  # dismissed stays dismissed
+
+    def test_refire_is_asked_about_the_tick_instant(self) -> None:
+        """The session's age is measured against the tick, not wall-clock now."""
+        with patch("wake_alarm._trigger.should_refire") as refire:
+            refire.return_value = False
+            _decide(_at(20, 0), Alarm(6, 45, "remote"))
+        refire.assert_called_once_with(now=_at(20, 0))
