@@ -35,6 +35,29 @@ starting; this file deliberately does not duplicate it.
 3. **Item 13, black screen.** Different repo (`~/testsAndMisc/
    linux_configuration`), host-only, blocks nothing.
 
+### Measured on the Pixel 6a, 2026-08-27
+
+**Verified for real:** the alarm fires from Doze on time (22:03:01 for a
+22:03 arm), wakes the screen (`Asleep`→`Awake`), puts `AlarmActivity` on top
+over the lockscreen, posts the full-screen-intent notification, and **rings
+through DND** — `zen_mode=1`, player `state:started` on
+`usage=USAGE_ALARM`/`STREAM_ALARM(4)`, `mutedState:none`. The STREAM_ALARM
+claim is no longer an assumption. NFC tag registration works end to end
+(`0465dab3ce2a81` via Settings → Room proof).
+
+**Still not verified: the actual dismiss.** Three real defects were found and
+fixed in the attempt (see `08b44b4`), but none of the fixes has been confirmed
+on hardware yet — the last test run ended before a successful tap. What needs
+one more run: register/confirm the tag, fire a ring, unlock at the keyguard
+prompt, tap the tag, solve the challenge, and confirm the sound stops **and**
+the screen closes.
+
+**`requestDismissKeyguard` does not silently unlock a secured phone.** It
+raises the PIN/biometric prompt and returns to `ON_LOCKED` until the user
+answers, so the NFC tap cannot work before that point. That is the agreed
+behaviour, not a bug — but it means "tap the tag without touching the phone"
+was never achievable on a secured device, and the docs should not imply it.
+
 ### Not yet verified on the phone
 
 The ring itself has only been fired on the API 36 AVD. On the Pixel 6a the
