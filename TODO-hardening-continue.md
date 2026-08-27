@@ -77,6 +77,28 @@ fix and regressed both NFC and steps. The user caught it. When hardware has
 just gone green, make the smallest possible delta on top of *that exact state*
 — never a restructure and a fix together.
 
+### Fully automatic, verified on the Pixel 2026-08-27
+
+The alarm is no longer opt-in and can no longer be weakened:
+
+- **Arms itself with zero taps.** Launching the app was enough —
+  `dumpsys alarm` showed `RTC_WAKEUP ... com.kuhy.wake_alarm_sync/.AlarmReceiver`
+  at `2026-08-28 08:00:00`, `window=0`, `exactAllowReason=policy_permission`.
+- **08:00 daily is baked in** (`AlarmPolicy.baselineHour`, mirrored by the PC's
+  `FALLBACK_ALARM_HOUR`). There is no arm button and no cancel — the Kotlin
+  `cancel` handler is deleted, so the capability does not exist rather than
+  being one `invokeMethod` away.
+- **Earlier-only ratchet, confirmed on-device.** Picking a later time was
+  rejected on the phone with "That is not earlier than 08:00. The alarm can
+  only be moved earlier.", and the armed alarm stayed at 08:00. An earlier
+  start is one-shot and resets after the alarm fires.
+- **Daily watchdog** (`AlarmWatchdog`) re-arms if nothing is scheduled, and
+  `BootReceiver` re-establishes it because `setInexactRepeating` does not
+  survive a reboot.
+- **PC watchdog:** `_trigger._clamp_to_baseline()` refuses any resolved alarm
+  later than 08:00 whatever its source, so a stale or tampered remote value
+  cannot move the alarm later through sync.
+
 ### Still unverified
 
 - The **QR** proof has no scanner UI (`mobile_scanner`); `checkQr` and its
