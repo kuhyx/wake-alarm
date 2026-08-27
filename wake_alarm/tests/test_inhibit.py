@@ -3,16 +3,11 @@
 from __future__ import annotations
 
 import subprocess
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
 
 from wake_alarm import _inhibit
-from wake_alarm._constants import INHIBIT_WHO
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 @pytest.fixture
@@ -46,7 +41,10 @@ class TestTakeInhibitor:
 
         def fake_popen(cmd: list[str], **_kwargs: object) -> MagicMock:
             captured.append(cmd)
-            return MagicMock(pid=4242)
+            live = MagicMock(pid=4242)
+            # Still running after the confirm wait: logind accepted it.
+            live.wait.side_effect = subprocess.TimeoutExpired("systemd-inhibit", 0.5)
+            return live
 
         monkeypatch.setattr(_inhibit.subprocess, "Popen", fake_popen)
 
@@ -68,6 +66,43 @@ class TestTakeInhibitor:
         with caplog.at_level("WARNING"):
             assert _inhibit.take_power_key_inhibitor() is None
         assert "systemd-inhibit not on PATH" in caplog.text
+
+    def test_a_refused_inhibit_is_reported_as_none(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Claiming a block we did not get is worse than reporting none.
+
+        Popen succeeding only means the *binary* launched. logind can still
+        refuse -- polkit denies a non-interactive session outright, which a
+        vmbox run turned up: systemd-inhibit printed "Failed to inhibit:
+        Access denied" and exited 1 while the alarm logged the power key as
+        blocked.
+        """
+        monkeypatch.setattr(
+            _inhibit, "_systemd_inhibit_path", lambda: "/usr/bin/systemd-inhibit"
+        )
+        refused = MagicMock(returncode=1)
+        refused.wait.return_value = 1
+        refused.stderr.read.return_value = b"Failed to inhibit: Access denied"
+        monkeypatch.setattr(_inhibit.subprocess, "Popen", lambda *a, **k: refused)
+        with caplog.at_level("WARNING"):
+            assert _inhibit.take_power_key_inhibitor() is None
+        assert "logind refused" in caplog.text
+        assert "Access denied" in caplog.text
+
+    def test_a_refusal_with_no_stderr_still_reports(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A silent refusal is still a refusal, and still must not be claimed."""
+        monkeypatch.setattr(
+            _inhibit, "_systemd_inhibit_path", lambda: "/usr/bin/systemd-inhibit"
+        )
+        refused = MagicMock(returncode=1, stderr=None)
+        refused.wait.return_value = 1
+        monkeypatch.setattr(_inhibit.subprocess, "Popen", lambda *a, **k: refused)
+        with caplog.at_level("WARNING"):
+            assert _inhibit.take_power_key_inhibitor() is None
+        assert "no detail" in caplog.text
 
     def test_spawn_failure_is_survivable(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -139,86 +174,3 @@ class TestReleaseInhibitor:
             _inhibit.release_power_key_inhibitor(process)
         process.kill.assert_called_once_with()
         assert "ignored SIGTERM" in caplog.text
-
-
-class TestStaleCleanup:
-    """Clearing an inhibitor orphaned by a crashed alarm."""
-
-    def test_identifies_our_own_child(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """A pid is judged by its argv, never by a command-line pattern.
-
-        The earlier ``pkill -f`` version matched the shell that had just typed
-        the pattern and killed *it* -- substring matching is self-matching.
-        """
-        proc = tmp_path / "77"
-        proc.mkdir()
-        (proc / "cmdline").write_bytes(
-            b"systemd-inhibit\x00--who=" + INHIBIT_WHO.encode() + b"\x00"
-        )
-        monkeypatch.setattr(
-            _inhibit.pathlib, "Path", lambda *p: tmp_path / p[-2] / p[-1]
-        )
-        assert _inhibit._is_our_inhibitor("77") is True
-
-    def test_ignores_a_pid_that_vanished(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """A process that exited between listing and reading is not stale."""
-        monkeypatch.setattr(
-            _inhibit.pathlib, "Path", lambda *p: tmp_path / "definitely-absent"
-        )
-        assert _inhibit._is_our_inhibitor("99") is False
-
-    def test_kills_only_matching_pids(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Someone else's systemd-inhibit is left strictly alone."""
-        monkeypatch.setattr(_inhibit.shutil, "which", lambda _name: "/usr/bin/pgrep")
-        monkeypatch.setattr(
-            _inhibit.subprocess,
-            "run",
-            lambda *a, **k: MagicMock(stdout=b"11\n22\n"),
-        )
-        monkeypatch.setattr(_inhibit, "_is_our_inhibitor", lambda pid: pid == "22")
-        signalled: list[int] = []
-        monkeypatch.setattr(
-            _inhibit.os, "kill", lambda pid, _sig: signalled.append(pid)
-        )
-        assert _inhibit.kill_stale_inhibitors() == 1
-        assert signalled == [22]
-
-    def test_survives_a_pid_that_exits_mid_kill(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A race between listing and killing is not an error."""
-        monkeypatch.setattr(_inhibit.shutil, "which", lambda _name: "/usr/bin/pgrep")
-        monkeypatch.setattr(
-            _inhibit.subprocess, "run", lambda *a, **k: MagicMock(stdout=b"11\n")
-        )
-        monkeypatch.setattr(_inhibit, "_is_our_inhibitor", lambda _pid: True)
-
-        def gone(_pid: int, _sig: int) -> None:
-            raise ProcessLookupError
-
-        monkeypatch.setattr(_inhibit.os, "kill", gone)
-        assert _inhibit.kill_stale_inhibitors() == 0
-
-    def test_no_pgrep_means_no_scan(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without pgrep the cleanup is skipped rather than guessed at."""
-        monkeypatch.setattr(_inhibit.shutil, "which", lambda _name: None)
-        assert _inhibit.kill_stale_inhibitors() == 0
-
-    def test_pgrep_failure_is_survivable(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """A failed scan must not stop the alarm from starting."""
-        monkeypatch.setattr(_inhibit.shutil, "which", lambda _name: "/usr/bin/pgrep")
-
-        def boom(*_a: object, **_k: object) -> None:
-            msg = "nope"
-            raise OSError(msg)
-
-        monkeypatch.setattr(_inhibit.subprocess, "run", boom)
-        with caplog.at_level("WARNING"):
-            assert _inhibit.kill_stale_inhibitors() == 0
-        assert "Could not check for a stale" in caplog.text

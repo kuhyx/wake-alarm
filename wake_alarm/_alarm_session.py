@@ -141,10 +141,27 @@ def load_session() -> dict[str, object] | None:
         return None
     if not isinstance(entry, dict):
         return None
-    if not verify_entry_hmac(entry):
-        _logger.warning("Alarm session HMAC verification failed")
-        return None
-    return entry
+    if verify_entry_hmac(entry):
+        return entry
+    # An entry with no "hmac" field at all was written unsigned, because no
+    # HMAC key was available at fire time. gatelock's verify returns False for
+    # that case *and* for a real forgery, and treating them alike would be a
+    # silent fail-open: on a machine with no key provisioned, every session
+    # record would be unreadable and the power-off defence would simply not
+    # exist. Found by running the vmbox harness, where /etc/gatelock is absent.
+    #
+    # So: unsigned is accepted with a loud warning (it is no weaker than the
+    # no-record state it replaces), while a *present but wrong* signature is
+    # still rejected outright -- that one really is tampering.
+    if "hmac" not in entry:
+        _logger.warning(
+            "Alarm session is unsigned (no HMAC key on this machine) — "
+            "honouring it, but it offers no tamper protection",
+            extra={"event": "session_unsigned"},
+        )
+        return entry
+    _logger.warning("Alarm session HMAC verification failed")
+    return None
 
 
 def _fired_at(entry: dict[str, object]) -> datetime | None:

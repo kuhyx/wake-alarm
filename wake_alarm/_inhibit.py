@@ -42,6 +42,7 @@ import signal
 import subprocess
 
 from wake_alarm._constants import (
+    INHIBIT_CONFIRM_SECONDS,
     INHIBIT_MAX_SECONDS,
     INHIBIT_WHAT,
     INHIBIT_WHO,
@@ -150,7 +151,7 @@ def take_power_key_inhibitor() -> subprocess.Popen[bytes] | None:
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
     except OSError:
         _logger.warning(
@@ -159,6 +160,29 @@ def take_power_key_inhibitor() -> subprocess.Popen[bytes] | None:
             extra={"event": "inhibitor_failed"},
         )
         return None
+
+    # Popen succeeding only means the *binary* started. logind can still
+    # refuse the inhibit -- polkit denies it outright for a non-interactive
+    # session, which is exactly what a vmbox run turned up: systemd-inhibit
+    # printed "Failed to inhibit: Access denied" and exited 1 while this
+    # function happily reported the power key blocked. Claiming protection
+    # that is not there is worse than reporting none, so wait briefly and
+    # check the child is actually alive.
+    try:
+        process.wait(timeout=INHIBIT_CONFIRM_SECONDS)
+    except subprocess.TimeoutExpired:
+        pass  # Still running after the grace period: the inhibit was accepted.
+    else:
+        stderr = b"" if process.stderr is None else process.stderr.read()
+        _logger.warning(
+            "logind refused the power-key inhibitor (rc=%d): %s — the alarm "
+            "rings unprotected",
+            process.returncode,
+            stderr.decode(errors="replace").strip() or "no detail",
+            extra={"event": "inhibitor_refused", "rc": process.returncode},
+        )
+        return None
+
     _logger.warning(
         "Power key inhibited for up to %ds (pid %d) — a short press no longer "
         "kills the alarm; a ~4s firmware hold still cuts power",

@@ -218,6 +218,10 @@ considering a dependency change done.
 - Show what the next tick would do: `python -m wake_alarm._trigger --dry-run`
 - Watch it live: `journalctl --user -fu wake-alarm-trigger.service`
 - Install for production: `bash install.sh`
+- Gate the shell/system scripts: `bash scripts/vmbox/harness.sh`
+  (disposable Arch VM; what it covers and what it cannot is in
+  **`DOCS-vmbox.md`** — notably *not* audio, the phone, or the
+  bootloader). A sandbox pass never proves the host is fine.
 
 Note the dev venv lacks `gatelock`, so anything importing `_state` (including
 `_trigger`) must be run with `/usr/bin/python3`, not `.venv/bin/python`.

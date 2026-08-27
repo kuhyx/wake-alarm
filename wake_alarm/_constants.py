@@ -132,6 +132,13 @@ INHIBIT_WHY: str = "Wake alarm is ringing and must be dismissed, not switched of
 # so it is never `sleep infinity`. Comfortably longer than any real alarm.
 INHIBIT_MAX_SECONDS: float = 7200.0
 
+# How long to wait for the inhibitor child to prove it survived. Popen
+# succeeding only means the binary launched; logind can still refuse (polkit
+# denies a non-interactive session, seen in a vmbox run: "Failed to inhibit:
+# Access denied", exit 1). Still alive after this means the inhibit was
+# accepted. Short enough not to delay the alarm perceptibly.
+INHIBIT_CONFIRM_SECONDS: float = 0.5
+
 # When the failsafe silences the alarm. Audio ONLY: the lock, the typed
 # challenge and the workout gate all persist past this point, so waiting it
 # out in bed is not a way to escape the alarm. It exists so a ring nobody is

@@ -3,8 +3,8 @@
 A phone-driven wake alarm for an always-on PC. The alarm time is whatever the
 companion phone app last synced (via the shared `crdt_sync` transport over a
 private GitHub repo); a per-minute systemd user timer fires at exactly that
-time, showing a fullscreen, challenge-dismissed alarm with fan ramp and
-optional TP-Link Tapo P110 smart-plug control.
+time, showing a fullscreen, challenge-dismissed alarm with escalating audio
+and optional TP-Link Tapo P110 smart-plug control.
 
 Change the alarm on the phone at any hour and the PC follows within ~5
 minutes. If the PC does happen to be powered down, a `shutdown` wrapper
@@ -20,8 +20,8 @@ This installs the package + dependencies into system Python's user
 site-packages (the systemd units run `/usr/bin/python` directly, not a venv —
 see `CLAUDE.md`), installs and enables the per-minute trigger timer, the
 systemd-sleep resume hook, the `shutdown` wrapper that hibernates with
-`rtcwake` as a fallback, the fan-ramp script, and (optionally) `python-kasa`
-for smart-plug control.
+`rtcwake` as a fallback, and (optionally) `python-kasa` for smart-plug
+control.
 
 Reading the phone's alarm needs a GitHub token with `repo` scope, at
 `~/.config/wake_alarm/sync.json` as `{"token": "..."}`. If that file is
