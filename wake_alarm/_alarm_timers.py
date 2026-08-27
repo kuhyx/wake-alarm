@@ -28,6 +28,7 @@ from wake_alarm._rounds import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Callable
     import tkinter as tk
 
     from wake_alarm._alarm_state import _AlarmProgress
@@ -48,9 +49,10 @@ class AlarmTimersMixin:
     _view: _ViewGroup
     _escape: EscapeHatch
 
-    def _start_flash_countdown(self) -> None:
-        """Restart the flash countdown; implemented by ``WakeAlarm``."""
-        raise NotImplementedError  # pragma: no cover
+    # Supplied by AlarmFlashMixin, which WakeAlarm also inherits. Declared
+    # rather than stubbed: an abstract stub here would win the MRO (this mixin
+    # is listed first) and shadow the real implementation.
+    _start_flash_countdown: Callable[[], None]
 
     def _schedule_code_refresh(self) -> None:
         """Replace the current challenge periodically.

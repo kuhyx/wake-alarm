@@ -10,6 +10,11 @@ output. Two consequences for tests, both of which bite silently:
   switching on the machine running the tests, and reaches the real
   ``$XDG_RUNTIME_DIR``, where it could stand a *production* locker down.
 
+Sink reactivation adds a fourth: ``WakeAlarm.__init__`` starts a background
+thread that really shells out to ``pactl set-card-profile`` and would reshape
+the *host's* audio routing mid-test. It is stubbed here and re-patched
+explicitly by the tests that assert the wiring.
+
 The escape hatch adds a third: ``WakeAlarm.__init__`` builds its tracker over
 the real ``ESCAPE_HISTORY_FILE``, so an unpatched run both reads a *production*
 budget -- making "the button appears" tests fail on any day the real budget is
@@ -87,6 +92,7 @@ def _hermetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None
             "wake_alarm._escape_flow.ESCAPE_HISTORY_FILE",
             tmp_path / "escape_history.json",
         ),
+        patch("wake_alarm._alarm.start_alarm_reactivation"),
         patch("gatelock._surfaces.tk.Toplevel", side_effect=make_toplevel),
         patch("gatelock._outputs.RandrBackend.create", return_value=None),
         patch("gatelock._outputs.scan_xrandr", return_value=FAKE_OUTPUTS),

@@ -25,8 +25,10 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 import logging
 import threading
+import time
 
 from wake_alarm._constants import REACTIVATE_ATTEMPT_DELAYS
+from wake_alarm._sinks import _activate_all_outputs, _list_real_sinks, _pactl_path
 
 _Activate = Callable[[], object]
 _ListSinks = Callable[[], Iterable[str]]
@@ -128,3 +130,51 @@ def start_background_reactivation(
     )
     thread.start()
     return thread
+
+
+def _activate_outputs_only() -> None:
+    """Re-run card-profile activation, discarding the captured prior state.
+
+    The return value of :func:`_activate_all_outputs` is the audio state as it
+    was *before* that call, and only the very first call sees the user's real
+    settings -- every retry pass captures the alarm's own already-activated
+    state. Restoring one of those would restore the alarm's settings as if they
+    were the user's, so the retries deliberately return nothing at all rather
+    than handing back a value someone could later wire into ``on_close()``.
+    """
+    _activate_all_outputs()
+
+
+def _list_real_sinks_now() -> list[str]:
+    """Return the currently visible real sinks, or none when pactl is absent.
+
+    :func:`wake_alarm._sinks._list_real_sinks` needs the pactl path, which is
+    resolved fresh each pass: the retry outlives the startup lookup, and a
+    machine without pactl must report "no sinks" rather than raise on a
+    background thread nobody is watching.
+    """
+    pactl = _pactl_path()
+    if pactl is None:
+        return []
+    return _list_real_sinks(pactl)
+
+
+def start_alarm_reactivation(stop: threading.Event) -> threading.Thread:
+    """Start the real reactivation retry for a ringing alarm.
+
+    The wiring point: everything above takes injected callables so it can be
+    tested without an audio stack, and this is the one place that binds them to
+    the real ``pactl``.
+
+    Args:
+        stop: The alarm's beep-stop event, set once it is dismissed.
+
+    Returns:
+        The started daemon thread.
+    """
+    return start_background_reactivation(
+        _activate_outputs_only,
+        _list_real_sinks_now,
+        sleep=time.sleep,
+        stop=stop,
+    )

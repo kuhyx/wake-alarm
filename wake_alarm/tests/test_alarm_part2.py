@@ -109,6 +109,25 @@ class TestWakeAlarmInit:
         assert alarm._view._views, "a surface must exist per live output"
         alarm._stop_beep.set()  # Stop beep thread
 
+    def test_init_starts_sink_reactivation(
+        self,
+        mock_tk_module: MagicMock,
+    ) -> None:
+        """The retry runs, and stops when the alarm does.
+
+        Without this the HDMI sink stays absent for the whole alarm: its card
+        profile is ``off`` at wake time, and only a fresh set-card-profile can
+        bring the sink into existence -- re-enumerating sinks never finds it.
+        The conftest stub is replaced here so the wiring itself is asserted.
+        """
+        assert mock_tk_module is not None
+        with patch("wake_alarm._alarm.start_alarm_reactivation") as start:
+            alarm = WakeAlarm(demo_mode=True)
+        start.assert_called_once_with(alarm._stop_beep)
+        # The same event the beep loop watches, so dismissal ends both.
+        alarm._stop_beep.set()
+        assert start.call_args.args[0].is_set()
+
     def test_production_mode_fullscreen(
         self,
         mock_tk_module: MagicMock,

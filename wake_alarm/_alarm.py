@@ -1,7 +1,7 @@
 """Wake alarm: escalating beeps behind a fullscreen dismiss challenge.
 
 Started by ``morning-routine.service``, never directly (AGENTS.md). Gate:
-``_gating``. Sound: ``_beep_loop``. Timers: ``_alarm_timers``.
+``_gating``. Sound: ``_beep_loop``. Timers: ``_alarm_timers`` and ``_alarm_flash``.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from gatelock import (
 )
 
 from wake_alarm._alarm_display import _restore_display
+from wake_alarm._alarm_flash import AlarmFlashMixin
 from wake_alarm._alarm_state import _AlarmHardware, _AlarmProgress
 from wake_alarm._alarm_timers import AlarmTimersMixin
 from wake_alarm._alarm_view import _build_alarm_view, _ViewGroup
@@ -27,23 +28,17 @@ from wake_alarm._beep_loop import start_beep_thread
 from wake_alarm._challenges import (
     _make_challenge,
 )
-from wake_alarm._constants import (
-    DISMISS_FLASH_SECONDS,
-    DISMISS_ROUNDS_REQUIRED,
-)
+from wake_alarm._constants import DISMISS_ROUNDS_REQUIRED
 from wake_alarm._escape_flow import EscapeHatch, build_tracker
 from wake_alarm._gating import parse_args, should_run_alarm
 from wake_alarm._lock_setup import build_config, claim_arbiter
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._reactivate import start_alarm_reactivation
 from wake_alarm._rounds import (
     BANNER_LINGER_MS,
-    FLASH_PERIOD_MS,
-    apply_flash_colour,
-    hide_flash_code,
     normalise,
     show_challenge,
     show_dismissal,
-    show_flash_countdown,
     show_round_progress,
     show_wrong_answer,
 )
@@ -60,7 +55,7 @@ from wake_alarm._state import (
 _logger = logging.getLogger(__name__)
 
 
-class WakeAlarm(AlarmTimersMixin):
+class WakeAlarm(AlarmTimersMixin, AlarmFlashMixin):
     """Fullscreen wake alarm with escalating beep and dismiss challenge."""
 
     def __init__(self, *, demo_mode: bool = False) -> None:
@@ -97,6 +92,12 @@ class WakeAlarm(AlarmTimersMixin):
         self._schedule_skip_window_close()
         start_beep_thread(self._stop_beep, self._progress.started_at)
         self._hardware = _AlarmHardware(audio_restore=_activate_all_outputs())
+        # The first activation above runs before the monitor has finished its
+        # HDMI handshake, so the sink that matters most may not exist yet.
+        # Keep retrying in the background until the alarm is dismissed -- only
+        # a fresh set-card-profile can bring that sink into existence, so no
+        # amount of re-enumerating sinks in the beep loop would find it.
+        start_alarm_reactivation(self._stop_beep)
         self._flash_step()
         self._lock.grab_input()
 
@@ -176,22 +177,6 @@ class WakeAlarm(AlarmTimersMixin):
         if self._progress.current_challenge.kind == "flash":
             self._start_flash_countdown()
 
-    def _start_flash_countdown(self) -> None:
-        """Begin the flash countdown: show code then hide it."""
-        self._progress.flash_remaining = DISMISS_FLASH_SECONDS
-        self._flash_tick()
-
-    def _flash_tick(self) -> None:
-        """Decrement flash countdown; replace the displayed code with placeholders."""
-        if not self._active:
-            return
-        if self._progress.flash_remaining > 0:
-            show_flash_countdown(self._view, self._progress.flash_remaining)
-            self._progress.flash_remaining -= 1
-            self.root.after(1000, self._flash_tick)
-        else:
-            hide_flash_code(self._view, self._progress.current_challenge)
-
     def _dismiss_alarm(self, *, earned_skip: bool) -> None:
         """Dismiss the alarm and save state."""
         self._active = False
@@ -210,16 +195,6 @@ class WakeAlarm(AlarmTimersMixin):
         """The hatch was earned: silence the alarm, grant no workout skip."""
         _logger.warning("alarm dismissed via the escape hatch, no skip earned")
         self._dismiss_alarm(earned_skip=False)
-
-    def _flash_step(self) -> None:
-        """Alternate the background colour to keep the screen attention-grabbing."""
-        if not self._active:
-            return
-        cfg = self._view.config
-        colour = cfg.danger if self._progress.flash_on else cfg.bg
-        apply_flash_colour(self.root, self._view.containers, colour)
-        self._progress.flash_on = not self._progress.flash_on
-        self.root.after(FLASH_PERIOD_MS, self._flash_step)
 
     def run(self) -> None:
         """Start the alarm main loop, restoring hardware on every exit path."""

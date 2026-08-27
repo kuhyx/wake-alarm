@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 import pytest
 
@@ -134,3 +135,79 @@ def test_background_thread_is_a_daemon() -> None:
     )
     thread.join(timeout=5)
     assert thread.daemon
+
+
+def test_activate_only_discards_the_captured_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retry passes must not hand back a state anyone could restore.
+
+    Only the *first* activation sees the user's real audio settings; every
+    later pass captures the alarm's own. Returning one would let a future
+    caller restore the alarm's settings as if they were the user's.
+    """
+    calls: list[str] = []
+
+    def fake_activate() -> str:
+        calls.append("activated")
+        return "prior-state"
+
+    monkeypatch.setattr(_reactivate, "_activate_all_outputs", fake_activate)
+    _reactivate._activate_outputs_only()
+    assert calls == ["activated"]
+
+
+def test_list_sinks_now_returns_the_real_sinks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The zero-arg adapter resolves pactl and forwards the path."""
+    monkeypatch.setattr(_reactivate, "_pactl_path", lambda: "/usr/bin/pactl")
+    monkeypatch.setattr(
+        _reactivate,
+        "_list_real_sinks",
+        lambda pactl: [f"sink-via-{pactl}"],
+    )
+    assert _reactivate._list_real_sinks_now() == ["sink-via-/usr/bin/pactl"]
+
+
+def test_list_sinks_now_is_empty_without_pactl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A machine with no pactl reports no sinks instead of raising.
+
+    The adapter runs on a background thread nobody is watching, so an
+    exception there would vanish silently.
+    """
+    monkeypatch.setattr(_reactivate, "_pactl_path", lambda: None)
+    assert _reactivate._list_real_sinks_now() == []
+
+
+def test_start_alarm_reactivation_binds_the_real_callables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one wiring point passes the real pactl adapters and time.sleep."""
+    captured: dict[str, object] = {}
+
+    sentinel = threading.Thread(target=lambda: None)
+
+    def fake_start(
+        activate: object,
+        list_sinks: object,
+        *,
+        sleep: object,
+        stop: object,
+    ) -> threading.Thread:
+        captured.update(
+            activate=activate, list_sinks=list_sinks, sleep=sleep, stop=stop
+        )
+        return sentinel
+
+    monkeypatch.setattr(_reactivate, "start_background_reactivation", fake_start)
+    stop = threading.Event()
+
+    assert _reactivate.start_alarm_reactivation(stop) is sentinel
+
+    assert captured["activate"] is _reactivate._activate_outputs_only
+    assert captured["list_sinks"] is _reactivate._list_real_sinks_now
+    assert captured["sleep"] is time.sleep
+    assert captured["stop"] is stop
