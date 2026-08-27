@@ -15,6 +15,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -34,6 +35,7 @@ class AlarmService : Service() {
     private var vibrator: Vibrator? = null
 
     companion object {
+        private const val TAG = "AlarmService"
         private const val CHANNEL_ID = "wake_alarm_ring"
         private const val NOTIFICATION_ID = 42
 
@@ -152,11 +154,22 @@ class AlarmService : Service() {
         raiseAlarmVolume()
     }
 
-    /** Alarm stream turned down to zero must not silence the alarm. */
+    /**
+     * Alarm stream turned down to zero must not silence the alarm.
+     *
+     * Guarded: setStreamVolume can throw under an active zen rule, and by this
+     * point startForeground() has already posted — an exception here would
+     * take the whole ring down over a volume bump that is only an
+     * improvement, not the mechanism.
+     */
     private fun raiseAlarmVolume() {
-        val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val max = audio.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        audio.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
+        try {
+            val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val max = audio.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audio.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "could not raise the alarm volume; ringing anyway", e)
+        }
     }
 
     private fun stopSound() {

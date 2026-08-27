@@ -25,14 +25,26 @@ object StepCounter {
     /** Sentinel for "no baseline captured yet". */
     private const val NONE = -1L
 
-    /** How long to wait for the sensor's first reading before giving up. */
-    private const val READ_TIMEOUT_MS = 3000L
+    /** Most recent step total seen, kept so reads never block the caller. */
+    @Volatile
+    private var latest: Long? = null
 
-    /** Records the current step total as the baseline for this ring. */
+    /**
+     * Starts listening and records the first reading as this ring's baseline.
+     *
+     * Registration is fire-and-forget: the sensor callback arrives on its own
+     * thread, so nothing here blocks the MethodChannel — this runs on the
+     * platform main thread, where a multi-second wait is an ANR.
+     */
     fun markRingStart(context: Context) {
-        val current = readTotal(context) ?: return
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putLong(KEY_BASELINE, current).apply()
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit().remove(KEY_BASELINE).apply()
+        listen(context) { total ->
+            // Only the first sample after a ring starts becomes the baseline.
+            if (!prefs.contains(KEY_BASELINE)) {
+                prefs.edit().putLong(KEY_BASELINE, total).apply()
+            }
+        }
     }
 
     /**
@@ -45,32 +57,35 @@ object StepCounter {
         val baseline = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getLong(KEY_BASELINE, NONE)
         if (baseline == NONE) return NONE
-        val current = readTotal(context) ?: return NONE
+        // Non-blocking: whatever the listener last delivered. Returns -1 until
+        // the first sample arrives rather than stalling the ring screen.
+        val current = latest ?: return NONE
         return (current - baseline).coerceAtLeast(0)
     }
 
-    /** Blocks briefly for one TYPE_STEP_COUNTER sample; null when there is no sensor. */
-    private fun readTotal(context: Context): Long? {
+    /**
+     * Registers a step listener, keeping [latest] fresh for later reads.
+     *
+     * The listener is deliberately never unregistered while the alarm rings:
+     * the ring screen polls repeatedly, and re-registering per read would cost
+     * a fresh sensor warm-up each time.
+     */
+    private fun listen(context: Context, onFirst: (Long) -> Unit) {
         val manager =
-            context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return null
-        val sensor = manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) ?: return null
-        val lock = Object()
-        var value: Long? = null
-        val listener = object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) {
-                synchronized(lock) {
-                    value = event.values.firstOrNull()?.toLong()
-                    lock.notifyAll()
+            context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return
+        val sensor = manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) ?: return
+        manager.registerListener(
+            object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    val total = event.values.firstOrNull()?.toLong() ?: return
+                    latest = total
+                    onFirst(total)
                 }
-            }
 
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
-        }
-        manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
-        synchronized(lock) {
-            if (value == null) lock.wait(READ_TIMEOUT_MS)
-        }
-        manager.unregisterListener(listener)
-        return value
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+            },
+            sensor,
+            SensorManager.SENSOR_DELAY_NORMAL,
+        )
     }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
+import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 
 /// The dismiss screen shown over the lockscreen while the alarm rings.
 ///
@@ -27,7 +28,9 @@ class _RingScreenState extends State<RingScreen> {
   late final AlarmScheduler _scheduler = widget.scheduler ?? AlarmScheduler();
   late final ChallengeGenerator _generator =
       widget.generator ?? ChallengeGenerator();
-  late final RoomProof _proof = RoomProof(scheduler: _scheduler);
+  RoomProof _proof = RoomProof(scheduler: AlarmScheduler());
+  RoomProofSettings _settings = const RoomProofSettings();
+  bool _nfcAvailable = false;
   late Challenge _challenge = _generator.next();
 
   final TextEditingController _input = TextEditingController();
@@ -44,8 +47,45 @@ class _RingScreenState extends State<RingScreen> {
   @override
   void initState() {
     super.initState();
+    _proof = RoomProof(scheduler: _scheduler);
     unawaited(_scheduler.beginStepCount());
+    unawaited(_loadRoomProof());
     _startFlashTimerIfNeeded();
+  }
+
+  /// Loads the registered tag/QR and starts listening for NFC taps.
+  Future<void> _loadRoomProof() async {
+    final settings = await RoomProofSettings.load();
+    final hasNfc = await _scheduler.hasNfc();
+    if (!mounted) return;
+    setState(() {
+      _settings = settings;
+      _nfcAvailable = hasNfc;
+      _proof = RoomProof(
+        scheduler: _scheduler,
+        registeredTagId: settings.nfcTagId,
+      );
+    });
+    _scheduler.onNfcTag(_onNfcTag);
+  }
+
+  void _onNfcTag(String tagId) {
+    final result = _proof.checkNfc(tagId);
+    if (!mounted) return;
+    setState(() {
+      _inRoom = result.satisfied;
+      _status = result.detail;
+    });
+  }
+
+  /// Called by the QR scanner when a code is decoded.
+  void onQrScanned(String payload) {
+    final result = _proof.checkQr(payload, expected: _settings.qrPayload ?? '');
+    if (!mounted) return;
+    setState(() {
+      _inRoom = result.satisfied;
+      _status = result.detail;
+    });
   }
 
   @override
@@ -116,12 +156,17 @@ class _RingScreenState extends State<RingScreen> {
 
   List<Widget> _roomGate(ThemeData theme) => <Widget>[
     Text(
-      'Go to the other room: tap the NFC tag, scan the QR code, '
-      'or walk ${RoomProof.requiredSteps} steps.',
+      _nfcAvailable && _settings.nfcTagId != null
+          ? 'Go to the other room and tap the NFC tag.'
+          : 'Go to the other room: scan the QR code, or walk '
+                '${RoomProof.requiredSteps} steps.',
       textAlign: TextAlign.center,
       style: theme.textTheme.bodyLarge,
     ),
     const SizedBox(height: 16),
+    // The steps fallback stays reachable even when NFC is registered: a
+    // single failing mechanism at 06:00 must never make the alarm
+    // undismissable.
     FilledButton(onPressed: _trySteps, child: const Text('Check steps')),
   ];
 

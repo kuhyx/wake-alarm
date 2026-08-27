@@ -48,6 +48,7 @@ object AlarmChannel {
                 AlarmService.start(context)
                 result.success(null)
             }
+            "hasNfc" -> result.success(NfcReader.isAvailable(context))
             "stepCount" -> result.success(StepCounter.stepsSinceRingStart(context))
             "beginStepCount" -> {
                 StepCounter.markRingStart(context)

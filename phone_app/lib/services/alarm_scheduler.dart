@@ -47,6 +47,24 @@ class AlarmScheduler {
   Future<bool> canUseFullScreenIntent() async =>
       await _channel.invokeMethod<bool>('canUseFullScreenIntent') ?? false;
 
+  /// Whether the device can read NFC and has it switched on.
+  Future<bool> hasNfc() async =>
+      await _channel.invokeMethod<bool>('hasNfc') ?? false;
+
+  /// Calls [onTag] with each NFC tag id scanned while the ring screen is up.
+  ///
+  /// Reader mode is driven from Kotlin, so the tap does not restart the
+  /// activity — a restart would reset the challenge.
+  void onNfcTag(void Function(String tagId) onTag) {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onNfcTag') {
+        final id = call.arguments;
+        if (id is String) onTag(id);
+      }
+      return null;
+    });
+  }
+
   /// Starts the ring immediately, without waiting for the alarm instant.
   ///
   /// Exists so the foreground-service and full-screen-intent path can be

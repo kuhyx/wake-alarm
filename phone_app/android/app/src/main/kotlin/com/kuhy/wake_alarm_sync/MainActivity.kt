@@ -18,26 +18,35 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestNotificationPermission()
+        requestAlarmPermissions()
     }
 
     /**
-     * Asks for POST_NOTIFICATIONS, which is a runtime permission from API 33.
+     * Asks for the two runtime permissions the alarm cannot work without.
      *
-     * Without the grant the app sits at importance=NONE, the full-screen
-     * intent is rejected before it is considered, and the alarm rings with no
-     * dismiss screen. Measured on the API 36 AVD, where a freshly installed
-     * app is blocked by default.
+     * POST_NOTIFICATIONS (API 33+): without the grant the app sits at
+     * importance=NONE, the full-screen intent is rejected before it is even
+     * considered, and the alarm rings with no dismiss screen. Measured on the
+     * API 36 AVD, where a freshly installed app is blocked by default.
+     *
+     * ACTIVITY_RECOGNITION (API 29+): TYPE_STEP_COUNTER delivers nothing
+     * without it, so the steps fallback would report "sensor unavailable"
+     * forever. That matters because a room proof that can never be satisfied
+     * makes the alarm undismissable, not merely degraded.
      */
-    private fun requestNotificationPermission() {
-        val granted = ContextCompat.checkSelfPermission(
-            this,
+    private fun requestAlarmPermissions() {
+        val wanted = arrayOf(
             Manifest.permission.POST_NOTIFICATIONS,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (granted) return
+            Manifest.permission.ACTIVITY_RECOGNITION,
+        )
+        val missing = wanted.filter {
+            ContextCompat.checkSelfPermission(this, it) !=
+                PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) return
         ActivityCompat.requestPermissions(
             this,
-            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            missing.toTypedArray(),
             NOTIFICATION_REQUEST_CODE,
         )
     }

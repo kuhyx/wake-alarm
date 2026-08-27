@@ -28,9 +28,25 @@ class AlarmActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
     }
 
+    /** Kept so NFC reader mode can push tag ids back to the ring screen. */
+    private var alarmChannel: MethodChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         AlarmChannel.register(this, flutterEngine)
+        alarmChannel = channel(flutterEngine)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Reader mode only works while this activity is in the foreground, so
+        // it is started here rather than at engine-configure time.
+        alarmChannel?.let { NfcReader.start(this, it) }
+    }
+
+    override fun onPause() {
+        NfcReader.stop(this)
+        super.onPause()
     }
 
     /**
