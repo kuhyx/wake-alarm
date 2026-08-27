@@ -39,7 +39,6 @@ def _patch_wake_state_file(wake_state_file: Path) -> None:
         yield
 
 
-
 class TestHasWorkoutSkipToday:
     """Tests for has_workout_skip_today."""
 
