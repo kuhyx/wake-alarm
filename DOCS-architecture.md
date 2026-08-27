@@ -43,4 +43,3 @@ and workout gate persist. Two invariants are locked in by tests in
   never leaves its softest rung before going quiet.
 - `ESCAPE_OFFER_AFTER_SECONDS` (900) `> FAILSAFE_SILENCE_SECONDS` — otherwise
   the escape hatch appears exactly as the alarm stops being annoying.
-
