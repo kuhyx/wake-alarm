@@ -23,10 +23,25 @@ scanning) — never for the ring path.
 
 Things that are a hard crash or a silent no-ring, not a warning:
 
-- **`STREAM_ALARM` is load-bearing.** `AlarmService` sets
-  `AudioAttributes.USAGE_ALARM`, which is what ignores DND and silent mode.
-  Never `USAGE_MEDIA`/`STREAM_MUSIC` — it would be muted exactly when the
-  alarm matters most.
+- **`STREAM_ALARM` is load-bearing — but it does not beat *every* DND mode.**
+  `AlarmService` sets `AudioAttributes.USAGE_ALARM`; never
+  `USAGE_MEDIA`/`STREAM_MUSIC`, which would be muted exactly when the alarm
+  matters most. Measured on the Pixel 6a (2026-08-27), the muted-stream mask
+  from `dumpsys audio` differs by zen mode:
+
+  | DND mode | `zen_mode` | `STREAM_ALARM` |
+  |---|---|---|
+  | priority (`ZEN_MODE_IMPORTANT_INTERRUPTIONS`) | 1 | **not muted** (mask `0x1a6`) |
+  | total silence (`ZEN_MODE_NO_INTERRUPTIONS`) | 2 | **MUTED** (mask `0x9be`) |
+
+  The confirmed ring was under **priority DND** (`zen_mode=1`): player
+  `state:started`, `usage=USAGE_ALARM` → `STREAM_ALARM(4)`, `mutedState:none`.
+  **Total silence mutes the alarm stream system-wide**, and no audio flag
+  escapes it — so "ignores DND" means priority DND, not total silence. If that
+  gap ever matters, the fix is a zen-policy check at arm time, not an audio
+  change. `raiseAlarmVolume()` does run on this hardware (observed raising
+  `oldIndex:0` → 7, no `SecurityException`), which recovers a stream turned
+  down to zero but not one muted by total silence.
 - **`android:foregroundServiceType="mediaPlayback"` must be on the `<service>`
   in the manifest AND passed to `startForeground()`.** Omitting either is a
   hard crash the moment the alarm fires on API 34+ — and it is invisible on an
@@ -89,4 +104,3 @@ cannot finish an activity). Without it the dismiss screen stays up over the
 lockscreen forever — back is disabled by design in both halves — and the live
 instance would carry a satisfied room proof and the solved answer into the
 next ring.
-

@@ -99,6 +99,23 @@ The alarm is no longer opt-in and can no longer be weakened:
   later than 08:00 whatever its source, so a stale or tampered remote value
   cannot move the alarm later through sync.
 
+### DND: verified for priority mode, NOT for total silence
+
+Measured on the Pixel: `STREAM_ALARM` is unmuted under **priority** DND
+(`zen_mode=1`, mask `0x1a6`) and **muted** under **total silence**
+(`zen_mode=2`, mask `0x9be`). The confirmed ring was priority DND. No audio
+flag escapes total silence, so if that gap matters the fix is a zen-policy
+check at arm time, not an audio change. Detail in `DOCS-phone-alarm.md`.
+
+Two harness traps found while testing this, worth keeping:
+
+- **Do not pass `--build-number` to a probe build** — it produced a
+  non-running APK.
+- **The arm probe can register for TOMORROW.** It calls `schedule()`, then
+  `main.dart`'s `rearm()` recomputes `nextOccurrence`; if the armed minute has
+  passed by then the alarm lands on the next day. Always re-check the
+  registered `triggerTime` is today before waiting for a ring.
+
 ### Still unverified
 
 - The **QR** proof has no scanner UI (`mobile_scanner`); `checkQr` and its
