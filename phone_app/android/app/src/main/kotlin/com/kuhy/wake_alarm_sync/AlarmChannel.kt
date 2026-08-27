@@ -40,6 +40,14 @@ object AlarmChannel {
                 AlarmScheduler.rearmFromStorage(context)
                 result.success(null)
             }
+            // Fires the ring immediately, so the foreground-service and
+            // full-screen-intent path can be exercised on an emulator without
+            // waiting for a real alarm instant. Reachable only over this app's
+            // own channel; it arms nothing and changes no stored time.
+            "ringNow" -> {
+                AlarmService.start(context)
+                result.success(null)
+            }
             "stepCount" -> result.success(StepCounter.stepsSinceRingStart(context))
             "beginStepCount" -> {
                 StepCounter.markRingStart(context)

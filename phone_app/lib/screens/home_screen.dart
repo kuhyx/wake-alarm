@@ -4,6 +4,7 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
+import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
@@ -26,6 +27,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _status = '';
   bool _configured = false;
   AlarmSyncService? _service;
+
+  /// Platform bridge that arms the app's own alarm (item 1).
+  final AlarmScheduler _scheduler = AlarmScheduler();
 
   @override
   void initState() {
@@ -82,13 +86,34 @@ class _HomeScreenState extends State<HomeScreen> {
   ///
   /// android_intent_plus v5 uses startActivityForResult; the Clock app
   /// never sends a result, so we time out after 3 s rather than hang forever.
+  /// Arms the app's own alarm — no user interaction (item 1).
+  ///
+  /// The SET_ALARM intent below is kept only as optional redundancy in the
+  /// system Clock app; it is no longer what makes the phone ring, because it
+  /// required the user to confirm in another app every single time.
+  ///
+  /// Returns an error string when the alarm could not be armed, or null on
+  /// success. A full-screen-intent grant that has been revoked is a hard
+  /// failure, not a warning: without it the alarm posts a notification the
+  /// sleeping user never sees.
+  Future<String?> _armOwnAlarm() async {
+    if (!await _scheduler.canUseFullScreenIntent()) {
+      return 'Allow "full screen notifications" for this app in Android '
+          'settings — without it the alarm cannot show over the lockscreen.';
+    }
+    await _scheduler.schedule(_hour, _minute);
+    return null;
+  }
+
   Future<void> _setPhoneAlarm() async {
     final intent = AndroidIntent(
       action: 'android.intent.action.SET_ALARM',
       arguments: {
         'android.intent.extra.alarm.HOUR': _hour,
         'android.intent.extra.alarm.MINUTES': _minute,
-        'android.intent.extra.alarm.SKIP_UI': false,
+        // SKIP_UI: the app already armed its own alarm, so the Clock entry is
+        // pure redundancy and must not demand a tap.
+        'android.intent.extra.alarm.SKIP_UI': true,
         'android.intent.extra.alarm.MESSAGE': 'Wake Alarm',
       },
     );
@@ -113,9 +138,15 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await service.setLocal(_hour, _minute);
       await service.push(settings.token);
-      setState(() => _status = 'Synced ✓ — opening Clock app…');
+      setState(() => _status = 'Synced ✓ — arming alarm…');
+      final problem = await _armOwnAlarm();
+      if (problem != null) {
+        setState(() => _status = problem);
+        return;
+      }
       await _setPhoneAlarm();
-      setState(() => _status = 'Done! Confirm the alarm in the Clock app.');
+      final at = _fmt(_hour, _minute);
+      setState(() => _status = 'Done! Alarm armed for $at.');
     } on Exception catch (e) {
       setState(() => _status = 'Error: $e');
     } finally {

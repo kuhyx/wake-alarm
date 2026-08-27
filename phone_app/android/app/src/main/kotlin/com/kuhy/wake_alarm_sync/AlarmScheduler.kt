@@ -71,14 +71,20 @@ object AlarmScheduler {
     /**
      * Whether the system will actually honour a full-screen intent.
      *
-     * False from API 34 unless the user granted it. The caller must treat this
-     * as a hard failure rather than logging and continuing: without it the
-     * alarm posts a notification the sleeping user never sees.
+     * Requires BOTH the API 34 full-screen-intent grant AND notifications
+     * being enabled at all: with notifications blocked the post is dropped
+     * before the full-screen intent is ever considered, so the alarm rings
+     * with no dismiss screen. Measured on the API 36 AVD, where a freshly
+     * installed app sits at importance=NONE and the op logs a rejectTime.
+     *
+     * The caller must treat a false here as a hard failure rather than
+     * logging and continuing — the sleeping user never sees a notification.
      */
     fun canUseFullScreenIntent(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
         val notifications =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!notifications.areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
         return notifications.canUseFullScreenIntent()
     }
 
