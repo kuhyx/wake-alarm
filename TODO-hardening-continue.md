@@ -21,15 +21,15 @@ starting; this file deliberately does not duplicate it.
 | 10 vmbox | **Done.** `scripts/vmbox/harness.sh` + `DOCS-vmbox.md`. 8 cases, fails closed. Found 2 live bugs the host could not reach. |
 | 5 curtains | **Done.** `_curtains.py` driver protocol + no-op default, called from `prepare_hardware()`. `DOCS-curtains-hardware.md` has the buy list. |
 | 1/4 phone alarm | **Done.** Five Kotlin files behind one MethodChannel + the Dart ring screen. The phone arms and rings its own alarm; no Clock-app confirmation. Verified on the API 36 AVD (screen Asleep→Awake, AlarmActivity over the lockscreen) and deployed to the Pixel 6a. |
-| 3 room proofs | **Mostly done.** NFC (hand-written `NfcReader.kt`) and the steps+elapsed fallback ship and are wired into the ring screen. QR is specified and unit-tested (`checkQr`) but has **no scanner UI** — `mobile_scanner` was left as the droppable extra. |
+| 3 room proofs | **Mostly done.** NFC works end to end: `NfcReader.kt` (hand-written), Settings → "Room proof" registers the tag, and a tap satisfies the gate. Steps+elapsed is the fallback. QR is specified, persisted and unit-tested but has **no scanner UI** — `mobile_scanner` is the droppable extra. |
 
 ## Remaining, in order
 
-1. **Item 3 leftovers.** The QR scanner UI (`mobile_scanner`) and a Settings
-   screen to register the NFC tag id / QR payload. `RoomProofSettings` already
-   persists both and `RoomProof.checkQr` is unit-tested — what is missing is
-   only the UI that feeds them. NFC and the steps fallback already work, so
-   the alarm is dismissable without this.
+1. **Item 3 leftover: the QR scanner UI only.** `mobile_scanner`, feeding
+   `RingScreen.onQrScanned`, which already exists and is unit-tested. The
+   payload is registered in Settings → "Room proof" and persisted. NFC and the
+   steps fallback both work, so the alarm is dismissable without this — QR is
+   the third mechanism, not a missing one.
 2. **Item 8, mutual gating.** Phone half is now in place. This is the phase
    that legitimately touches `_sync.py`, so it carries that split (see below).
 3. **Item 13, black screen.** Different repo (`~/testsAndMisc/
@@ -43,6 +43,16 @@ alarm has never rung on it** — that needs an alarm armed through the picker
 (which needs a sync backend connected) and a wait to the fire instant. Ring
 with **DND on**, since "STREAM_ALARM ignores DND" is the load-bearing claim
 and has not been observed on hardware.
+
+The **dismiss path** has never run on any device either: the AVD has neither a
+step sensor nor NFC, so the room gate correctly refuses to open there. It is
+covered by widget tests (NFC tap → challenge → `dismiss` + `closeRingScreen`),
+which is weaker than a real tap on a real tag. Register a tag via Settings →
+"Room proof" and dismiss a real ring before calling item 3 finished.
+
+**Mute the host before firing a ring on the emulator.** The AVD routes
+`STREAM_ALARM` to the PC's speakers, and `raiseAlarmVolume()` sets it to max —
+this went off out loud during the session (2026-08-27).
 
 ## Decisions already made — do not re-litigate
 
