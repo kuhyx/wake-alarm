@@ -11,7 +11,7 @@
 #   4. Installs the systemd-sleep hook (restarts alarm after hibernate resume)
 #   5. Adds a sudoers entry for passwordless rtcwake
 #   6. Installs shutdown wrapper so "shutdown now" also hibernates on alarm nights
-#   7. Installs fan-control script so alarm can max fans on wake
+#   7. Removes the retired fan-control script + its sudoers entry
 #   8. Installs python-kasa (AUR) so the alarm can toggle a Tapo P110 smart plug
 #   9. Installs ddcutil and grants /dev/i2c-* access for DDC/CI monitor control
 
@@ -40,7 +40,6 @@ TRIGGER_SERVICE_SRC="$SCRIPT_DIR/wake-alarm-trigger.service"
 TRIGGER_TIMER_SRC="$SCRIPT_DIR/wake-alarm-trigger.timer"
 SLEEP_HOOK_SRC="$SCRIPT_DIR/sleep-hook.sh"
 SHUTDOWN_WRAPPER_SRC="$SCRIPT_DIR/shutdown-wrapper.sh"
-FANS_SCRIPT_SRC="$SCRIPT_DIR/wake-alarm-fans.sh"
 FANS_SCRIPT_DST="/usr/local/bin/wake-alarm-fans.sh"
 SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 SLEEP_HOOK_DST="/usr/lib/systemd/system-sleep/wake-alarm.sh"
@@ -112,19 +111,21 @@ sudo chmod 0755 "$SHUTDOWN_WRAPPER_DST"
 echo "  Installed to $SHUTDOWN_WRAPPER_DST"
 echo "  'shutdown now' will now hibernate (not poweroff) on alarm nights."
 
-# 7. Install fan-control script and its sudoers entry
-echo "[7/9] Installing fan-control script..."
-sudo cp "$FANS_SCRIPT_SRC" "$FANS_SCRIPT_DST"
-sudo chmod 0755 "$FANS_SCRIPT_DST"
-FANS_SUDOERS_LINE="$USER ALL=(root) NOPASSWD: $FANS_SCRIPT_DST"
-if [[ -f "$SUDOERS_FILE" ]] && grep -qF "$FANS_SUDOERS_LINE" "$SUDOERS_FILE"; then
-    echo "  Fan sudoers entry already exists"
-else
-    # Append to existing file (or create)
-    echo "$FANS_SUDOERS_LINE" | sudo tee -a "$SUDOERS_FILE" > /dev/null
-    sudo chmod 0440 "$SUDOERS_FILE"
-    echo "  Added fan sudoers entry"
+# 7. Remove the retired fan-control script and its sudoers entry.
+# The alarm no longer ramps fans: it added anxiety without helping anyone wake
+# up. An upgrade must actively clean up, or a machine that installed the old
+# version keeps a passwordless root entry for a script that no longer exists.
+echo "[7/9] Removing retired fan-control script..."
+if [[ -e "$FANS_SCRIPT_DST" ]]; then
+    sudo rm -f "$FANS_SCRIPT_DST"
+    echo "  Removed $FANS_SCRIPT_DST"
 fi
+if [[ -f "$SUDOERS_FILE" ]] && grep -qF "$FANS_SCRIPT_DST" "$SUDOERS_FILE"; then
+    sudo sed -i "\\|$FANS_SCRIPT_DST|d" "$SUDOERS_FILE"
+    sudo chmod 0440 "$SUDOERS_FILE"
+    echo "  Dropped the fan NOPASSWD sudoers entry"
+fi
+sudo rm -f /run/wake-alarm-fans.state
 
 # 8. Install python-kasa (AUR) for TP-Link Tapo P110 smart-plug control
 echo "[8/9] Installing python-kasa (AUR)..."

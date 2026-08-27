@@ -6,8 +6,7 @@ A wake alarm: on alarm days (`ALARM_DAYS` in `_constants.py` — currently
 **every day**, `frozenset({0..6})`), the machine hibernates overnight and
 wakes itself via `rtcwake` at the configured alarm time. `wake-alarm.service`
 then opens a fullscreen Tk window that must be dismissed (with a typed challenge — see
-`_challenges.py`), ramps fans to 100% via `wake-alarm-fans.sh`, plays audio
-through whatever sink comes up after the monitor wakes, and optionally
+`_challenges.py`), plays audio through every real sink, and optionally
 toggles a TP-Link Tapo P110 smart plug via `python-kasa`.
 
 ## Scheduling — a per-minute timer, with hibernate as the fallback
@@ -128,6 +127,13 @@ remote reader to keep in step.
 
 Check what the PC currently resolves: `python -m wake_alarm._sync --show`.
 Check what it would do right now: `python -m wake_alarm._trigger --dry-run`.
+
+## Module map
+
+`_alarm.py` owns the window and the dismiss flow and nothing else. The full
+map of which module answers which question, the HDMI-silence root cause, and
+the timing constants that must not collide are in **`DOCS-architecture.md`**.
+Read it before changing the escalation or the failsafe.
 
 ## Cross-repo coupling — not a bug
 
