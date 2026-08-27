@@ -58,9 +58,9 @@ def _patch_paths(
 ) -> None:
     """Redirect every on-disk path into tmp_path for every test."""
     with (
-        patch("wake_alarm._sync.SYNC_CONFIG_FILE", config_file),
+        patch("wake_alarm._sync_transport.SYNC_CONFIG_FILE", config_file),
         patch("wake_alarm._sync.ALARM_CACHE_FILE", cache_file),
-        patch("wake_alarm._sync.SYNC_TOKEN_FALLBACK_FILES", fallback_files),
+        patch("wake_alarm._sync_transport.SYNC_TOKEN_FALLBACK_FILES", fallback_files),
     ):
         yield
 

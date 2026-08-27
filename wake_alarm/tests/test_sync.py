@@ -60,9 +60,9 @@ def _patch_paths(
 ) -> None:
     """Redirect every on-disk path into tmp_path for every test."""
     with (
-        patch("wake_alarm._sync.SYNC_CONFIG_FILE", config_file),
+        patch("wake_alarm._sync_transport.SYNC_CONFIG_FILE", config_file),
         patch("wake_alarm._sync.ALARM_CACHE_FILE", cache_file),
-        patch("wake_alarm._sync.SYNC_TOKEN_FALLBACK_FILES", fallback_files),
+        patch("wake_alarm._sync_transport.SYNC_TOKEN_FALLBACK_FILES", fallback_files),
     ):
         yield
 
@@ -111,7 +111,7 @@ class TestFetchRemoteAlarm:
         """The token is never sent over a plaintext or file:// URL."""
         self._with_token(config_file)
         with (
-            patch("wake_alarm._sync.SYNC_API_BASE", "http://api.github.com"),
+            patch("wake_alarm._sync_transport.SYNC_API_BASE", "http://api.github.com"),
             patch("urllib.request.urlopen") as urlopen,
         ):
             assert _fetch_github_alarm() is None

@@ -64,7 +64,7 @@ class TestFetchFirebaseAlarm:
         config = MagicMock()
         config.is_file.return_value = configured
         return patch.multiple(
-            "wake_alarm._sync",
+            "wake_alarm._sync_transport",
             _FIREBASE_AVAILABLE=True,
             FIREBASE_CONFIG_FILE=config,
             firebase_client_for=MagicMock(
@@ -77,7 +77,7 @@ class TestFetchFirebaseAlarm:
 
     def test_missing_dependency_yields_none(self) -> None:
         """A machine without crdt_sync falls back instead of raising."""
-        with patch("wake_alarm._sync._FIREBASE_AVAILABLE", new=False):
+        with patch("wake_alarm._sync_transport._FIREBASE_AVAILABLE", new=False):
             assert _fetch_firebase_alarm() is None
 
     def test_unconfigured_never_touches_the_network(self) -> None:
@@ -183,7 +183,7 @@ class TestOptionalCrdtSyncImport:
         import importlib
         import sys
 
-        from wake_alarm import _sync
+        from wake_alarm import _sync_transport
 
         for name in (
             "crdt_sync",
@@ -193,11 +193,14 @@ class TestOptionalCrdtSyncImport:
         ):
             monkeypatch.setitem(sys.modules, name, None)
         try:
-            reloaded = importlib.reload(_sync)
+            reloaded = importlib.reload(_sync_transport)
             assert reloaded._FIREBASE_AVAILABLE is False
         finally:
             monkeypatch.undo()
-            importlib.reload(_sync)
+            # Restore the real module for every later test: a reload left in
+            # the import-failed state would silently disable Firebase for the
+            # rest of the session.
+            importlib.reload(_sync_transport)
 
 
 class TestFetchRemoteAlarmDispatch:
@@ -206,8 +209,10 @@ class TestFetchRemoteAlarmDispatch:
     def test_prefers_firebase(self) -> None:
         """When Firebase answers, GitHub is never asked."""
         with (
-            patch("wake_alarm._sync._fetch_firebase_alarm", return_value=(6, 15)),
-            patch("wake_alarm._sync._fetch_github_alarm") as github,
+            patch(
+                "wake_alarm._sync_transport._fetch_firebase_alarm", return_value=(6, 15)
+            ),
+            patch("wake_alarm._sync_transport._fetch_github_alarm") as github,
         ):
             assert fetch_remote_alarm() == (6, 15)
         github.assert_not_called()
@@ -215,15 +220,21 @@ class TestFetchRemoteAlarmDispatch:
     def test_falls_back_to_github(self) -> None:
         """A Firebase miss still resolves through the mirror."""
         with (
-            patch("wake_alarm._sync._fetch_firebase_alarm", return_value=None),
-            patch("wake_alarm._sync._fetch_github_alarm", return_value=(7, 30)),
+            patch(
+                "wake_alarm._sync_transport._fetch_firebase_alarm", return_value=None
+            ),
+            patch(
+                "wake_alarm._sync_transport._fetch_github_alarm", return_value=(7, 30)
+            ),
         ):
             assert fetch_remote_alarm() == (7, 30)
 
     def test_both_missing_yields_none(self) -> None:
         """With neither backend usable the caller degrades to the cache."""
         with (
-            patch("wake_alarm._sync._fetch_firebase_alarm", return_value=None),
-            patch("wake_alarm._sync._fetch_github_alarm", return_value=None),
+            patch(
+                "wake_alarm._sync_transport._fetch_firebase_alarm", return_value=None
+            ),
+            patch("wake_alarm._sync_transport._fetch_github_alarm", return_value=None),
         ):
             assert fetch_remote_alarm() is None
