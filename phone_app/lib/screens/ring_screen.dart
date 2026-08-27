@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
@@ -143,6 +144,11 @@ class _RingScreenState extends State<RingScreen> {
   Future<void> _finishDismiss() async {
     developer.log('dismiss: stopping ring', name: 'WakeAlarmRing');
     await _scheduler.dismiss();
+    // A one-shot earlier start applies to this alarm only. Without the reset
+    // the first early morning would become permanent, with no way back to the
+    // 08:00 baseline short of reinstalling — a ratchet with no reset is a
+    // trap, not a defence.
+    await AlarmPolicy.resetAfterFire();
     developer.log('dismiss: closing screen', name: 'WakeAlarmRing');
     await _scheduler.closeRingScreen();
   }

@@ -16,18 +16,30 @@ class AlarmScheduler {
 
   /// Arms the alarm for the next occurrence of [hour]:[minute] in local time.
   ///
-  /// The phone rings **daily**, matching the PC's `ALARM_DAYS` which is
-  /// currently all seven days. The two are deliberately not synced — a shared
-  /// day set is item 8's shape, and diverging defaults would have the halves
-  /// firing on different days.
+  /// The phone rings **daily**, matching the PC's `ALARM_DAYS` (all seven
+  /// days) and its baked-in fallback hour. Callers pass a time resolved by
+  /// `AlarmPolicy`, never a user-chosen one: the schedule is fixed at 08:00
+  /// and only ever ratchets earlier.
   Future<void> schedule(int hour, int minute) =>
       _channel.invokeMethod<void>('schedule', <String, int>{
         'hour': hour,
         'minute': minute,
       });
 
-  /// Cancels the armed alarm and forgets the stored time.
-  Future<void> cancel() => _channel.invokeMethod<void>('cancel');
+  // There is deliberately NO cancel(). The alarm cannot be switched off from
+  // the app: the only way past it is the full dismiss ritual at ring time.
+  // The Kotlin `cancel` handler is gone too, so this is not merely a missing
+  // Dart wrapper around a live capability.
+
+  /// Arms the fixed schedule and starts the daily watchdog.
+  ///
+  /// Called from the app's init seam, so simply launching the app arms the
+  /// alarm — there is no button to forget to press.
+  Future<void> armSchedule(int hour, int minute) =>
+      _channel.invokeMethod<void>('armSchedule', <String, int>{
+        'hour': hour,
+        'minute': minute,
+      });
 
   /// Re-arms from the stored time; false when no alarm was ever set.
   ///

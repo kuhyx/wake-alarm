@@ -24,14 +24,27 @@ object AlarmChannel {
     fun handleCall(context: Context, call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "schedule" -> schedule(context, call, result)
-            "cancel" -> {
-                AlarmScheduler.cancel(context)
-                result.success(null)
-            }
+            // No "cancel": the alarm cannot be switched off. Removing the
+            // handler (rather than just the Dart wrapper) is what makes that
+            // real — otherwise the capability is one invokeMethod away.
             // Called from the Dart init seam and after a dismiss: with no
             // change-stream in the store, these are the only re-arm hooks
             // besides BOOT_COMPLETED.
             "rearm" -> result.success(AlarmScheduler.rearmFromStorage(context))
+            // Arms the fixed schedule and (re)starts the daily check. Called
+            // from the Dart init seam on every launch, so the alarm is armed
+            // by opening the app at all rather than by tapping anything.
+            "armSchedule" -> {
+                val hour = call.argument<Int>("hour")
+                val minute = call.argument<Int>("minute")
+                if (hour == null || minute == null) {
+                    result.error("bad_args", "hour and minute are required", null)
+                } else {
+                    AlarmScheduler.schedule(context, hour, minute)
+                    AlarmWatchdog.schedule(context)
+                    result.success(null)
+                }
+            }
             "canUseFullScreenIntent" ->
                 result.success(AlarmScheduler.canUseFullScreenIntent(context))
             "dismiss" -> {

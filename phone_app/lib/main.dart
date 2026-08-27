@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wake_alarm_sync/screens/home_screen.dart';
 import 'package:wake_alarm_sync/screens/ring_screen.dart';
+import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
@@ -18,10 +19,11 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 /// startup re-arm below runs before the first frame.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // The log store has no change stream, so the picker's save is the only other
-  // arm hook. Without this, restarting the app without touching the picker
-  // would leave nothing armed at all.
-  await AlarmScheduler().rearm();
+  // The alarm is not opt-in: launching the app is enough to arm it. There is
+  // no "set alarm" button to forget, and no cancel to reach for at 02:00 —
+  // AlarmPolicy fixes the time at 08:00 and only ever lets it move earlier.
+  final policy = await AlarmPolicy.load();
+  await AlarmScheduler().armSchedule(policy.hour, policy.minute);
   runApp(const WakeAlarmSyncApp());
 }
 

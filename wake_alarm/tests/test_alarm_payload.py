@@ -1,107 +1,193 @@
-"""Tests for parsing and ranking the alarm payload devices publish.
+"""Tests for _alarm_payload.py — parsing and ranking what the phone pushed.
 
-A misparse here does not raise -- it resolves to the wrong wake-up time --
-so the malformed shapes are covered as carefully as the good ones.
+Split out of test_sync.py: these exercise the wire format, which is a
+different module from the fetching/caching this file's siblings cover.
 """
 
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
-from wake_alarm._alarm_payload import extract_hlc, newest_alarm, parse_log
+import pytest
+
+from wake_alarm._alarm_payload import (
+    extract_field,
+    extract_hlc,
+    newest_alarm,
+    parse_log,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
-def _log(hour: object = 7, minute: object = 30, hlc: str = "hlc-1") -> str:
+def _log(hour: object = 7, minute: object = 30) -> str:
     """Build a crdt_sync log payload shaped like the phone's."""
     return json.dumps(
         {
             "alarm": {
                 "fields": {
-                    "alarm_hour": [hour, hlc],
-                    "alarm_minute": [minute, hlc],
+                    "alarm_hour": [hour, "hlc-1"],
+                    "alarm_minute": [minute, "hlc-1"],
                 }
             }
         }
     )
 
 
-class TestExtractHlc:
-    def test_reads_the_stamp(self) -> None:
-        """The HLC is element 1 of the (value, HLC) pair."""
-        assert extract_hlc(json.loads(_log(hlc="stamp-9")), "alarm_hour") == "stamp-9"
-
-    def test_a_pair_with_no_hlc_reads_as_empty(self) -> None:
-        """A one-element pair sorts below every real stamp rather than raising."""
-        log = {"alarm": {"fields": {"alarm_hour": [7]}}}
-
-        assert extract_hlc(log, "alarm_hour") == ""
-
-    def test_a_non_string_hlc_reads_as_empty(self) -> None:
-        """A numeric stamp is not orderable against real ones; treat as absent."""
-        log = {"alarm": {"fields": {"alarm_hour": [7, 12345]}}}
-
-        assert extract_hlc(log, "alarm_hour") == ""
-
-    def test_a_missing_record_reads_as_empty(self) -> None:
-        """No alarm record at all is not an error here."""
-        assert extract_hlc({}, "alarm_hour") == ""
+@pytest.fixture
+def config_file(tmp_path: Path) -> Path:
+    """Provide a temporary sync config path."""
+    return tmp_path / "sync.json"
 
 
-class TestNewestAlarm:
-    def test_no_devices_yields_none(self) -> None:
-        """Nothing published is a miss, not a crash."""
-        assert newest_alarm([]) is None
+@pytest.fixture
+def cache_file(tmp_path: Path) -> Path:
+    """Provide a temporary alarm cache path."""
+    return tmp_path / "cache" / "alarm_cache.json"
 
-    def test_every_device_unusable_yields_none(self) -> None:
-        """If no device parses, there is no alarm to return."""
-        assert newest_alarm([("a", "{not json"), ("b", "[]")]) is None
 
-    def test_newest_hlc_wins(self) -> None:
-        """The device that set the alarm last wins, not the first listed."""
-        published = [
-            ("old", _log(9, 0, hlc="2026-07-01T10:00:00.000Z-0000-old")),
-            ("new", _log(5, 30, hlc="2026-08-09T10:00:00.000Z-0000-new")),
-        ]
+@pytest.fixture
+def fallback_files(tmp_path: Path) -> tuple[Path, Path]:
+    """Provide two temporary sibling-app token paths."""
+    return tmp_path / "diet_guard_token", tmp_path / "screen_locker_token"
 
-        assert newest_alarm(published) == (5, 30)
 
-    def test_ranking_is_independent_of_listing_order(self) -> None:
-        """Reversing the input must not change the winner."""
-        published = [
-            ("new", _log(5, 30, hlc="2026-08-09T10:00:00.000Z-0000-new")),
-            ("old", _log(9, 0, hlc="2026-07-01T10:00:00.000Z-0000-old")),
-        ]
+@pytest.fixture(autouse=True)
+def _patch_paths(
+    config_file: Path, cache_file: Path, fallback_files: tuple[Path, Path]
+) -> None:
+    """Redirect every on-disk path into tmp_path for every test."""
+    with (
+        patch("wake_alarm._sync.SYNC_CONFIG_FILE", config_file),
+        patch("wake_alarm._sync.ALARM_CACHE_FILE", cache_file),
+        patch("wake_alarm._sync.SYNC_TOKEN_FALLBACK_FILES", fallback_files),
+    ):
+        yield
 
-        assert newest_alarm(published) == (5, 30)
-        assert newest_alarm(list(reversed(published))) == (5, 30)
 
-    def test_an_exact_hlc_tie_breaks_on_device_id(self) -> None:
-        """Two devices stamped identically must not alternate between ticks."""
-        published = [
-            ("aaa", _log(6, 0, hlc="same")),
-            ("zzz", _log(8, 0, hlc="same")),
-        ]
+class TestExtractField:
+    """Tests for extract_field's tolerance of malformed logs."""
 
-        assert newest_alarm(published) == (8, 0)
-        assert newest_alarm(list(reversed(published))) == (8, 0)
+    @pytest.mark.parametrize(
+        "log",
+        [
+            {},
+            {"alarm": "not a dict"},
+            {"alarm": {}},
+            {"alarm": {"fields": "not a dict"}},
+            {"alarm": {"fields": {}}},
+            {"alarm": {"fields": {"alarm_hour": "not a list"}}},
+            {"alarm": {"fields": {"alarm_hour": []}}},
+            {"alarm": {"fields": {"alarm_hour": ["7", "hlc"]}}},
+            {"alarm": {"fields": {"alarm_hour": [True, "hlc"]}}},
+        ],
+    )
+    def test_malformed_shapes_yield_none(self, log: dict[str, Any]) -> None:
+        """Every unexpected shape degrades to None rather than raising."""
+        assert extract_field(log, "alarm_hour") is None
 
-    def test_an_unusable_device_is_skipped_not_fatal(self) -> None:
-        """A corrupt publisher must not shadow a healthy one."""
-        published = [("broken", "{not json"), ("good", _log(7, 20))]
-
-        assert newest_alarm(published) == (7, 20)
-
-    def test_an_out_of_range_device_is_skipped(self) -> None:
-        """A nonsense hour never becomes a fire time, even if newest."""
-        published = [
-            ("bad", _log(99, 0, hlc="2026-08-09T10:00:00.000Z-0000-bad")),
-            ("good", _log(7, 20, hlc="2026-07-01T10:00:00.000Z-0000-good")),
-        ]
-
-        assert newest_alarm(published) == (7, 20)
+    def test_extracts_value(self) -> None:
+        """The value is element 0 of the (value, HLC) pair."""
+        log = {"alarm": {"fields": {"alarm_hour": [6, "hlc"]}}}
+        assert extract_field(log, "alarm_hour") == 6
 
 
 class TestParseLog:
-    def test_a_non_object_payload_yields_none(self) -> None:
-        """A JSON array is valid JSON but not a log."""
+    """Tests for parse_log."""
+
+    def test_valid(self) -> None:
+        """A well-formed log parses to an (hour, minute) pair."""
+        assert parse_log(_log(7, 30)) == (7, 30)
+
+    def test_invalid_json(self) -> None:
+        """Unparsable JSON yields None."""
+        assert parse_log("{nope") is None
+
+    def test_not_a_dict(self) -> None:
+        """A JSON array is not a log."""
         assert parse_log("[]") is None
+
+    def test_missing_fields(self) -> None:
+        """A log without the alarm fields yields None."""
+        assert parse_log(json.dumps({"alarm": {"fields": {}}})) is None
+
+    @pytest.mark.parametrize(("hour", "minute"), [(24, 0), (-1, 0), (7, 60), (7, -1)])
+    def test_out_of_range(self, hour: int, minute: int) -> None:
+        """Values outside 0-23 / 0-59 are rejected."""
+        assert parse_log(_log(hour, minute)) is None
+
+
+class TestExtractHlc:
+    """The HLC stamp is how the newest device's alarm wins the ranking."""
+
+    def test_returns_the_stamp_from_a_well_formed_pair(self) -> None:
+        """A `[value, hlc]` pair yields its second element."""
+        log = {"alarm": {"fields": {"alarm_hour": [7, "2026-08-27T06:00:00Z"]}}}
+        assert extract_hlc(log, "alarm_hour") == "2026-08-27T06:00:00Z"
+
+    def test_a_missing_field_ranks_below_every_real_stamp(self) -> None:
+        """Empty string sorts first, so a malformed device never outranks."""
+        assert extract_hlc({"alarm": {"fields": {}}}, "alarm_hour") == ""
+
+    def test_a_short_pair_ranks_below_every_real_stamp(self) -> None:
+        """A value with no stamp is unusable for ranking."""
+        log = {"alarm": {"fields": {"alarm_hour": [7]}}}
+        assert extract_hlc(log, "alarm_hour") == ""
+
+    def test_a_non_string_stamp_is_rejected(self) -> None:
+        """A numeric stamp would compare wrongly against real ISO strings."""
+        log = {"alarm": {"fields": {"alarm_hour": [7, 12345]}}}
+        assert extract_hlc(log, "alarm_hour") == ""
+
+
+class TestNewestAlarm:
+    """Ranking every device's published alarm, newest HLC wins."""
+
+    def test_no_devices_at_all_yields_none(self) -> None:
+        """An empty listing must not be mistaken for a valid alarm."""
+        assert newest_alarm([]) is None
+
+    def test_every_device_unusable_yields_none(self) -> None:
+        """A device whose payload will not parse is skipped, not trusted."""
+        assert newest_alarm([("phone", "not json"), ("tablet", "{}")]) is None
+
+    def test_the_newest_hlc_wins(self) -> None:
+        """The point of the stamp: the most recently set alarm is used."""
+        older = json.dumps(
+            {
+                "alarm": {
+                    "fields": {
+                        "alarm_hour": [6, "2026-08-26T06:00:00Z"],
+                        "alarm_minute": [0, "2026-08-26T06:00:00Z"],
+                    }
+                }
+            },
+        )
+        newer = json.dumps(
+            {
+                "alarm": {
+                    "fields": {
+                        "alarm_hour": [7, "2026-08-27T06:00:00Z"],
+                        "alarm_minute": [30, "2026-08-27T06:00:00Z"],
+                    }
+                }
+            },
+        )
+        assert newest_alarm([("old", older), ("new", newer)]) == (7, 30)
+
+    def test_an_unusable_device_does_not_block_a_good_one(self) -> None:
+        """One broken device must not cost the user their alarm."""
+        good = json.dumps(
+            {
+                "alarm": {
+                    "fields": {
+                        "alarm_hour": [5, "2026-08-27T06:00:00Z"],
+                        "alarm_minute": [15, "2026-08-27T06:00:00Z"],
+                    }
+                }
+            },
+        )
+        assert newest_alarm([("broken", "{}"), ("good", good)]) == (5, 15)

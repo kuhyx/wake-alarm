@@ -14,5 +14,9 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         AlarmScheduler.rearmFromStorage(context)
+        // setInexactRepeating does not survive a reboot, so the daily check
+        // has to be re-established here or it silently stops after the first
+        // restart — exactly when a watchdog is most needed.
+        AlarmWatchdog.schedule(context)
     }
 }

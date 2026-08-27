@@ -29,6 +29,7 @@ import sys
 from wake_alarm._alarm_session import should_refire
 from wake_alarm._constants import (
     ALARM_DAYS,
+    FALLBACK_ALARM_HOUR,
     TRIGGER_CATCHUP_MINUTES,
     TRIGGER_TARGET_UNIT,
 )
@@ -172,13 +173,46 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _clamp_to_baseline(alarm: Alarm) -> Alarm:
+    """Refuse to let any resolved alarm land later than the baseline.
+
+    The phone bakes in ``FALLBACK_ALARM_HOUR`` and only ever ratchets *earlier*,
+    so a synced value later than the baseline means something is wrong — a
+    stale record from before the policy landed, a half-written payload, or a
+    tampered store. Whatever the cause, the safe direction is unambiguous:
+    honour it if it is earlier, clamp it if it is later.
+
+    This is the PC half of the watchdog. Without it the PC would faithfully
+    reproduce a bad remote value, and the one thing the design forbids —
+    the alarm silently moving later — would be reachable through sync.
+
+    Args:
+        alarm: The alarm as resolved by ``get_alarm``.
+
+    Returns:
+        The same alarm, or the baseline when the resolved time is later.
+    """
+    if (alarm.hour, alarm.minute) <= (FALLBACK_ALARM_HOUR, 0):
+        return alarm
+    _logger.warning(
+        "Resolved alarm %02d:%02d is later than the %02d:00 baseline "
+        "(source=%s) — clamping. The phone can only move it earlier, so a "
+        "later value means a stale or tampered record.",
+        alarm.hour,
+        alarm.minute,
+        FALLBACK_ALARM_HOUR,
+        alarm.source,
+    )
+    return Alarm(FALLBACK_ALARM_HOUR, 0, f"clamped-{alarm.source}")
+
+
 def main() -> None:
     """Entry point for one timer tick."""
     configure_logging(component="trigger")
     args = _parse_args(sys.argv[1:])
 
     now = _now()
-    alarm = get_alarm()
+    alarm = _clamp_to_baseline(get_alarm())
     should_fire, reason = _decide(now, alarm)
 
     if args.dry_run:

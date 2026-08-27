@@ -19,7 +19,12 @@ DISMISS_WINDOW_MINUTES: int = 30
 
 # Hour at which the alarm fires when the phone's alarm cannot be resolved at
 # all — no network *and* no cached read ever written. Minute is implicitly 0.
-FALLBACK_ALARM_HOUR: int = 13
+#
+# Deliberately the SAME baseline the phone bakes in (AlarmPolicy.baselineHour),
+# so the two halves agree even with the network down. It used to be 13:00,
+# which meant a Firebase outage silently moved the alarm five hours later —
+# the one direction the whole design refuses to allow.
+FALLBACK_ALARM_HOUR: int = 8
 
 # Alarm escalation phase boundaries (minutes from alarm start).
 #

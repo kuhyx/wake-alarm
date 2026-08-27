@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_arming.dart';
+import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
@@ -21,8 +22,11 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _hour = 7;
-  int _minute = 0;
+  int _hour = AlarmPolicy.baselineHour;
+  int _minute = AlarmPolicy.baselineMinute;
+
+  /// True while a one-shot earlier start is in force for the next alarm.
+  bool _isOverridden = false;
   bool _busy = false;
   String _status = '';
   bool _configured = false;
@@ -31,10 +35,17 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Platform bridge that arms the app's own alarm (item 1).
   final AlarmArming _arming = AlarmArming(AlarmScheduler());
 
+  /// Platform bridge used to arm the fixed schedule.
+  final AlarmScheduler _scheduler = AlarmScheduler();
+
   @override
   void initState() {
     super.initState();
+    unawaited(_applyPolicy());
     unawaited(_loadSavedTime());
+    // Publishing to the PC is automatic too: it used to require the same tap
+    // that armed the alarm, so a forgotten tap left the PC on its fallback.
+    unawaited(_syncToPc());
   }
 
   Future<void> _loadSavedTime() async {
@@ -68,21 +79,48 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _pickTime() async {
+  /// Lets the user move **tomorrow's** alarm earlier, never later.
+  ///
+  /// This is the only schedule edit the app offers. Earlier-only is what makes
+  /// it tamper-proof: every change available costs the user sleep, so there is
+  /// no lever a half-asleep user can pull to stay in bed. A later time, a
+  /// skipped day and an off switch are simply not expressible.
+  Future<void> _pickEarlier() async {
+    final current = _fmt(_hour, _minute);
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _hour, minute: _minute),
+      helpText: 'Earlier than $current only',
     );
-    if (picked != null) {
-      setState(() {
-        _hour = picked.hour;
-        _minute = picked.minute;
-        _status = '';
-      });
+    if (picked == null) return;
+    final accepted = await AlarmPolicy.setEarlier(picked.hour, picked.minute);
+    if (!mounted) return;
+    if (!accepted) {
+      setState(
+        () => _status =
+            'That is not earlier than $current. The alarm can only be '
+            'moved earlier.',
+      );
+      return;
     }
+    await _applyPolicy();
+    if (!mounted) return;
+    setState(() => _status = 'Armed for ${_fmt(_hour, _minute)} tomorrow.');
   }
 
-  Future<void> _syncAndSet() async {
+  /// Re-reads the policy and arms the alarm to match it.
+  Future<void> _applyPolicy() async {
+    final policy = await AlarmPolicy.load();
+    await _scheduler.armSchedule(policy.hour, policy.minute);
+    if (!mounted) return;
+    setState(() {
+      _hour = policy.hour;
+      _minute = policy.minute;
+      _isOverridden = policy.isOverridden;
+    });
+  }
+
+  Future<void> _syncToPc() async {
     final settings = await SyncSettings.load();
     final service = _service;
     // syncBackend() falls back to GitHub alone, or pushes to Firebase alone
@@ -115,6 +153,10 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _busy = false);
     }
   }
+
+  /// The baseline time, shown when a one-shot override is active.
+  String get _baseline =>
+      _fmt(AlarmPolicy.baselineHour, AlarmPolicy.baselineMinute);
 
   String _fmt(int h, int m) =>
       '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
@@ -154,38 +196,35 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Alarm time', style: TextStyle(fontSize: 16)),
+                const Text(
+                  'Alarm is armed for',
+                  style: TextStyle(fontSize: 16),
+                ),
                 const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: _pickTime,
-                  child: Text(
-                    _fmt(_hour, _minute),
-                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                Text(
+                  _fmt(_hour, _minute),
+                  style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _pickTime,
-                  child: const Text('Tap to change'),
+                Text(
+                  _isOverridden
+                      ? 'One-shot early start — back to $_baseline '
+                            'after it rings'
+                      : 'Every day. It cannot be turned off.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13),
                 ),
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _busy ? null : _syncAndSet,
-                    icon: _busy
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.alarm_add),
-                    label: const Text('Set Alarm & Sync to PC'),
-                    style: ElevatedButton.styleFrom(
+                  child: OutlinedButton.icon(
+                    onPressed: _busy ? null : _pickEarlier,
+                    icon: const Icon(Icons.arrow_upward),
+                    label: const Text('Wake me earlier tomorrow'),
+                    style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      textStyle: const TextStyle(fontSize: 18),
                     ),
                   ),
                 ),

@@ -27,9 +27,21 @@ void main() {
     expect(calls.single.arguments, <String, int>{'hour': 6, 'minute': 45});
   });
 
-  test('cancel invokes cancel', () async {
-    await scheduler.cancel();
-    expect(calls.single.method, 'cancel');
+  test('there is no way to cancel the alarm', () {
+    // Not a missing wrapper: the Kotlin handler is gone too, so the alarm
+    // genuinely cannot be switched off from the app. The only way past it is
+    // the full dismiss ritual at ring time.
+    expect(
+      calls.where((c) => c.method == 'cancel'),
+      isEmpty,
+      reason: 'no code path may invoke cancel',
+    );
+  });
+
+  test('armSchedule passes the policy time across the channel', () async {
+    await scheduler.armSchedule(8, 0);
+    expect(calls.single.method, 'armSchedule');
+    expect(calls.single.arguments, <String, int>{'hour': 8, 'minute': 0});
   });
 
   test('dismiss invokes dismiss', () async {

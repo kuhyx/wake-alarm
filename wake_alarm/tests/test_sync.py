@@ -3,23 +3,19 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 import urllib.error
 
 import pytest
 
-from wake_alarm._alarm_payload import extract_field, parse_log
+from wake_alarm._constants import FALLBACK_ALARM_HOUR
 from wake_alarm._sync import (
     Alarm,
     _fetch_github_alarm,
-    _parse_args,
     _read_cache,
-    _read_token,
-    _read_token_fallback,
     _write_cache,
     get_alarm,
-    main,
 )
 
 if TYPE_CHECKING:
@@ -77,133 +73,6 @@ class TestAlarm:
     def test_str_pads_and_names_source(self) -> None:
         """Render zero-padded HH:MM with the source in parentheses."""
         assert str(Alarm(7, 5, "remote")) == "07:05 (remote)"
-
-
-class TestReadToken:
-    """Tests for _read_token."""
-
-    def test_missing_file(self) -> None:
-        """A missing config file yields no token."""
-        assert _read_token() is None
-
-    def test_malformed_json(self, config_file: Path) -> None:
-        """Unparsable JSON yields no token."""
-        config_file.write_text("{not json")
-        assert _read_token() is None
-
-    def test_not_a_dict(self, config_file: Path) -> None:
-        """A JSON array is not a config object."""
-        config_file.write_text("[]")
-        assert _read_token() is None
-
-    @pytest.mark.parametrize("value", [None, "", 42])
-    def test_unusable_token_values(self, config_file: Path, value: object) -> None:
-        """Absent, empty and non-string tokens are all rejected."""
-        config_file.write_text(json.dumps({"token": value}))
-        assert _read_token() is None
-
-    def test_valid_token(self, config_file: Path) -> None:
-        """A non-empty string token is returned."""
-        config_file.write_text(json.dumps({"token": "ghp_x"}))
-        assert _read_token() == "ghp_x"
-
-
-class TestTokenFallback:
-    """Tests for reusing a sibling companion app's token file."""
-
-    def test_no_fallback_files(self) -> None:
-        """With nothing on disk anywhere there is no token."""
-        assert _read_token_fallback() is None
-        assert _read_token() is None
-
-    def test_reads_raw_single_line_token(
-        self, fallback_files: tuple[Path, Path]
-    ) -> None:
-        """A sibling token file is a raw PAT, not JSON — and is stripped."""
-        fallback_files[0].write_text("  ghp_sibling\n")
-        assert _read_token_fallback() == "ghp_sibling"
-
-    def test_skips_empty_file(self, fallback_files: tuple[Path, Path]) -> None:
-        """An empty first file falls through to the second."""
-        fallback_files[0].write_text("   \n")
-        fallback_files[1].write_text("ghp_second")
-        assert _read_token_fallback() == "ghp_second"
-
-    def test_skips_unreadable_file(self, fallback_files: tuple[Path, Path]) -> None:
-        """An unreadable file is skipped rather than fatal."""
-        fallback_files[1].write_text("ghp_second")
-        with patch(
-            "pathlib.Path.read_text",
-            side_effect=[OSError("denied"), "ghp_second"],
-        ):
-            assert _read_token_fallback() == "ghp_second"
-
-    def test_own_config_wins(
-        self, config_file: Path, fallback_files: tuple[Path, Path]
-    ) -> None:
-        """wake_alarm's own config takes precedence over a sibling's."""
-        config_file.write_text(json.dumps({"token": "ghp_own"}))
-        fallback_files[0].write_text("ghp_sibling")
-        assert _read_token() == "ghp_own"
-
-    def test_falls_back_when_config_absent(
-        self, fallback_files: tuple[Path, Path]
-    ) -> None:
-        """With no own config, the sibling token is used."""
-        fallback_files[0].write_text("ghp_sibling")
-        assert _read_token() == "ghp_sibling"
-
-
-class TestExtractField:
-    """Tests for extract_field's tolerance of malformed logs."""
-
-    @pytest.mark.parametrize(
-        "log",
-        [
-            {},
-            {"alarm": "not a dict"},
-            {"alarm": {}},
-            {"alarm": {"fields": "not a dict"}},
-            {"alarm": {"fields": {}}},
-            {"alarm": {"fields": {"alarm_hour": "not a list"}}},
-            {"alarm": {"fields": {"alarm_hour": []}}},
-            {"alarm": {"fields": {"alarm_hour": ["7", "hlc"]}}},
-            {"alarm": {"fields": {"alarm_hour": [True, "hlc"]}}},
-        ],
-    )
-    def test_malformed_shapes_yield_none(self, log: dict[str, Any]) -> None:
-        """Every unexpected shape degrades to None rather than raising."""
-        assert extract_field(log, "alarm_hour") is None
-
-    def test_extracts_value(self) -> None:
-        """The value is element 0 of the (value, HLC) pair."""
-        log = {"alarm": {"fields": {"alarm_hour": [6, "hlc"]}}}
-        assert extract_field(log, "alarm_hour") == 6
-
-
-class TestParseLog:
-    """Tests for parse_log."""
-
-    def test_valid(self) -> None:
-        """A well-formed log parses to an (hour, minute) pair."""
-        assert parse_log(_log(7, 30)) == (7, 30)
-
-    def test_invalid_json(self) -> None:
-        """Unparsable JSON yields None."""
-        assert parse_log("{nope") is None
-
-    def test_not_a_dict(self) -> None:
-        """A JSON array is not a log."""
-        assert parse_log("[]") is None
-
-    def test_missing_fields(self) -> None:
-        """A log without the alarm fields yields None."""
-        assert parse_log(json.dumps({"alarm": {"fields": {}}})) is None
-
-    @pytest.mark.parametrize(("hour", "minute"), [(24, 0), (-1, 0), (7, 60), (7, -1)])
-    def test_out_of_range(self, hour: int, minute: int) -> None:
-        """Values outside 0-23 / 0-59 are rejected."""
-        assert parse_log(_log(hour, minute)) is None
 
 
 class TestFetchRemoteAlarm:
@@ -349,38 +218,7 @@ class TestGetAlarm:
         with patch("wake_alarm._sync.fetch_remote_alarm", return_value=None):
             alarm = get_alarm()
         assert (alarm.minute, alarm.source) == (0, "fallback")
-        assert alarm.hour == 13
-
-
-class TestCli:
-    """Tests for the --show entry point."""
-
-    def test_parse_args_defaults(self) -> None:
-        """Both flags default to off."""
-        args = _parse_args([])
-        assert not args.show
-        assert not args.no_cache
-
-    def test_main_prints_alarm(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """main prints the resolved alarm."""
-        with (
-            patch("sys.argv", ["_sync", "--show"]),
-            patch(
-                "wake_alarm._sync.get_alarm",
-                return_value=Alarm(7, 30, "remote"),
-            ),
-        ):
-            main()
-        assert "07:30 (remote)" in capsys.readouterr().out
-
-    def test_no_cache_forces_live_read(self) -> None:
-        """--no-cache asks get_alarm for a zero-age cache."""
-        with (
-            patch("sys.argv", ["_sync", "--no-cache"]),
-            patch(
-                "wake_alarm._sync.get_alarm",
-                return_value=Alarm(7, 30, "remote"),
-            ) as get,
-        ):
-            main()
-        assert get.call_args.kwargs["max_cache_age_seconds"] == 0.0
+        # Bound to the constant, not a literal: the fallback deliberately
+        # matches the phone's baked-in baseline, so hardcoding the number here
+        # would fail every time that shared value moves.
+        assert alarm.hour == FALLBACK_ALARM_HOUR

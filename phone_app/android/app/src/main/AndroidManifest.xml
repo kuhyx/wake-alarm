@@ -63,6 +63,11 @@
         <receiver
             android:name=".AlarmReceiver"
             android:exported="false"/>
+        <!-- Daily check that the alarm is still armed; not exported, only
+             this app's own repeating PendingIntent reaches it. -->
+        <receiver
+            android:name=".WatchdogReceiver"
+            android:exported="false"/>
         <receiver
             android:name=".BootReceiver"
             android:exported="true">
