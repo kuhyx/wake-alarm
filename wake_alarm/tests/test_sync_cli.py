@@ -68,7 +68,6 @@ def _patch_paths(
         yield
 
 
-
 class TestCli:
     """Tests for the --show entry point."""
 
