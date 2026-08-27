@@ -20,7 +20,7 @@ starting; this file deliberately does not duplicate it.
 | 2 power button | **Done.** `_inhibit.py` (logind block, self-terminating, stale cleanup by pid via `/proc`) + `_alarm_session.py` fire-time record, re-fired by `_trigger` outside the catch-up window. |
 | 10 vmbox | **Done.** `scripts/vmbox/harness.sh` + `DOCS-vmbox.md`. 8 cases, fails closed. Found 2 live bugs the host could not reach. |
 | 5 curtains | **Done.** `_curtains.py` driver protocol + no-op default, called from `prepare_hardware()`. `DOCS-curtains-hardware.md` has the buy list. |
-| 1/4 phone alarm | **Done.** Five Kotlin files behind one MethodChannel + the Dart ring screen. The phone arms and rings its own alarm; no Clock-app confirmation. Verified on the API 36 AVD (screen Asleep→Awake, AlarmActivity over the lockscreen) and deployed to the Pixel 6a. |
+| 1/4 phone alarm | **Done, verified on the phone.** Five Kotlin files behind one MethodChannel + the Dart ring screen. Fires from Doze on time, wakes the screen over the lockscreen, rings through DND on STREAM_ALARM, and dismisses via an NFC tap + challenge. Confirmed by the user on the Pixel 6a, not inferred. |
 | 3 room proofs | **Mostly done.** NFC works end to end: `NfcReader.kt` (hand-written), Settings → "Room proof" registers the tag, and a tap satisfies the gate. Steps+elapsed is the fallback. QR is specified, persisted and unit-tested but has **no scanner UI** — `mobile_scanner` is the droppable extra. |
 
 ## Remaining, in order
@@ -35,47 +35,54 @@ starting; this file deliberately does not duplicate it.
 3. **Item 13, black screen.** Different repo (`~/testsAndMisc/
    linux_configuration`), host-only, blocks nothing.
 
-### Measured on the Pixel 6a, 2026-08-27
+### Verified end to end on the Pixel 6a, 2026-08-27
 
-**Verified for real:** the alarm fires from Doze on time (22:03:01 for a
-22:03 arm), wakes the screen (`Asleep`→`Awake`), puts `AlarmActivity` on top
-over the lockscreen, posts the full-screen-intent notification, and **rings
-through DND** — `zen_mode=1`, player `state:started` on
-`usage=USAGE_ALARM`/`STREAM_ALARM(4)`, `mutedState:none`. The STREAM_ALARM
-claim is no longer an assumption. NFC tag registration works end to end
-(`0465dab3ce2a81` via Settings → Room proof).
+**The whole path is confirmed on hardware, by the user, not inferred:**
 
-**Still not verified: the actual dismiss.** Three real defects were found and
-fixed in the attempt (see `08b44b4`), but none of the fixes has been confirmed
-on hardware yet — the last test run ended before a successful tap. What needs
-one more run: register/confirm the tag, fire a ring, unlock at the keyguard
-prompt, tap the tag, solve the challenge, and confirm the sound stops **and**
-the screen closes.
+- Fires from Doze on time (22:03:01 for a 22:03 arm), registered by the system
+  as `RTC_WAKEUP` / "Next wake from idle".
+- Wakes the screen (`Asleep`→`Awake`) and puts `AlarmActivity` on top over the
+  lockscreen, with the full-screen-intent notification posted.
+- **Rings through DND** — `zen_mode=1`, player `state:started` on
+  `usage=USAGE_ALARM`/`STREAM_ALARM(4)`, `mutedState:none`. The STREAM_ALARM
+  claim is measured, no longer assumed.
+- NFC tag registers (Settings → Room proof) and **a tap dismisses**:
+  `tag discovered: 0465dab3ce2a81` on the ring screen, challenge solved,
+  alarm silent.
+- Step counter reaches the gate.
 
-**`requestDismissKeyguard` does not silently unlock a secured phone.** It
-raises the PIN/biometric prompt and returns to `ON_LOCKED` until the user
-answers, so the NFC tap cannot work before that point. That is the agreed
-behaviour, not a bug — but it means "tap the tag without touching the phone"
-was never achievable on a secured device, and the docs should not imply it.
+**Four defects were found only because it was run on the phone**, every one
+invisible to the emulator (no NFC, no step sensor) and to the widget tests
+(which mock the channel):
 
-### Not yet verified on the phone
+1. `AlarmActivity.onPause` called `NfcReader.stop()`. `enableReaderMode` is
+   per-activity but `disableReaderMode` is global, so anything briefly in
+   front of the ring screen killed polling for the rest of the ring.
+2. `TYPE_STEP_COUNTER` is cumulative and on-change: it emits nothing until the
+   user has already walked, and the first emission was being eaten as the
+   baseline, so the screen sat at `0/25` forever. `TYPE_STEP_DETECTOR` is now
+   primary — one event per stride, no baseline to miss.
+3. NFC does not poll while the ring shows over a locked keyguard
+   (`mScreenState=ON_LOCKED`). `requestDismissKeyguard()` is called on fire.
+   It does **not** silently unlock a secured phone — it raises the PIN prompt
+   — so "tap without touching the phone" was never achievable on a secured
+   device. Say that plainly; don't let docs imply otherwise.
+4. The **flash** challenge hides its code after 4s, which is unsolvable when
+   the screen is reached by walking to another room. Removed from the phone's
+   rotation, with a test asserting no self-hiding challenge is ever shown.
 
-The ring itself has only been fired on the API 36 AVD. On the Pixel 6a the
-build installs and the runtime permission prompts appear, but **an actual
-alarm has never rung on it** — that needs an alarm armed through the picker
-(which needs a sync backend connected) and a wait to the fire instant. Ring
-with **DND on**, since "STREAM_ALARM ignores DND" is the load-bearing claim
-and has not been observed on hardware.
+**A process lesson worth more than any of them:** after hardware confirmed the
+path worked, the next change bundled a MethodChannel restructure with a bug
+fix and regressed both NFC and steps. The user caught it. When hardware has
+just gone green, make the smallest possible delta on top of *that exact state*
+— never a restructure and a fix together.
 
-The **dismiss path** has never run on any device either: the AVD has neither a
-step sensor nor NFC, so the room gate correctly refuses to open there. It is
-covered by widget tests (NFC tap → challenge → `dismiss` + `closeRingScreen`),
-which is weaker than a real tap on a real tag. Register a tag via Settings →
-"Room proof" and dismiss a real ring before calling item 3 finished.
+### Still unverified
 
-**Mute the host before firing a ring on the emulator.** The AVD routes
-`STREAM_ALARM` to the PC's speakers, and `raiseAlarmVolume()` sets it to max —
-this went off out loud during the session (2026-08-27).
+- The **QR** proof has no scanner UI (`mobile_scanner`); `checkQr` and its
+  persistence are unit-tested only.
+- The **locked-keyguard** dismiss was not run to completion: the confirmed run
+  was on an unlocked phone. The PIN-prompt path is implemented but unproven.
 
 ## Decisions already made — do not re-litigate
 
