@@ -6,6 +6,7 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 from wake_alarm._gating import parse_args as _parse_args
+from wake_alarm._sink_parsing import _parse_profile_line
 from wake_alarm._sinks import (
     _capture_audio_state,
     _current_default_sink,
@@ -13,7 +14,6 @@ from wake_alarm._sinks import (
     _list_real_sinks,
     _pactl_text,
     _parse_cards,
-    _parse_profile_line,
     _parse_sinks,
 )
 

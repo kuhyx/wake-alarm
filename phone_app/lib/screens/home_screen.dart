@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
-import 'package:wake_alarm_sync/services/alarm_arming.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
+import 'package:wake_alarm_sync/services/alarm_publisher.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
@@ -33,7 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   AlarmSyncService? _service;
 
   /// Platform bridge that arms the app's own alarm (item 1).
-  final AlarmArming _arming = AlarmArming(AlarmScheduler());
+  final AlarmPublisher _publisher = AlarmPublisher();
 
   /// Platform bridge used to arm the fixed schedule.
   final AlarmScheduler _scheduler = AlarmScheduler();
@@ -42,13 +42,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     unawaited(_applyPolicy());
-    unawaited(_loadSavedTime());
+    unawaited(_loadSyncState());
     // Publishing to the PC is automatic too: it used to require the same tap
     // that armed the alarm, so a forgotten tap left the PC on its fallback.
     unawaited(_syncToPc());
   }
 
-  Future<void> _loadSavedTime() async {
+  /// Opens the sync store and records whether a backend is connected.
+  ///
+  /// No longer loads a *time*: the schedule is baked in and owned by
+  /// [AlarmPolicy], so a stored value could only disagree with it. This exists
+  /// to supply the store for publishing and to drive the "connect a backend"
+  /// hint.
+  Future<void> _loadSyncState() async {
     final SyncSettings settings;
     final AlarmSyncService service;
     try {
@@ -68,15 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(
       () => _configured = settings.isConfigured || firebaseAccount != null,
     );
-
-    final alarm = service.currentAlarm;
-    if (alarm != null && mounted) {
-      setState(() {
-        _hour = alarm.hour;
-        _minute = alarm.minute;
-        _status = 'Loaded saved alarm';
-      });
-    }
   }
 
   /// Lets the user move **tomorrow's** alarm earlier, never later.
@@ -121,43 +118,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _syncToPc() async {
-    final settings = await SyncSettings.load();
-    final service = _service;
-    // syncBackend() falls back to GitHub alone, or pushes to Firebase alone
-    // via the mirror, so either credential is enough to proceed.
-    final hasFirebase = await loadAccount() != null;
-    if ((!settings.isConfigured && !hasFirebase) || service == null) {
-      setState(() => _status = 'Connect a sync backend in Settings first.');
-      return;
-    }
-
     setState(() {
       _busy = true;
       _status = 'Syncing to PC…';
     });
-    try {
-      await service.setLocal(_hour, _minute);
-      await service.push(settings.token);
-      setState(() => _status = 'Synced ✓ — arming alarm…');
-      final problem = await _arming.arm(_hour, _minute);
-      if (problem != null) {
-        setState(() => _status = problem);
-        return;
-      }
-      await _arming.registerWithClockApp(_hour, _minute);
-      final at = _fmt(_hour, _minute);
-      setState(() => _status = 'Done! Alarm armed for $at.');
-    } on Exception catch (e) {
-      setState(() => _status = 'Error: $e');
-    } finally {
-      setState(() => _busy = false);
-    }
+    final message = await _publisher.publish(
+      service: _service,
+      hour: _hour,
+      minute: _minute,
+    );
+    if (!mounted) return;
+    setState(() {
+      _status = message;
+      _busy = false;
+    });
   }
 
   /// The baseline time, shown when a one-shot override is active.
   String get _baseline =>
       _fmt(AlarmPolicy.baselineHour, AlarmPolicy.baselineMinute);
-
   String _fmt(int h, int m) =>
       '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
 
@@ -178,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
               );
-              await _loadSavedTime();
+              await _loadSyncState();
             },
           ),
         ],
