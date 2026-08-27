@@ -3,6 +3,7 @@ package com.kuhy.wake_alarm_sync
 import android.app.Activity
 import android.nfc.NfcAdapter
 import android.nfc.Tag
+import android.util.Log
 import io.flutter.plugin.common.MethodChannel
 
 /**
@@ -41,12 +42,20 @@ object NfcReader {
         if (!adapter.isEnabled) return false
         adapter.enableReaderMode(
             activity,
-            { tag -> activity.runOnUiThread { channel.invokeMethod(ON_TAG, idOf(tag)) } },
+            { tag ->
+                val id = idOf(tag)
+                Log.i(TAG, "tag discovered: $id")
+                activity.runOnUiThread { channel.invokeMethod(ON_TAG, id) }
+            },
             FLAGS,
             null,
         )
+        Log.i(TAG, "reader mode started on ${activity.javaClass.simpleName}")
         return true
     }
+
+    /** Logcat tag for diagnosing why a tap did or did not arrive. */
+    private const val TAG = "WakeAlarmNfc"
 
     /** Whether this device can read NFC at all and has it switched on. */
     fun isAvailable(context: android.content.Context): Boolean {

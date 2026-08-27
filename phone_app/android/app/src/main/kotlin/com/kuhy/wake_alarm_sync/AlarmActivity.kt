@@ -1,5 +1,7 @@
 package com.kuhy.wake_alarm_sync
 
+import android.app.KeyguardManager
+import android.content.Context
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -26,6 +28,38 @@ class AlarmActivity : FlutterActivity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         super.onCreate(savedInstanceState)
+        dismissKeyguard()
+    }
+
+    /**
+     * Asks the system to take the keyguard down for the ring screen.
+     *
+     * Load-bearing for the NFC room proof, not cosmetic. Showing *over* the
+     * keyguard leaves the device locked, and NFC reports `mScreenState=
+     * ON_LOCKED` in that state: the controller stops polling for tags even
+     * though `enableReaderMode` was accepted (measured on the Pixel 6a — the
+     * same tag that registered fine while unlocked was never discovered while
+     * the ring screen was up). Without this the only satisfiable proof at
+     * 06:00 is steps, which is exactly the single-mechanism dependency the
+     * room-proof redundancy exists to avoid.
+     *
+     * On a secured device this surfaces the PIN/biometric prompt, which is an
+     * acceptable trade for an alarm the user must get up for.
+     */
+    private fun dismissKeyguard() {
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        if (!keyguard.isKeyguardLocked) return
+        keyguard.requestDismissKeyguard(
+            this,
+            object : KeyguardManager.KeyguardDismissCallback() {
+                override fun onDismissSucceeded() {
+                    // NFC only starts polling once the screen state leaves
+                    // ON_LOCKED, so reader mode has to be re-asserted after
+                    // the unlock rather than only in onResume.
+                    alarmChannel?.let { NfcReader.start(this@AlarmActivity, it) }
+                }
+            },
+        )
     }
 
     /** Kept so NFC reader mode can push tag ids back to the ring screen. */
@@ -55,12 +89,28 @@ class AlarmActivity : FlutterActivity() {
         super.onResume()
         // Reader mode only works while this activity is in the foreground, so
         // it is started here rather than at engine-configure time.
+        //
+        // Re-asserted on every resume, not just the first: anything that comes
+        // up over the ring screen (the launcher activity, a system dialog)
+        // pauses this one and takes reader mode down with it, and the tag tap
+        // must keep working once the ring screen is back in front.
         alarmChannel?.let { NfcReader.start(this, it) }
     }
 
     override fun onPause() {
-        NfcReader.stop(this)
+        // Deliberately does NOT disable reader mode. enableReaderMode is
+        // per-activity but disableReaderMode is effectively global, so
+        // stopping here killed polling for the ring screen whenever another
+        // activity briefly came in front — measured on the Pixel, where the
+        // NfcService log showed `flags: 271` immediately followed by
+        // `flags: 0`. onDestroy is the right place: by then the ring really
+        // is over.
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        NfcReader.stop(this)
+        super.onDestroy()
     }
 
     /**
