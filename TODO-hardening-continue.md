@@ -20,15 +20,29 @@ starting; this file deliberately does not duplicate it.
 | 2 power button | **Done.** `_inhibit.py` (logind block, self-terminating, stale cleanup by pid via `/proc`) + `_alarm_session.py` fire-time record, re-fired by `_trigger` outside the catch-up window. |
 | 10 vmbox | **Done.** `scripts/vmbox/harness.sh` + `DOCS-vmbox.md`. 8 cases, fails closed. Found 2 live bugs the host could not reach. |
 | 5 curtains | **Done.** `_curtains.py` driver protocol + no-op default, called from `prepare_hardware()`. `DOCS-curtains-hardware.md` has the buy list. |
+| 1/4 phone alarm | **Done.** Five Kotlin files behind one MethodChannel + the Dart ring screen. The phone arms and rings its own alarm; no Clock-app confirmation. Verified on the API 36 AVD (screen Asleep→Awake, AlarmActivity over the lockscreen) and deployed to the Pixel 6a. |
+| 3 room proofs | **Mostly done.** NFC (hand-written `NfcReader.kt`) and the steps+elapsed fallback ship and are wired into the ring screen. QR is specified and unit-tested (`checkQr`) but has **no scanner UI** — `mobile_scanner` was left as the droppable extra. |
 
 ## Remaining, in order
 
-1. **Items 4/3/1, phone.** Biggest chunk by far. Own session. Everything here
-   is new — the app has zero alarm capability today, only a time picker.
-2. **Item 8, mutual gating.** Needs 1 done first. This is the phase that
-   legitimately touches `_sync.py`, so it carries that split (see below).
+1. **Item 3 leftovers.** The QR scanner UI (`mobile_scanner`) and a Settings
+   screen to register the NFC tag id / QR payload. `RoomProofSettings` already
+   persists both and `RoomProof.checkQr` is unit-tested — what is missing is
+   only the UI that feeds them. NFC and the steps fallback already work, so
+   the alarm is dismissable without this.
+2. **Item 8, mutual gating.** Phone half is now in place. This is the phase
+   that legitimately touches `_sync.py`, so it carries that split (see below).
 3. **Item 13, black screen.** Different repo (`~/testsAndMisc/
    linux_configuration`), host-only, blocks nothing.
+
+### Not yet verified on the phone
+
+The ring itself has only been fired on the API 36 AVD. On the Pixel 6a the
+build installs and the runtime permission prompts appear, but **an actual
+alarm has never rung on it** — that needs an alarm armed through the picker
+(which needs a sync backend connected) and a wait to the fire instant. Ring
+with **DND on**, since "STREAM_ALARM ignores DND" is the load-bearing claim
+and has not been observed on hardware.
 
 ## Decisions already made — do not re-litigate
 
@@ -48,6 +62,24 @@ starting; this file deliberately does not duplicate it.
   it is what ignores DND and silent mode.
 - Curtains: no hardware; pluggable driver + logging no-op default.
 - Quality bar: 100% branch coverage, no new `# noqa` / `type: ignore`.
+
+## Traps found in the phone session
+
+- **The plan's `LogStore.changes` does not exist.** `crdt_sync_dart` has no
+  Stream at all. Re-arm therefore needs three explicit hooks — startup,
+  BOOT_COMPLETED, dismiss — and dropping any one makes the alarm ring once
+  and then silently stop forever.
+- **The Android SDK was never missing, only unexported.** `~/Android/Sdk` has
+  `cmdline-tools`, `emulator` and `platform-tools`; only `adb` was on PATH.
+  Export `ANDROID_HOME` rather than installing anything.
+- **A permission declared in the manifest is not a permission granted.**
+  Both `POST_NOTIFICATIONS` and `ACTIVITY_RECOGNITION` are runtime grants, and
+  each one missing silently breaks a different half of the dismiss path
+  (no full-screen intent / no step sensor). The AVD caught both because a
+  freshly installed app there sits at `importance=NONE`.
+- **A debug probe entrypoint with its own UI proves nothing about the route.**
+  The first probe rendered its own widget, so the AVD run validated the Kotlin
+  and nothing about `/ring`. Point the probe at the real app widget.
 
 ## Traps that cost time this session
 
