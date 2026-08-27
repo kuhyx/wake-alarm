@@ -142,12 +142,28 @@ void main() {
       expect(c.answer, word.split('').reversed.join());
     });
 
-    test('next() can produce every kind', () {
+    test('next() never returns a challenge that hides itself', () {
+      // flash disappears after kDismissFlashSeconds, which is unsolvable on
+      // the phone: the user reaches the ring screen only after walking to
+      // another room and tapping a tag.
       final kinds = <ChallengeKind>{};
       for (var i = 0; i < 400; i++) {
         kinds.add(ChallengeGenerator().next().kind);
       }
-      expect(kinds, hasLength(ChallengeKind.values.length));
+      expect(kinds, isNot(contains(ChallengeKind.flash)));
+    });
+
+    test('next() produces every kind that is safe to show', () {
+      final kinds = <ChallengeKind>{};
+      for (var i = 0; i < 400; i++) {
+        kinds.add(ChallengeGenerator().next().kind);
+      }
+      expect(kinds, <ChallengeKind>{
+        ChallengeKind.math,
+        ChallengeKind.sort,
+        ChallengeKind.sequence,
+        ChallengeKind.reverse,
+      });
     });
   });
 }

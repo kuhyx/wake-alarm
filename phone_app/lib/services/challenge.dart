@@ -91,15 +91,18 @@ class ChallengeGenerator {
 
   final Random _random;
 
-  /// Picks one of the five kinds at random and generates an instance.
+  /// Picks a challenge kind at random and generates an instance.
+  ///
+  /// [flash] is deliberately **excluded**. It hides the code after
+  /// [kDismissFlashSeconds], and on the phone that is unsolvable in practice:
+  /// the ring screen is reached by walking to another room and tapping a tag,
+  /// so the code has usually already vanished by the time the user is looking
+  /// at the screen — reported from the phone on 2026-08-27 as "impossible to
+  /// actually do". Every challenge the alarm shows must stay on screen until
+  /// it is answered. [flash] is kept as a constructor for the PC half's
+  /// parity tests, but nothing routes to it here.
   Challenge next() {
-    final builders = <Challenge Function()>[
-      math,
-      flash,
-      sort,
-      sequence,
-      reverse,
-    ];
+    final builders = <Challenge Function()>[math, sort, sequence, reverse];
     return builders[_random.nextInt(builders.length)]();
   }
 

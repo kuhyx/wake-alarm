@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
@@ -40,9 +41,6 @@ class _RingScreenState extends State<RingScreen> {
   bool _inRoom = false;
   String _status = '';
 
-  /// Hidden after [kDismissFlashSeconds] for the flash challenge only.
-  bool _codeVisible = true;
-  Timer? _flashTimer;
 
   @override
   void initState() {
@@ -50,7 +48,6 @@ class _RingScreenState extends State<RingScreen> {
     _proof = RoomProof(scheduler: _scheduler);
     unawaited(_scheduler.beginStepCount());
     unawaited(_loadRoomProof());
-    _startFlashTimerIfNeeded();
   }
 
   /// Loads the registered tag/QR and starts listening for NFC taps.
@@ -71,11 +68,28 @@ class _RingScreenState extends State<RingScreen> {
 
   void _onNfcTag(String tagId) {
     final result = _proof.checkNfc(tagId);
+    developer.log(
+      'nfc tag=$tagId satisfied=${result.satisfied} detail=${result.detail}',
+      name: 'WakeAlarmRing',
+    );
     if (!mounted) return;
     setState(() {
       _inRoom = result.satisfied;
       _status = result.detail;
     });
+    if (result.satisfied) _logChallenge();
+  }
+
+  /// Logs the current challenge so a hardware test can be scripted.
+  ///
+  /// Debug aid only: the answer is already on screen for whoever is holding
+  /// the phone, so this leaks nothing the user cannot see.
+  void _logChallenge() {
+    developer.log(
+      'challenge kind=${_challenge.kind.name} display="${_challenge.display}" '
+      'answer=${_challenge.answer}',
+      name: 'WakeAlarmRing',
+    );
   }
 
   /// Called by the QR scanner when a code is decoded.
@@ -91,27 +105,23 @@ class _RingScreenState extends State<RingScreen> {
   @override
   void dispose() {
     _scheduler.clearNfcListener();
-    _flashTimer?.cancel();
     _input.dispose();
     _elapsed.stop();
     super.dispose();
   }
 
-  void _startFlashTimerIfNeeded() {
-    if (_challenge.kind != ChallengeKind.flash) return;
-    _flashTimer?.cancel();
-    _flashTimer = Timer(const Duration(seconds: kDismissFlashSeconds), () {
-      if (mounted) setState(() => _codeVisible = false);
-    });
-  }
-
   Future<void> _trySteps() async {
     final result = await _proof.checkSteps(_elapsed.elapsed);
+    developer.log(
+      'steps satisfied=${result.satisfied} detail=${result.detail}',
+      name: 'WakeAlarmRing',
+    );
     if (!mounted) return;
     setState(() {
       _inRoom = result.satisfied;
       _status = result.detail;
     });
+    if (result.satisfied) _logChallenge();
   }
 
   void _submit() {
@@ -119,10 +129,8 @@ class _RingScreenState extends State<RingScreen> {
       setState(() {
         _status = 'Wrong — here is another one';
         _challenge = _generator.next();
-        _codeVisible = true;
         _input.clear();
       });
-      _startFlashTimerIfNeeded();
       return;
     }
     setState(() => _status = 'Dismissed');
@@ -133,7 +141,9 @@ class _RingScreenState extends State<RingScreen> {
   ///
   /// Ordered: the sound must stop even if closing the window fails.
   Future<void> _finishDismiss() async {
+    developer.log('dismiss: stopping ring', name: 'WakeAlarmRing');
     await _scheduler.dismiss();
+    developer.log('dismiss: closing screen', name: 'WakeAlarmRing');
     await _scheduler.closeRingScreen();
   }
 
@@ -183,7 +193,9 @@ class _RingScreenState extends State<RingScreen> {
     Text(_challenge.hint, style: theme.textTheme.bodyLarge),
     const SizedBox(height: 12),
     Text(
-      _codeVisible ? _challenge.display : '••••••',
+      // Always visible: a challenge that hides itself is unsolvable when the
+      // user reaches the screen seconds later, having walked to another room.
+      _challenge.display,
       textAlign: TextAlign.center,
       style: theme.textTheme.displaySmall,
     ),

@@ -1,6 +1,7 @@
 package com.kuhy.wake_alarm_sync
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.core.app.ActivityCompat
@@ -70,6 +71,24 @@ class MainActivity : FlutterActivity() {
                 "startTagRegistration" -> {
                     registeringTag = NfcReader.start(this, channel)
                     result.success(registeringTag)
+                }
+                // Finishes the picker after starting a test ring, so it
+                // cannot sit on top of AlarmActivity — that pause used to
+                // tear NFC reader mode down for the whole ring.
+                "ringNow" -> {
+                    AlarmChannel.handleCall(applicationContext, call, result)
+                    // An unlocked, in-use device downgrades the full-screen
+                    // intent to a heads-up notification (appops logs a
+                    // rejectTime), so the ring screen would never appear on
+                    // its own during a hardware test. Launch it directly and
+                    // step out of the way: leaving the picker in front pauses
+                    // AlarmActivity, which used to kill NFC reader mode.
+                    startActivity(
+                        Intent(this, AlarmActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        },
+                    )
+                    finishAndRemoveTask()
                 }
                 "stopTagRegistration" -> {
                     registeringTag = false
