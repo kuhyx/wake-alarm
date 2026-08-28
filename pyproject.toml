@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "wake-alarm"
 version = "1.0.0"
 description = "Phone-driven wake alarm with fan ramp and smart-plug control"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.7.2#subdirectory=gatelock",
     # Firebase transport for the alarm read. _sync.py imports it lazily and
@@ -74,7 +74,7 @@ line-ending = "auto"
 docstring-code-format = true
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -108,7 +108,7 @@ init-hook = "import sys; sys.path.insert(0, '.')"
 analyse-fallback-blocks = true
 persistent = true
 jobs = 0
-py-version = "3.10"
+py-version = "3.11"
 # "tests" is a basename match: test suites intentionally use patterns
 # (protected-access, magic-value comparisons) that don't apply to source
 # code, matching testsAndMisc's pylint scope (tests are linted by ruff, not
