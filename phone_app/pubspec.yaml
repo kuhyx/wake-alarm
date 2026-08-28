@@ -8,29 +8,29 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
-  android_intent_plus: ^5.0.0
+  android_intent_plus: 6.1.0
   crdt_sync:
     git:
       url: https://github.com/kuhyx/utils
-      ref: crdt_sync_dart-v0.10.0
+      ref: crdt_sync_dart-v0.11.1
       path: crdt_sync_dart
-  cupertino_icons: ^1.0.8
+  cupertino_icons: 1.0.9
   flutter:
     sdk: flutter
-  flutter_secure_storage: ^9.0.0
+  flutter_secure_storage: 11.0.0
 
   # One-tap sign-in for the sync account. App-side only: crdt_sync stays pure
   # Dart so it keeps working on Linux desktop and headless.
   github_device_auth:
     git:
       url: https://github.com/kuhyx/utils
-      ref: github_device_auth-v0.3.0
+      ref: github_device_auth-v0.3.1
       path: github_device_auth
-  google_sign_in: ^7.2.0
-  http: ^1.2.0
-  path: ^1.9.0
-  path_provider: ^2.1.0
-  shared_preferences: ^2.3.0
+  google_sign_in: 7.2.0
+  http: 1.6.0
+  path: 1.9.1
+  path_provider: 2.1.6
+  shared_preferences: 2.5.5
 
   # Shared "Sync settings" screen (Firebase + optional local backup), reused
   # across every kuhy app that syncs. GitHub mirror stays app-local (see
@@ -38,18 +38,18 @@ dependencies:
   sync_settings_ui:
     git:
       url: https://github.com/kuhyx/utils
-      ref: sync_settings_ui-v0.1.0
+      ref: sync_settings_ui-v0.4.1
       path: sync_settings_ui
-  url_launcher: ^6.3.0
-  uuid: ^4.6.0
+  url_launcher: 6.3.2
+  uuid: 4.6.0
 
 dev_dependencies:
   # Generates the Android launcher icons from assets/icon/ (see
   # python_pkg/app_icons in testsAndMisc for the shared style).
-  flutter_launcher_icons: ^0.14.4
+  flutter_launcher_icons: 0.14.4
   flutter_test:
     sdk: flutter
-  very_good_analysis: ^10.2.0
+  very_good_analysis: ^10.3.0
 
 flutter:
   uses-material-design: true

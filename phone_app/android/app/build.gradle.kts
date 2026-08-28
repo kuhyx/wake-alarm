@@ -21,7 +21,12 @@ android {
     // Pinned explicitly rather than delegated to the Flutter Gradle plugin:
     // full-screen-intent and foreground-service semantics both changed at
     // API 34/35, and the alarm path cannot be reasoned about without a floor.
-    compileSdk = 36
+    // Pinned above `flutter.compileSdkVersion` (36 on Flutter 3.47.2):
+    // flutter_secure_storage 11.0.0, which arrives with crdt_sync_flutter
+    // v0.3.1, publishes AAR metadata demanding API 37 or later. That in
+    // turn needs AGP > 9.1.0, which needs Gradle >= 9.5.0 -- see
+    // settings.gradle.kts and gradle-wrapper.properties.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
