@@ -47,7 +47,7 @@ def _pactl_text(pactl: str, *args: str, timeout: float = 5.0) -> str | None:
             timeout=timeout,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         _logger.warning("pactl %s failed", " ".join(args), exc_info=True)
         return None
     return result.stdout.decode(errors="replace")
@@ -79,7 +79,7 @@ def _current_default_sink(pactl: str) -> str | None:
             timeout=3,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         _logger.warning("pactl get-default-sink failed", exc_info=True)
         return None
     name = result.stdout.decode(errors="replace").strip()

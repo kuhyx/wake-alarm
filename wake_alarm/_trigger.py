@@ -21,7 +21,7 @@ must be built in the same timezone the user reads off their phone.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 import logging
 import subprocess
 import sys
@@ -53,7 +53,7 @@ def _now() -> datetime:
     Returns:
         The current local time, with tzinfo set. Also the seam tests patch.
     """
-    return datetime.now(tz=timezone.utc).astimezone()
+    return datetime.now(tz=UTC).astimezone()
 
 
 def _fire_window(alarm: Alarm, now: datetime) -> tuple[datetime, datetime]:

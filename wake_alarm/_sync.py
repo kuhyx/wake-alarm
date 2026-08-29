@@ -94,7 +94,7 @@ def _read_cache() -> tuple[int, int, float] | None:
     try:
         with ALARM_CACHE_FILE.open() as handle:
             cached = json.load(handle)
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return None
     if not isinstance(cached, dict):
         return None

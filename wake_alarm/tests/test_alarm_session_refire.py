@@ -7,7 +7,7 @@ write the *production* record, which the next real trigger tick would act on.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 import json
 from typing import TYPE_CHECKING
 
@@ -61,7 +61,7 @@ class TestShouldRefire:
         clear; unbounded, this would restart the alarm every minute forever.
         """
         start_session("wake-20260827-0700")
-        much_later = datetime.now(tz=timezone.utc).astimezone() + timedelta(days=1)
+        much_later = datetime.now(tz=UTC).astimezone() + timedelta(days=1)
         with caplog.at_level("INFO"):
             assert should_refire(now=much_later) is False
         assert "Ignoring an unfinished alarm session" in caplog.text
@@ -78,7 +78,7 @@ class TestShouldRefire:
         exact scenario this record exists to close.
         """
         start_session("wake-20260827-0700")
-        corrected = datetime.now(tz=timezone.utc).astimezone() - timedelta(minutes=5)
+        corrected = datetime.now(tz=UTC).astimezone() - timedelta(minutes=5)
         with caplog.at_level("INFO"):
             assert should_refire(now=corrected) is True
         assert "in the future" in caplog.text
@@ -88,7 +88,7 @@ class TestShouldRefire:
     ) -> None:
         """Bounded, so a broken RTC cannot create an endless re-fire."""
         start_session("wake-20260827-0700")
-        way_earlier = datetime.now(tz=timezone.utc).astimezone() - timedelta(hours=6)
+        way_earlier = datetime.now(tz=UTC).astimezone() - timedelta(hours=6)
         with caplog.at_level("WARNING"):
             assert should_refire(now=way_earlier) is False
         assert "beyond the" in caplog.text
@@ -128,7 +128,7 @@ class TestShouldRefire:
     def test_age_is_reported_for_a_live_session(self) -> None:
         """The age helper is what makes the bound observable."""
         start_session("wake-20260827-0700")
-        later = datetime.now(tz=timezone.utc).astimezone() + timedelta(seconds=90)
+        later = datetime.now(tz=UTC).astimezone() + timedelta(seconds=90)
         age = unfinished_session_age(now=later)
         assert age is not None
         assert 89 <= age <= 92

@@ -7,7 +7,7 @@ Started by ``morning-routine.service``, never directly (AGENTS.md). Gate:
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import logging
 import sys
 import threading
@@ -206,7 +206,7 @@ class WakeAlarm(AlarmTimersMixin, AlarmFlashMixin):
         self._active = False
         self.dismissed = True
         self._stop_beep.set()
-        now_iso = datetime.now(tz=timezone.utc).isoformat()
+        now_iso = datetime.now(tz=UTC).isoformat()
         save_wake_state(dismissed_at=now_iso, skip_workout=earned_skip)
         show_dismissal(
             self._view.containers,
@@ -236,7 +236,7 @@ def main() -> None:
 
     _logger.warning(
         "ALARM TRIGGERED at %s (demo=%s, trigger_now=%s)",
-        datetime.now(tz=timezone.utc).isoformat(timespec="seconds"),
+        datetime.now(tz=UTC).isoformat(timespec="seconds"),
         args.demo,
         args.trigger_now,
     )

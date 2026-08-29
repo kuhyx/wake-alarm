@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -55,7 +55,7 @@ class TestNow:
         now = _now()
         assert now.tzinfo is not None
         # Local, not UTC: the wall-clock hour must match the system clock's.
-        assert now.hour == datetime.now(tz=timezone.utc).astimezone().hour
+        assert now.hour == datetime.now(tz=UTC).astimezone().hour
 
 
 class TestFireWindow:

@@ -34,7 +34,7 @@ record cannot simply be edited to say ``dismissed``.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import json
 import logging
 
@@ -54,7 +54,7 @@ STATE_FINISHED = "finished"
 
 def _now() -> datetime:
     """Return the current instant, aware and local. The seam tests patch."""
-    return datetime.now(tz=timezone.utc).astimezone()
+    return datetime.now(tz=UTC).astimezone()
 
 
 def _write(entry: dict[str, object]) -> bool:
@@ -136,7 +136,7 @@ def load_session() -> dict[str, object] | None:
     try:
         with ALARM_SESSION_FILE.open() as handle:
             entry = json.load(handle)
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         _logger.warning("Cannot read the alarm session record")
         return None
     if not isinstance(entry, dict):

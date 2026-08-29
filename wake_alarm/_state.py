@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import json
 import logging
 
@@ -18,7 +18,7 @@ _logger = logging.getLogger(__name__)
 
 def _today_str() -> str:
     """Return today's date as YYYY-MM-DD in UTC."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    return datetime.now(tz=UTC).strftime("%Y-%m-%d")
 
 
 def save_wake_state(
@@ -73,7 +73,7 @@ def load_wake_state() -> dict[str, object] | None:
     try:
         with WAKE_STATE_FILE.open() as f:
             state = json.load(f)
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         _logger.warning("Cannot read wake state file")
         return None
 
@@ -121,7 +121,7 @@ def was_workout_logged_today() -> bool:
     try:
         with WORKOUT_LOG_FILE.open() as f:
             log = json.load(f)
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         _logger.warning("Cannot read workout log file %s", WORKOUT_LOG_FILE)
         return False
     if not isinstance(log, dict):

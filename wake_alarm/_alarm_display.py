@@ -31,7 +31,7 @@ def _ddcutil_power_on() -> None:
             capture_output=True,
             timeout=10,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         _logger.warning("ddcutil setvcp failed", exc_info=True)
         return
     if result.returncode != 0:

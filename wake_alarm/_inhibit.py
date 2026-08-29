@@ -98,7 +98,7 @@ def kill_stale_inhibitors() -> int:
             timeout=5,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         _logger.warning("Could not check for a stale power-key inhibitor")
         return 0
     killed = 0
@@ -107,7 +107,7 @@ def kill_stale_inhibitors() -> int:
             continue
         try:
             os.kill(int(pid), signal.SIGTERM)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             continue
         killed += 1
     if killed:

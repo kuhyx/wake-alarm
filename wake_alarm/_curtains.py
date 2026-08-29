@@ -107,7 +107,7 @@ def _load_config() -> dict[str, object] | None:
     try:
         with CURTAINS_CONFIG_FILE.open() as handle:
             config = json.load(handle)
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         _logger.warning(
             "Cannot read %s; falling back to the no-op curtain driver",
             CURTAINS_CONFIG_FILE,
@@ -157,7 +157,7 @@ def open_curtains() -> bool:
     """
     try:
         return get_driver().open()
-    except (OSError, RuntimeError, ValueError):
+    except OSError, RuntimeError, ValueError:
         _logger.warning(
             "Curtain driver failed to open; the alarm continues",
             exc_info=True,

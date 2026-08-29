@@ -12,7 +12,7 @@ time gate, a ``WantedBy=`` would fire the alarm at login.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import logging
 
 from wake_alarm._constants import ALARM_DAYS
@@ -30,7 +30,7 @@ def is_alarm_day(*, now: datetime | None = None) -> bool:
     Returns:
         True when today's weekday is in ``ALARM_DAYS``.
     """
-    moment = now if now is not None else datetime.now(tz=timezone.utc).astimezone()
+    moment = now if now is not None else datetime.now(tz=UTC).astimezone()
     return moment.weekday() in ALARM_DAYS
 
 

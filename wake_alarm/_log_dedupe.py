@@ -59,7 +59,7 @@ class DedupeFilter(logging.Filter):
         """
         try:
             raw = json.loads(self._state_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return "", 0
         if not isinstance(raw, dict):
             return "", 0

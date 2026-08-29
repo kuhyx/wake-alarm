@@ -104,7 +104,7 @@ def _try_player(binary: str, wav: Path) -> bool:
             timeout=_TONE_TIMEOUT_SECONDS,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         _logger.warning("%s failed playing %s", binary, wav.name, exc_info=True)
         return False
     if result.returncode != 0:
@@ -158,7 +158,7 @@ def _play_tone(frequency: int) -> None:
             timeout=_TONE_TIMEOUT_SECONDS,
             check=False,
         )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+    except FileNotFoundError, OSError, subprocess.TimeoutExpired:
         _logger.warning(
             "All tone players failed at %d Hz; falling back to soft beep",
             frequency,

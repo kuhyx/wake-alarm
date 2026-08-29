@@ -27,7 +27,7 @@ def _set_max_brightness() -> None:
             timeout=5,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         _logger.warning("xrandr --query failed; skipping max-brightness", exc_info=True)
         return
     for line in result.stdout.splitlines():
@@ -40,7 +40,7 @@ def _set_max_brightness() -> None:
                     capture_output=True,
                     timeout=5,
                 )
-            except (OSError, subprocess.TimeoutExpired):
+            except OSError, subprocess.TimeoutExpired:
                 _logger.warning(
                     "Failed to set brightness on %s",
                     output,

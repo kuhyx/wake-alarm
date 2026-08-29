@@ -61,7 +61,7 @@ def _read_token_config() -> str | None:
     try:
         with SYNC_CONFIG_FILE.open() as handle:
             config = json.load(handle)
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return None
     if not isinstance(config, dict):
         return None

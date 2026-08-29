@@ -63,7 +63,7 @@ def _load_config() -> dict[str, str] | None:
             TAPO_CONFIG_FILE,
         )
         return None
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         _logger.warning(
             "Tapo config %s is unreadable or malformed; skipping plug control",
             TAPO_CONFIG_FILE,
@@ -94,12 +94,12 @@ async def _connect(config: dict[str, str]) -> Device | None:
             config["host"],
             credentials=Credentials(config["email"], config["password"]),
         )
-    except (KasaException, OSError, asyncio.TimeoutError):
+    except TimeoutError, KasaException, OSError:
         _logger.warning("Tapo plug discovery failed", exc_info=True)
         return None
     try:
         await dev.update()
-    except (KasaException, OSError, asyncio.TimeoutError):
+    except TimeoutError, KasaException, OSError:
         _logger.warning("Tapo plug update failed", exc_info=True)
         with contextlib.suppress(KasaException, OSError):
             await dev.disconnect()
@@ -120,7 +120,7 @@ async def _set_state(*, on: bool) -> None:
             await dev.turn_on()
         else:
             await dev.turn_off()
-    except (KasaException, OSError, asyncio.TimeoutError):
+    except TimeoutError, KasaException, OSError:
         _logger.warning("Tapo plug toggle failed", exc_info=True)
     finally:
         with contextlib.suppress(KasaException, OSError):
@@ -141,7 +141,7 @@ def _run(*, on: bool) -> None:
 
     try:
         asyncio.run(_runner())
-    except (asyncio.TimeoutError, OSError, RuntimeError):
+    except TimeoutError, OSError, RuntimeError:
         _logger.warning("Tapo plug control timed out or failed", exc_info=True)
 
 
