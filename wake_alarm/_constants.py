@@ -104,6 +104,20 @@ SYNC_HTTP_TIMEOUT_SECONDS: float = 10.0
 # a minute (so firing lands on the exact minute), but only touches the network
 # when the cache is older than this — bounding phone->PC latency at ~5 minutes
 # while keeping GitHub reads to ~288/day.
+# How old the phone's *published* record may be before the PC stops trusting
+# it. Distinct from ALARM_CACHE_MAX_AGE_SECONDS, which is about how recently
+# *we fetched*: a value fetched five seconds ago can still be a time the phone
+# chose months back and has since moved on from.
+#
+# This exists because that is exactly what happened. A publishing bug on the
+# phone left one record stamped 2026-08-09, and the PC honoured it faithfully
+# for three weeks -- a publish that never happens is indistinguishable from one
+# that has not changed, so the last successful publish is authoritative
+# forever. Expiring to FALLBACK_ALARM_HOUR is safe precisely because that
+# constant is the phone's own baseline, so a lapsed record degrades to the
+# right answer rather than a guess.
+PUBLISHED_ALARM_MAX_AGE_SECONDS: float = 14 * 24 * 60 * 60
+
 ALARM_CACHE_MAX_AGE_SECONDS: float = 300.0
 
 # How long after the alarm instant the trigger will still fire. Covers a

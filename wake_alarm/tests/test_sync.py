@@ -9,7 +9,9 @@ import urllib.error
 
 import pytest
 
-from wake_alarm._constants import FALLBACK_ALARM_HOUR
+from wake_alarm._constants import (
+    FALLBACK_ALARM_HOUR,
+)
 from wake_alarm._sync import (
     Alarm,
     _fetch_github_alarm,
@@ -92,7 +94,18 @@ class TestFetchRemoteAlarm:
         response.read.return_value = _log(6, 15).encode()
         response.__enter__.return_value = response
         with patch("urllib.request.urlopen", return_value=response):
-            assert _fetch_github_alarm() == (6, 15)
+            fetched = _fetch_github_alarm()
+            assert fetched is not None
+            assert fetched[:2] == (6, 15)
+
+    def test_unparseable_body_is_not_an_alarm(self, config_file: Path) -> None:
+        """A 200 whose body is not a usable log yields nothing, not a crash."""
+        self._with_token(config_file)
+        response = MagicMock()
+        response.read.return_value = b"{}"
+        response.__enter__.return_value = response
+        with patch("urllib.request.urlopen", return_value=response):
+            assert _fetch_github_alarm() is None
 
     def test_sends_raw_media_type_and_auth(self, config_file: Path) -> None:
         """The request carries the token and the raw Accept header."""
@@ -139,7 +152,7 @@ class TestCache:
 
     def test_roundtrip(self, cache_file: Path) -> None:
         """A written cache reads back with the same values."""
-        _write_cache(6, 45)
+        _write_cache(6, 45, None)
         cached = _read_cache()
         assert cached is not None
         assert cached[0] == 6
@@ -147,13 +160,13 @@ class TestCache:
 
     def test_write_creates_parent_dir(self, cache_file: Path) -> None:
         """The cache directory is created on demand."""
-        _write_cache(6, 45)
+        _write_cache(6, 45, None)
         assert cache_file.exists()
 
     def test_write_failure_is_swallowed(self) -> None:
         """An unwritable cache logs but does not raise."""
         with patch("pathlib.Path.mkdir", side_effect=OSError("read-only")):
-            _write_cache(6, 45)
+            _write_cache(6, 45, None)
 
     def test_missing_file(self) -> None:
         """No cache file yields None."""
@@ -183,7 +196,7 @@ class TestGetAlarm:
 
     def test_fresh_cache_skips_network(self, cache_file: Path) -> None:
         """A young cache entry is served without any fetch."""
-        _write_cache(6, 45)
+        _write_cache(6, 45, None)
         with patch("wake_alarm._sync.fetch_remote_alarm") as fetch:
             alarm = get_alarm()
         fetch.assert_not_called()
@@ -191,20 +204,20 @@ class TestGetAlarm:
 
     def test_stale_cache_triggers_fetch(self, cache_file: Path) -> None:
         """An old cache entry is refreshed from the network."""
-        _write_cache(6, 45)
-        with patch("wake_alarm._sync.fetch_remote_alarm", return_value=(7, 0)):
+        _write_cache(6, 45, None)
+        with patch("wake_alarm._sync.fetch_remote_alarm", return_value=(7, 0, None)):
             alarm = get_alarm(max_cache_age_seconds=0)
         assert (alarm.hour, alarm.minute, alarm.source) == (7, 0, "remote")
 
     def test_fetch_result_is_cached(self, cache_file: Path) -> None:
         """A successful fetch is written to the cache for next time."""
-        with patch("wake_alarm._sync.fetch_remote_alarm", return_value=(7, 0)):
+        with patch("wake_alarm._sync.fetch_remote_alarm", return_value=(7, 0, None)):
             get_alarm()
         assert json.loads(cache_file.read_text())["hour"] == 7
 
     def test_falls_back_to_stale_cache(self, cache_file: Path) -> None:
         """When the fetch fails, an old cache entry is still used."""
-        _write_cache(6, 45)
+        _write_cache(6, 45, None)
         with patch("wake_alarm._sync.fetch_remote_alarm", return_value=None):
             alarm = get_alarm(max_cache_age_seconds=0)
         assert (alarm.hour, alarm.minute, alarm.source) == (

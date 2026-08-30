@@ -16,6 +16,7 @@ rather than the value, so the alarm that wins is the one *set* most recently.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 import logging
 from typing import Any
@@ -140,7 +141,34 @@ def parse_log(raw: str) -> tuple[int, int] | None:
     return hour, minute
 
 
-def newest_alarm(published: list[tuple[str, str]]) -> tuple[int, int] | None:
+def hlc_instant(hlc: str) -> float | None:
+    """Wall-clock instant an HLC stamp was minted, as epoch seconds.
+
+    HLC strings are ``<iso>-<counter>-<deviceId>``, and the ISO part ends at
+    its ``Z`` -- which is what makes this splittable at all, since the ISO
+    date itself contains the same ``-`` the fields are joined with.
+
+    Args:
+        hlc: The stamp, or ``""`` when the field carried none.
+
+    Returns:
+        Epoch seconds, or None when the stamp is absent or unparsable. None
+        means "cannot tell how old this is", and callers treat that as
+        trustworthy rather than expired -- refusing to act on an alarm we
+        merely failed to date would be a worse failure than acting on it.
+    """
+    iso, separator, _ = hlc.partition("Z")
+    if not separator:
+        return None
+    try:
+        return datetime.fromisoformat(iso).replace(tzinfo=UTC).timestamp()
+    except ValueError:
+        return None
+
+
+def newest_alarm(
+    published: list[tuple[str, str]],
+) -> tuple[int, int, float | None] | None:
     """Pick the most recently published alarm out of every device's log.
 
     Ranked by the hour field's HLC stamp, which orders by wall time and then
@@ -154,8 +182,9 @@ def newest_alarm(published: list[tuple[str, str]]) -> tuple[int, int] | None:
             published, in any order.
 
     Returns:
-        The newest (hour, minute) pair, or None if no device published a
-        usable one.
+        The newest ``(hour, minute, published_at)``, where ``published_at`` is
+        epoch seconds from the winning HLC (or None if it carried no readable
+        stamp). None if no device published a usable alarm.
     """
     ranked: list[tuple[str, str, tuple[int, int]]] = []
     for device_id, raw in published:
@@ -170,4 +199,4 @@ def newest_alarm(published: list[tuple[str, str]]) -> tuple[int, int] | None:
     # stamped in the same millisecond don't alternate between ticks.
     hlc, winner, alarm = max(ranked, key=lambda entry: (entry[0], entry[1]))
     _logger.info("Using the alarm published by %r (hlc %s)", winner, hlc or "none")
-    return alarm
+    return (*alarm, hlc_instant(hlc))

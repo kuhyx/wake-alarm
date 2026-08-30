@@ -103,7 +103,7 @@ def _read_token() -> str | None:
     return _read_token_config() or _read_token_fallback()
 
 
-def _fetch_firebase_alarm() -> tuple[int, int] | None:
+def _fetch_firebase_alarm() -> tuple[int, int, float | None] | None:
     """Fetch the newest alarm any device has pushed to Firebase.
 
     Discovers device directories rather than reading one fixed path: the
@@ -118,7 +118,8 @@ def _fetch_firebase_alarm() -> tuple[int, int] | None:
     fall back to GitHub and then to the cache.
 
     Returns:
-        The (hour, minute) pair, or None if unconfigured or unreadable.
+        ``(hour, minute, published_at)``, or None if unconfigured or
+        unreadable.
     """
     if not _FIREBASE_AVAILABLE:
         return None
@@ -153,14 +154,15 @@ def _fetch_firebase_alarm() -> tuple[int, int] | None:
     return newest_alarm(published)
 
 
-def _fetch_github_alarm() -> tuple[int, int] | None:
+def _fetch_github_alarm() -> tuple[int, int, float | None] | None:
     """Fetch the alarm the phone last pushed to GitHub.
 
     Uses the raw media type so the Contents API returns the file body directly
     rather than base64-wrapped JSON.
 
     Returns:
-        The (hour, minute) pair, or None if unconfigured, unreachable, or
+        ``(hour, minute, published_at)`` -- age unknown on this path -- or
+        None if unconfigured, unreachable, or
         malformed. Never raises — a failed read must degrade to the cache,
         not crash the trigger.
     """
@@ -202,10 +204,16 @@ def _fetch_github_alarm() -> tuple[int, int] | None:
         _logger.info("Cannot fetch synced alarm: %s", exc)
         return None
 
-    return parse_log(raw)
+    parsed = parse_log(raw)
+    if parsed is None:
+        return None
+    # The mirror is a single fixed path with no per-field HLC to read, so its
+    # age is unknown rather than fresh. See hlc_instant on why that is treated
+    # as trustworthy.
+    return (*parsed, None)
 
 
-def fetch_remote_alarm() -> tuple[int, int] | None:
+def fetch_remote_alarm() -> tuple[int, int, float | None] | None:
     """Fetch the alarm the phone last pushed, Firebase first.
 
     GitHub is tried only when Firebase yields nothing, which covers both the
@@ -213,6 +221,8 @@ def fetch_remote_alarm() -> tuple[int, int] | None:
     moved, deleting the GitHub branch is the whole retirement.
 
     Returns:
-        The (hour, minute) pair, or None if no backend has a usable answer.
+        ``(hour, minute, published_at)``, or None if no backend has a
+        usable answer. ``published_at`` is epoch seconds, or None when the
+        record carries no readable stamp.
     """
     return _fetch_firebase_alarm() or _fetch_github_alarm()

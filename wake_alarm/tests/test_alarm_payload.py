@@ -6,6 +6,7 @@ different module from the fetching/caching this file's siblings cover.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -15,6 +16,7 @@ import pytest
 from wake_alarm._alarm_payload import (
     extract_field,
     extract_hlc,
+    hlc_instant,
     newest_alarm,
     parse_log,
 )
@@ -176,7 +178,9 @@ class TestNewestAlarm:
                 }
             },
         )
-        assert newest_alarm([("old", older), ("new", newer)]) == (7, 30)
+        winner = newest_alarm([("old", older), ("new", newer)])
+        assert winner is not None
+        assert winner[:2] == (7, 30)
 
     def test_an_unusable_device_does_not_block_a_good_one(self) -> None:
         """One broken device must not cost the user their alarm."""
@@ -190,4 +194,24 @@ class TestNewestAlarm:
                 }
             },
         )
-        assert newest_alarm([("broken", "{}"), ("good", good)]) == (5, 15)
+        winner = newest_alarm([("broken", "{}"), ("good", good)])
+        assert winner is not None
+        assert winner[:2] == (5, 15)
+
+
+class TestHlcInstant:
+    """Dating a record, so a lapsed one can be spotted."""
+
+    def test_reads_the_iso_prefix(self) -> None:
+        """The ISO part ends at its Z, which is what makes it splittable."""
+        stamp = hlc_instant("2026-08-09T16:28:05.575Z-0000-device")
+        assert stamp is not None
+        assert datetime.fromtimestamp(stamp, UTC).day == 9
+
+    def test_an_absent_stamp_is_undated(self) -> None:
+        """A field with no HLC cannot be dated, and says so."""
+        assert hlc_instant("") is None
+
+    def test_an_unparsable_prefix_is_undated(self) -> None:
+        """Garbage before the Z must not raise out of a per-minute tick."""
+        assert hlc_instant("not-a-timestampZ-0000-device") is None

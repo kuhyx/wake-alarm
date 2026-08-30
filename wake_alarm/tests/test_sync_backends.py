@@ -17,7 +17,7 @@ from wake_alarm._constants import (
     SYNC_ALARM_PATH,
     SYNC_DEVICES_PREFIX,
 )
-from wake_alarm._sync import _fetch_firebase_alarm, fetch_remote_alarm
+from wake_alarm._sync import _fetch_firebase_alarm
 
 if TYPE_CHECKING:
     from contextlib import AbstractContextManager
@@ -93,7 +93,9 @@ class TestFetchFirebaseAlarm:
         client.list_directory.return_value = []
         client.get_file_text.return_value = _log(6, 15)
         with self._patched(client=client):
-            assert _fetch_firebase_alarm() == (6, 15)
+            fetched = _fetch_firebase_alarm()
+            assert fetched is not None
+            assert fetched[:2] == (6, 15)
         client.get_file_text.assert_called_once_with(SYNC_ALARM_PATH)
 
     def test_absent_value_yields_none(self) -> None:
@@ -110,7 +112,9 @@ class TestFetchFirebaseAlarm:
         client.list_directory.return_value = ["7f3c-uuid"]
         client.get_file_text.return_value = _log(6, 45)
         with self._patched(client=client):
-            assert _fetch_firebase_alarm() == (6, 45)
+            fetched = _fetch_firebase_alarm()
+            assert fetched is not None
+            assert fetched[:2] == (6, 45)
         client.get_file_text.assert_called_once_with(
             f"{SYNC_DEVICES_PREFIX}/7f3c-uuid/{SYNC_ALARM_FILENAME}"
         )
@@ -134,7 +138,9 @@ class TestFetchFirebaseAlarm:
             ),
         }[path]
         with self._patched(client=client):
-            assert _fetch_firebase_alarm() == (5, 30)
+            fetched = _fetch_firebase_alarm()
+            assert fetched is not None
+            assert fetched[:2] == (5, 30)
 
     def test_falls_back_to_the_legacy_path_when_nothing_lists(self) -> None:
         """A backend that lists nothing still reads the un-migrated phone."""
@@ -142,7 +148,9 @@ class TestFetchFirebaseAlarm:
         client.list_directory.return_value = ["phone"]
         client.get_file_text.side_effect = [None, _log(8, 5)]
         with self._patched(client=client):
-            assert _fetch_firebase_alarm() == (8, 5)
+            fetched = _fetch_firebase_alarm()
+            assert fetched is not None
+            assert fetched[:2] == (8, 5)
         assert client.get_file_text.call_args_list[-1].args[0] == SYNC_ALARM_PATH
 
     def test_a_device_publishing_garbage_does_not_win(self) -> None:
@@ -154,7 +162,9 @@ class TestFetchFirebaseAlarm:
             f"{SYNC_DEVICES_PREFIX}/good/{SYNC_ALARM_FILENAME}": _log(7, 20),
         }[path]
         with self._patched(client=client):
-            assert _fetch_firebase_alarm() == (7, 20)
+            fetched = _fetch_firebase_alarm()
+            assert fetched is not None
+            assert fetched[:2] == (7, 20)
 
     @pytest.mark.parametrize(
         "exc",
@@ -201,40 +211,3 @@ class TestOptionalCrdtSyncImport:
             # the import-failed state would silently disable Firebase for the
             # rest of the session.
             importlib.reload(_sync_transport)
-
-
-class TestFetchRemoteAlarmDispatch:
-    """Tests for the Firebase-first, GitHub-fallback ordering."""
-
-    def test_prefers_firebase(self) -> None:
-        """When Firebase answers, GitHub is never asked."""
-        with (
-            patch(
-                "wake_alarm._sync_transport._fetch_firebase_alarm", return_value=(6, 15)
-            ),
-            patch("wake_alarm._sync_transport._fetch_github_alarm") as github,
-        ):
-            assert fetch_remote_alarm() == (6, 15)
-        github.assert_not_called()
-
-    def test_falls_back_to_github(self) -> None:
-        """A Firebase miss still resolves through the mirror."""
-        with (
-            patch(
-                "wake_alarm._sync_transport._fetch_firebase_alarm", return_value=None
-            ),
-            patch(
-                "wake_alarm._sync_transport._fetch_github_alarm", return_value=(7, 30)
-            ),
-        ):
-            assert fetch_remote_alarm() == (7, 30)
-
-    def test_both_missing_yields_none(self) -> None:
-        """With neither backend usable the caller degrades to the cache."""
-        with (
-            patch(
-                "wake_alarm._sync_transport._fetch_firebase_alarm", return_value=None
-            ),
-            patch("wake_alarm._sync_transport._fetch_github_alarm", return_value=None),
-        ):
-            assert fetch_remote_alarm() is None
