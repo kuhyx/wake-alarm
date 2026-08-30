@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
+import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,48 +20,46 @@ void main() {
     scheduler = AlarmScheduler(channel: channel);
   });
 
+  const twoTags = RoomProofSettings(nfcTagIds: <String>['tag-1', 'tag-2']);
+
   group('NFC', () {
-    test('a matching registered tag satisfies the proof', () {
-      final proof = RoomProof(scheduler: scheduler, registeredTagId: 'tag-1');
-      final result = proof.checkNfc('tag-1');
+    test('a matching registered tag satisfies its own slot', () {
+      final proof = RoomProof(scheduler: scheduler, settings: twoTags);
+      final result = proof.checkNfc('tag-1', slot: 0);
       expect(result.satisfied, isTrue);
       expect(result.kind, RoomProofKind.nfc);
     });
 
     test('a different tag does not', () {
-      final proof = RoomProof(scheduler: scheduler, registeredTagId: 'tag-1');
-      expect(proof.checkNfc('tag-2').satisfied, isFalse);
+      final proof = RoomProof(scheduler: scheduler, settings: twoTags);
+      expect(proof.checkNfc('tag-9', slot: 0).satisfied, isFalse);
+    });
+
+    test('the OTHER registered tag does not satisfy this slot', () {
+      // Two locations must stay two locations: if tag 2 could pass stage 1
+      // the walk between them would be optional.
+      final proof = RoomProof(scheduler: scheduler, settings: twoTags);
+      final result = proof.checkNfc('tag-2', slot: 0);
+      expect(result.satisfied, isFalse);
+      expect(result.detail, contains('Not tag 1'));
+    });
+
+    test('each slot matches only its own tag', () {
+      final proof = RoomProof(scheduler: scheduler, settings: twoTags);
+      expect(proof.checkNfc('tag-2', slot: 1).satisfied, isTrue);
+      expect(proof.checkNfc('tag-1', slot: 1).satisfied, isFalse);
     });
 
     test('no registered tag means NFC cannot satisfy, not that all pass', () {
       final proof = RoomProof(scheduler: scheduler);
-      final result = proof.checkNfc('tag-1');
+      final result = proof.checkNfc('tag-1', slot: 0);
       expect(result.satisfied, isFalse);
-      expect(result.detail, contains('No NFC tag registered'));
+      expect(result.detail, contains('No tag 1 registered'));
     });
 
     test('an empty registered tag is treated as unregistered', () {
-      final proof = RoomProof(scheduler: scheduler, registeredTagId: '');
-      expect(proof.checkNfc('').satisfied, isFalse);
-    });
-  });
-
-  group('QR', () {
-    test('the expected payload satisfies the proof', () {
       final proof = RoomProof(scheduler: scheduler);
-      final result = proof.checkQr('kitchen', expected: 'kitchen');
-      expect(result.satisfied, isTrue);
-      expect(result.kind, RoomProofKind.qr);
-    });
-
-    test('a different payload does not', () {
-      final proof = RoomProof(scheduler: scheduler);
-      expect(proof.checkQr('bedroom', expected: 'kitchen').satisfied, isFalse);
-    });
-
-    test('an empty expectation never matches', () {
-      final proof = RoomProof(scheduler: scheduler);
-      expect(proof.checkQr('', expected: '').satisfied, isFalse);
+      expect(proof.checkNfc('', slot: 0).satisfied, isFalse);
     });
   });
 

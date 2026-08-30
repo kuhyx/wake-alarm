@@ -18,8 +18,9 @@ intent) · `AlarmActivity` (dismiss screen over the lockscreen) ·
 **Never replace any of this with a pub plugin.** The stack is AGP 9.0.1 /
 Gradle 9.1 / Kotlin 2.3.20; a plugin that will not compile against AGP 9 breaks
 the build outright rather than degrading, and this is the one path that must
-not break. Third-party plugins are acceptable only for droppable extras (QR
-scanning) — never for the ring path.
+not break. Third-party plugins are acceptable only for droppable extras —
+never for the ring path, and never for NFC or the step counter, both of which
+the dismiss sequence now hard-depends on.
 
 Things that are a hard crash or a silent no-ring, not a warning:
 
@@ -71,15 +72,37 @@ once and then silently stops.
 The two are deliberately not synced — a shared day set is item 8's shape, and
 diverging defaults would have the halves firing on different days.
 
-`lib/services/challenge.dart` is a port of `_challenges.py`'s five kinds so
-both halves behave identically; `kDismissCodeLength`/`kDismissFlashSeconds`
-are **duplicated** from `_constants.py`, not synced. Change one, change both.
+`lib/services/challenge.dart` owns the four challenge kinds. **Every kind
+must keep its prompt on screen until it is answered.** A memorise-then-hide
+kind existed once and was deleted outright: the ring screen is reached by
+walking in from another room, so anything already gone by the time the user
+looks at it is unsolvable, not merely hard.
 
-Room proof (item 3) is `lib/services/room_proof.dart`: **NFC or QR satisfies
-on its own; steps alone never does** — the phone is stationary while you walk
-to it, so steps only accrue after pickup and can be faked by shaking it in
-bed. Steps are accepted only together with elapsed time, as the fallback for
-when both other mechanisms fail.
+Room proof is now a **strict, latched sequence**, owned by
+`lib/services/dismiss_gate.dart`:
+
+    tag 1  ->  25 steps + 2 min  ->  tag 2  ->  3 challenges
+
+Every stage is required, they must happen **in that order**, and a stage once
+passed **never reverts** — an unknown or out-of-order tag is ignored rather
+than clearing progress. `room_proof.dart` answers only "did this one check
+pass just now"; the ordering lives in the gate. Two *distinct* tags are
+required: the same id in both slots is refused at registration, because one
+tag satisfying both stages removes the walk that is the entire point.
+
+Steps still require elapsed time as well as a count — the phone is stationary
+while you walk to it, so a bare count can be faked by shaking it in bed. That
+pair is unchanged from when steps were a fallback; it is only its role that
+changed, from alternative to prerequisite.
+
+**The bypass is the only fallback, and it is deliberately narrow.** After
+`DismissGate.bypassAfter` (5 minutes) of ringing, or immediately when NFC is
+off or fewer than two distinct tags are registered, the two *tag* stages are
+skipped and the challenge count rises to 6. **The walk is never skipped** —
+jumping straight to the challenges would let someone lie in bed for five
+minutes and answer questions without standing up, which is weaker than the
+gate this replaced. Without some such hatch a dead tag at 06:00 leaves an
+alarm that literally cannot be switched off.
 
 **`ringNow` + `lib/main_ring_probe.dart` are a deliberate manual test
 handle**, the phone-side equivalent of `wake-alarm.service` on the PC: the

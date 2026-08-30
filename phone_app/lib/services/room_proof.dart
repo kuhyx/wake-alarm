@@ -1,12 +1,10 @@
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
+import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 
-/// Which mechanism satisfied the separate-room requirement.
+/// Which mechanism satisfied a stage of the separate-room requirement.
 enum RoomProofKind {
-  /// Tapped the registered NFC tag in the other room.
+  /// Tapped the registered NFC tag for the stage that was live.
   nfc,
-
-  /// Scanned the printed QR code in the other room.
-  qr,
 
   /// Walked far enough, for long enough, since the alarm started.
   steps,
@@ -17,7 +15,7 @@ class RoomProofResult {
   /// Creates a result; [kind] is null when nothing has satisfied yet.
   const RoomProofResult({required this.satisfied, this.kind, this.detail = ''});
 
-  /// Whether the user has proven they are in the other room.
+  /// Whether this particular check passed.
   final bool satisfied;
 
   /// Which mechanism satisfied it, or null if none did.
@@ -27,66 +25,60 @@ class RoomProofResult {
   final String detail;
 }
 
-/// Proof that the user physically walked to another room before dismissing.
+/// The individual checks behind the dismiss sequence.
 ///
-/// **Any one of NFC or QR satisfies.** Steps alone deliberately does NOT: the
-/// phone is stationary in the other room while you walk *to* it, so steps only
-/// accrue after pickup and can be faked by shaking it in bed. Steps are only
-/// accepted together with elapsed time, as the fallback for when both other
-/// mechanisms fail — a single failing mechanism at 06:00 must never make the
-/// alarm undismissable.
+/// **Every check is required, in order** — see `DismissGate`, which owns the
+/// sequencing. This class only answers "did this one thing pass right now".
+///
+/// Steps deliberately require elapsed time as well as a count: the phone is
+/// stationary while you walk *to* it, so a bare step count can be faked by
+/// shaking it in bed. The pair is unchanged from when steps were a fallback.
 class RoomProof {
   /// Creates a room-proof checker over [scheduler]'s platform channel.
-  RoomProof({required this.scheduler, this._registeredTagId});
+  RoomProof({
+    required this.scheduler,
+    this.settings = const RoomProofSettings(),
+  });
 
   /// Platform bridge used to read the step counter.
   final AlarmScheduler scheduler;
-  final String? _registeredTagId;
 
-  /// Steps required by the fallback, counted since the alarm started ringing.
+  /// The registered tags, one per sequence stage.
+  final RoomProofSettings settings;
+
+  /// Steps required, counted since the alarm started ringing.
   static const int requiredSteps = 25;
 
-  /// Elapsed time the fallback also requires, so shaking the phone cannot pass.
+  /// Elapsed time also required, so shaking the phone cannot pass.
   static const Duration requiredElapsed = Duration(minutes: 2);
 
-  /// Whether [tagId] is the tag registered in Settings.
+  /// Whether [tagId] is the tag registered for [slot].
   ///
-  /// Registering no tag means NFC cannot satisfy the proof — it does not mean
-  /// every tag passes.
-  RoomProofResult checkNfc(String tagId) {
-    final registered = _registeredTagId;
-    if (registered == null || registered.isEmpty) {
-      return const RoomProofResult(
+  /// A tag registered for a *different* slot fails here: tapping tag 2 while
+  /// stage 1 is live must not advance anything, or the two locations collapse
+  /// into one.
+  RoomProofResult checkNfc(String tagId, {required int slot}) {
+    final expected = settings.tagAt(slot);
+    if (expected == null) {
+      return RoomProofResult(
         satisfied: false,
-        detail: 'No NFC tag registered in Settings',
+        detail: 'No tag ${slot + 1} registered in Settings',
       );
     }
-    if (tagId != registered) {
-      return const RoomProofResult(satisfied: false, detail: 'Wrong NFC tag');
+    if (tagId != expected) {
+      return RoomProofResult(
+        satisfied: false,
+        detail: 'Not tag ${slot + 1}',
+      );
     }
-    return const RoomProofResult(
+    return RoomProofResult(
       satisfied: true,
       kind: RoomProofKind.nfc,
-      detail: 'NFC tag matched',
+      detail: 'Tag ${slot + 1} matched',
     );
   }
 
-  /// Whether [payload] is the expected printed QR code.
-  ///
-  /// A printed code is photographable, which is exactly why it is one of two
-  /// accepted proofs rather than the only one.
-  RoomProofResult checkQr(String payload, {required String expected}) {
-    if (expected.isEmpty || payload != expected) {
-      return const RoomProofResult(satisfied: false, detail: 'Wrong QR code');
-    }
-    return const RoomProofResult(
-      satisfied: true,
-      kind: RoomProofKind.qr,
-      detail: 'QR code matched',
-    );
-  }
-
-  /// The fallback: enough steps AND enough elapsed time since the ring started.
+  /// Enough steps AND enough elapsed time since the ring started.
   ///
   /// Both are required together. [elapsed] is passed in rather than measured
   /// here so the ring screen owns the single clock.

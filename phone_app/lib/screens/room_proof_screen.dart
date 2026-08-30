@@ -1,12 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 
-/// Registers the separate-room proofs: the NFC tag and the printed QR code.
+/// Registers the two NFC tags the dismiss sequence walks between.
 ///
-/// Without a registered tag, NFC can never satisfy the room proof and the
-/// steps fallback becomes the only way to dismiss — which is exactly the
-/// single-mechanism dependency the redundancy exists to avoid.
+/// Both slots must hold **different** tags. With fewer than two distinct tags
+/// the tag stages are unsatisfiable, so the ring screen falls straight through
+/// to the bypass — a weaker morning, not a locked-out one.
 class RoomProofScreen extends StatefulWidget {
   /// Creates the screen; [scheduler] is injectable for tests.
   const RoomProofScreen({super.key, this.scheduler});
@@ -20,10 +22,9 @@ class RoomProofScreen extends StatefulWidget {
 
 class _RoomProofScreenState extends State<RoomProofScreen> {
   late final AlarmScheduler _scheduler = widget.scheduler ?? AlarmScheduler();
-  final TextEditingController _qr = TextEditingController();
 
-  String? _tagId;
-  bool _scanning = false;
+  RoomProofSettings _settings = const RoomProofSettings();
+  int? _scanningSlot;
   String _status = '';
 
   @override
@@ -34,48 +35,75 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
 
   @override
   void dispose() {
-    if (_scanning) unawaited(_scheduler.stopTagRegistration());
+    if (_scanningSlot != null) unawaited(_scheduler.stopTagRegistration());
     _scheduler.clearNfcListener();
-    _qr.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     final settings = await RoomProofSettings.load();
     if (!mounted) return;
-    setState(() {
-      _tagId = settings.nfcTagId;
-      _qr.text = settings.qrPayload ?? '';
-    });
+    setState(() => _settings = settings);
   }
 
-  Future<void> _startScan() async {
-    _scheduler.onNfcTag(_onTag);
+  Future<void> _startScan(int slot) async {
+    _scheduler.onNfcTag((tagId) => unawaited(_onTag(slot, tagId)));
     final started = await _scheduler.startTagRegistration();
     if (!mounted) return;
     setState(() {
-      _scanning = started;
+      _scanningSlot = started ? slot : null;
       _status = started
-          ? 'Tap the tag against the phone…'
+          ? 'Tap tag ${slot + 1} against the phone…'
           : 'NFC is unavailable or switched off.';
     });
   }
 
-  Future<void> _onTag(String tagId) async {
-    await RoomProofSettings.saveNfcTag(tagId);
+  Future<void> _onTag(int slot, String tagId) async {
+    // The same tag in both slots would let one tap satisfy both stages, which
+    // removes the walk between them — the entire point of having two.
+    final other = _settings.tagAt(slot == 0 ? 1 : 0);
+    if (tagId == other) {
+      await _scheduler.stopTagRegistration();
+      if (!mounted) return;
+      setState(() {
+        _scanningSlot = null;
+        _status = 'That is already tag ${slot == 0 ? 2 : 1}. Use a different '
+            'tag, in a different room.';
+      });
+      return;
+    }
+    await RoomProofSettings.saveNfcTagAt(slot, tagId);
+    final settings = await RoomProofSettings.load();
     await _scheduler.stopTagRegistration();
     if (!mounted) return;
     setState(() {
-      _tagId = tagId;
-      _scanning = false;
-      _status = 'Tag registered.';
+      _settings = settings;
+      _scanningSlot = null;
+      _status = 'Tag ${slot + 1} registered.';
     });
   }
 
-  Future<void> _saveQr() async {
-    await RoomProofSettings.saveQrPayload(_qr.text.trim());
-    if (!mounted) return;
-    setState(() => _status = 'QR code saved.');
+  Widget _slotRow(int slot) {
+    final id = _settings.tagAt(slot);
+    final scanning = _scanningSlot == slot;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text('Tag ${slot + 1}: ${id ?? "none registered"}'),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: _scanningSlot != null ? null : () => _startScan(slot),
+            child: Text(
+              scanning
+                  ? 'Waiting for tag…'
+                  : 'Register tag ${slot + 1}${id == null ? "" : " again"}',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -87,23 +115,13 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text('NFC tag: ${_tagId ?? "none registered"}'),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _scanning ? null : _startScan,
-              child: Text(_scanning ? 'Waiting for tag…' : 'Register NFC tag'),
+            const Text(
+              'Put the two tags in different rooms. Dismissing the alarm '
+              'means tapping tag 1, walking, then tapping tag 2.',
             ),
-            const SizedBox(height: 32),
-            TextField(
-              controller: _qr,
-              decoration: const InputDecoration(
-                labelText: 'QR code text',
-                helperText: 'Text encoded in the code printed for that room',
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(onPressed: _saveQr, child: const Text('Save QR code')),
             const SizedBox(height: 24),
+            for (var i = 0; i < RoomProofSettings.requiredTagCount; i++)
+              _slotRow(i),
             Text(_status),
           ],
         ),
@@ -111,6 +129,3 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
     );
   }
 }
-
-/// Local helper so this file need not import dart:async for fire-and-forget.
-void unawaited(Future<void> future) {}

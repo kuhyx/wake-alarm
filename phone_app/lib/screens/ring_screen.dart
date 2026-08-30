@@ -2,25 +2,43 @@ import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/screens/ring_challenge.dart';
+import 'package:wake_alarm_sync/screens/ring_checklist.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
+import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 
+/// How often the live steps stage re-reads the step counter.
+const Duration kStepPollInterval = Duration(seconds: 2);
+
 /// The dismiss screen shown over the lockscreen while the alarm rings.
 ///
-/// Two gates, in order: prove you are in the other room, then solve a
-/// challenge. Only then does the sound stop.
+/// A strict sequence: tag 1, then the walk, then tag 2, then the challenges.
+/// `DismissGate` owns the ordering; this widget owns the clocks and the UI.
 class RingScreen extends StatefulWidget {
-  /// Creates the ring screen; both dependencies are injectable for tests.
-  const RingScreen({super.key, this.scheduler, this.generator});
+  /// Creates the ring screen; every dependency is injectable for tests.
+  const RingScreen({
+    super.key,
+    this.scheduler,
+    this.generator,
+    this.clock,
+  });
 
   /// Platform bridge; defaults to the real MethodChannel.
   final AlarmScheduler? scheduler;
 
   /// Challenge source; defaults to a secure-random generator.
   final ChallengeGenerator? generator;
+
+  /// Time since the ring started; defaults to a real `Stopwatch`.
+  ///
+  /// Injectable because `Stopwatch` reads the wall clock, which
+  /// `tester.pump()` does not advance — without this seam no widget test can
+  /// reach the two-minute steps floor or the five-minute bypass.
+  final Duration Function()? clock;
 
   @override
   State<RingScreen> createState() => _RingScreenState();
@@ -30,55 +48,91 @@ class _RingScreenState extends State<RingScreen> {
   late final AlarmScheduler _scheduler = widget.scheduler ?? AlarmScheduler();
   late final ChallengeGenerator _generator =
       widget.generator ?? ChallengeGenerator();
-  RoomProof _proof = RoomProof(scheduler: AlarmScheduler());
-  RoomProofSettings _settings = const RoomProofSettings();
-  bool _nfcAvailable = false;
+  late RoomProof _proof = RoomProof(scheduler: _scheduler);
+  final DismissGate _gate = DismissGate();
   late Challenge _challenge = _generator.next();
 
   final TextEditingController _input = TextEditingController();
-  final Stopwatch _elapsed = Stopwatch()..start();
+  final Stopwatch _stopwatch = Stopwatch()..start();
+  late final Duration Function() _elapsed =
+      widget.clock ?? () => _stopwatch.elapsed;
+  Timer? _bypassTimer;
+  Timer? _stepTimer;
 
-  /// Whether the room proof has been satisfied; the challenge is gated on it.
-  bool _inRoom = false;
   String _status = '';
-
 
   @override
   void initState() {
     super.initState();
-    _proof = RoomProof(scheduler: _scheduler);
     unawaited(_scheduler.beginStepCount());
     unawaited(_loadRoomProof());
+    // The escape hatch. Set up before anything can fail, so a crash in the
+    // settings load cannot leave an alarm with no way out.
+    _bypassTimer = Timer(DismissGate.bypassAfter, _onBypassDue);
+    _stepTimer = Timer.periodic(kStepPollInterval, (_) => _pollSteps());
   }
 
-  /// Loads the registered tag/QR and starts listening for NFC taps.
+  /// Loads the registered tags and starts listening for NFC taps.
   Future<void> _loadRoomProof() async {
     final settings = await RoomProofSettings.load();
     final hasNfc = await _scheduler.hasNfc();
     if (!mounted) return;
     setState(() {
-      _settings = settings;
-      _nfcAvailable = hasNfc;
-      _proof = RoomProof(
-        scheduler: _scheduler,
-        registeredTagId: settings.nfcTagId,
-      );
+      _proof = RoomProof(scheduler: _scheduler, settings: settings);
+      // Nothing to wait for: without NFC or without two distinct tags the
+      // tag stages can never be satisfied, so making the user sit through
+      // the full timer would be pure punishment for a config problem.
+      if (!hasNfc || !settings.isComplete) {
+        _gate.activateBypass();
+        _status = hasNfc
+            ? 'Register two NFC tags in Settings.'
+            : 'NFC is off or unavailable.';
+      }
     });
     _scheduler.onNfcTag(_onNfcTag);
   }
 
+  void _onBypassDue() {
+    if (!mounted) return;
+    if (!_gate.activateBypass()) return;
+    developer.log('bypass activated', name: 'WakeAlarmRing');
+    setState(() => _status = 'Taking too long — tags skipped.');
+  }
+
   void _onNfcTag(String tagId) {
-    final result = _proof.checkNfc(tagId);
+    final slot = _gate.expectedTagSlot;
+    if (slot == null) return;
+    final result = _proof.checkNfc(tagId, slot: slot);
     developer.log(
-      'nfc tag=$tagId satisfied=${result.satisfied} detail=${result.detail}',
+      'nfc tag=$tagId slot=$slot satisfied=${result.satisfied} '
+      'detail=${result.detail}',
       name: 'WakeAlarmRing',
     );
     if (!mounted) return;
     setState(() {
-      _inRoom = result.satisfied;
+      // Only a pass moves the sequence. A wrong tag reports itself and
+      // changes nothing — stages never un-latch.
+      if (result.satisfied) _gate.passTagStage();
       _status = result.detail;
     });
-    if (result.satisfied) _logChallenge();
+    if (_gate.stage == DismissStage.challenges) _logChallenge();
+  }
+
+  /// Re-reads the step counter while the steps stage is live.
+  ///
+  /// Polled rather than button-driven: the walk to tag 1 has usually already
+  /// banked the steps, so the only thing still binding is the elapsed-time
+  /// floor. Making the user hunt for a button to discover that is friction
+  /// without difficulty.
+  Future<void> _pollSteps() async {
+    if (_gate.stage != DismissStage.steps) return;
+    final result = await _proof.checkSteps(_elapsed());
+    if (!mounted || _gate.stage != DismissStage.steps) return;
+    setState(() {
+      if (result.satisfied) _gate.passStepsStage();
+      _status = result.detail;
+    });
+    if (_gate.stage == DismissStage.challenges) _logChallenge();
   }
 
   /// Logs the current challenge so a hardware test can be scripted.
@@ -88,54 +142,42 @@ class _RingScreenState extends State<RingScreen> {
   void _logChallenge() {
     developer.log(
       'challenge kind=${_challenge.kind.name} display="${_challenge.display}" '
-      'answer=${_challenge.answer}',
+      'answer=${_challenge.answer} '
+      '${_gate.challengesPassed}/${_gate.challengesRequired}',
       name: 'WakeAlarmRing',
     );
-  }
-
-  /// Called by the QR scanner when a code is decoded.
-  void onQrScanned(String payload) {
-    final result = _proof.checkQr(payload, expected: _settings.qrPayload ?? '');
-    if (!mounted) return;
-    setState(() {
-      _inRoom = result.satisfied;
-      _status = result.detail;
-    });
   }
 
   @override
   void dispose() {
+    _bypassTimer?.cancel();
+    _stepTimer?.cancel();
     _scheduler.clearNfcListener();
     _input.dispose();
-    _elapsed.stop();
+    _stopwatch.stop();
     super.dispose();
   }
 
-  Future<void> _trySteps() async {
-    final result = await _proof.checkSteps(_elapsed.elapsed);
-    developer.log(
-      'steps satisfied=${result.satisfied} detail=${result.detail}',
-      name: 'WakeAlarmRing',
-    );
-    if (!mounted) return;
-    setState(() {
-      _inRoom = result.satisfied;
-      _status = result.detail;
-    });
-    if (result.satisfied) _logChallenge();
-  }
-
   void _submit() {
-    if (!_challenge.accepts(_input.text)) {
-      setState(() {
-        _status = 'Wrong — here is another one';
+    final correct = _challenge.accepts(_input.text);
+    setState(() {
+      _gate.recordChallenge(correct: correct);
+      _input.clear();
+      // A wrong answer costs the attempt only; the tally never falls back.
+      if (_gate.isDone) {
+        _status = 'Dismissed';
+      } else {
+        _status = correct
+            ? 'Correct — next one'
+            : 'Wrong — here is another one';
         _challenge = _generator.next();
-        _input.clear();
-      });
-      return;
+      }
+    });
+    if (_gate.isDone) {
+      unawaited(_finishDismiss());
+    } else {
+      _logChallenge();
     }
-    setState(() => _status = 'Dismissed');
-    unawaited(_finishDismiss());
   }
 
   /// Stops the ring, then closes this screen.
@@ -156,6 +198,7 @@ class _RingScreenState extends State<RingScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final inChallenges = _gate.stage == DismissStage.challenges;
     return PopScope(
       // The alarm cannot be escaped with back; dismissing is the only way out.
       canPop: false,
@@ -168,7 +211,16 @@ class _RingScreenState extends State<RingScreen> {
               children: <Widget>[
                 Text('Wake up', style: theme.textTheme.headlineMedium),
                 const SizedBox(height: 24),
-                if (!_inRoom) ..._roomGate(theme) else ..._challengeGate(theme),
+                if (inChallenges)
+                  RingChallenge(
+                    challenge: _challenge,
+                    controller: _input,
+                    passed: _gate.challengesPassed,
+                    total: _gate.challengesRequired,
+                    onSubmit: _submit,
+                  )
+                else
+                  RingChecklist(gate: _gate),
                 const SizedBox(height: 16),
                 Text(_status, style: theme.textTheme.bodyMedium),
               ],
@@ -179,41 +231,4 @@ class _RingScreenState extends State<RingScreen> {
     );
   }
 
-  List<Widget> _roomGate(ThemeData theme) => <Widget>[
-    Text(
-      _nfcAvailable && _settings.nfcTagId != null
-          ? 'Go to the other room and tap the NFC tag.'
-          : 'Go to the other room: scan the QR code, or walk '
-                '${RoomProof.requiredSteps} steps.',
-      textAlign: TextAlign.center,
-      style: theme.textTheme.bodyLarge,
-    ),
-    const SizedBox(height: 16),
-    // The steps fallback stays reachable even when NFC is registered: a
-    // single failing mechanism at 06:00 must never make the alarm
-    // undismissable.
-    FilledButton(onPressed: _trySteps, child: const Text('Check steps')),
-  ];
-
-  List<Widget> _challengeGate(ThemeData theme) => <Widget>[
-    Text(_challenge.hint, style: theme.textTheme.bodyLarge),
-    const SizedBox(height: 12),
-    Text(
-      // Always visible: a challenge that hides itself is unsolvable when the
-      // user reaches the screen seconds later, having walked to another room.
-      _challenge.display,
-      textAlign: TextAlign.center,
-      style: theme.textTheme.displaySmall,
-    ),
-    const SizedBox(height: 16),
-    TextField(
-      controller: _input,
-      autofocus: true,
-      textCapitalization: TextCapitalization.characters,
-      decoration: const InputDecoration(labelText: 'Answer'),
-      onSubmitted: (_) => _submit(),
-    ),
-    const SizedBox(height: 16),
-    FilledButton(onPressed: _submit, child: const Text('Dismiss')),
-  ];
 }

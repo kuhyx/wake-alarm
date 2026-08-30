@@ -53,12 +53,6 @@ void main() {
   });
 
   group('ChallengeGenerator', () {
-    test('generateCode has the mirrored length and no ambiguous chars', () {
-      final code = ChallengeGenerator().generateCode();
-      expect(code, hasLength(kDismissCodeLength));
-      expect(RegExp(r'^[A-HJ-NP-Z2-9]+$').hasMatch(code), isTrue);
-    });
-
     test('math covers addition', () {
       final c = ChallengeGenerator(random: _FixedRandom(<int>[0, 5, 7])).math();
       expect(c.kind, ChallengeKind.math);
@@ -101,13 +95,6 @@ void main() {
       expect(c.answer.split('').toSet(), hasLength(8));
     });
 
-    test('flash displays the code it expects back', () {
-      final c = ChallengeGenerator().flash();
-      expect(c.kind, ChallengeKind.flash);
-      expect(c.display, c.answer);
-      expect(c.hint, contains('${kDismissFlashSeconds}s'));
-    });
-
     test('sequence covers the arithmetic branch', () {
       final c = ChallengeGenerator(
         random: _FixedRandom(<int>[0, 3, 2]),
@@ -142,15 +129,16 @@ void main() {
       expect(c.answer, word.split('').reversed.join());
     });
 
-    test('next() never returns a challenge that hides itself', () {
-      // flash disappears after kDismissFlashSeconds, which is unsolvable on
-      // the phone: the user reaches the ring screen only after walking to
-      // another room and tapping a tag.
-      final kinds = <ChallengeKind>{};
+    test('every kind keeps its prompt on screen while it is answered', () {
+      // The memorise-then-hide kind was deleted outright rather than merely
+      // left out of the rotation, so this is now an enum-level guarantee: a
+      // challenge that hides itself is unsolvable for someone who has just
+      // walked in from another room.
       for (var i = 0; i < 400; i++) {
-        kinds.add(ChallengeGenerator().next().kind);
+        final c = ChallengeGenerator().next();
+        expect(c.display, isNotEmpty, reason: '${c.kind} showed nothing');
       }
-      expect(kinds, isNot(contains(ChallengeKind.flash)));
+      expect(ChallengeKind.values, hasLength(4));
     });
 
     test('next() produces every kind that is safe to show', () {

@@ -1,22 +1,11 @@
-/// Dismiss-challenge types, ported from the PC half's
-/// `wake_alarm/_challenges.py` so both halves behave identically.
+/// Dismiss-challenge types.
 ///
-/// The two constants below are duplicated from `wake_alarm/_constants.py`
-/// (`DISMISS_CODE_LENGTH`, `DISMISS_FLASH_SECONDS`) rather than synced — the
-/// Dart side has no way to read Python. If they change there, change them here.
+/// Every kind must keep its prompt **on screen until it is answered**. A
+/// challenge that hides what it asked is unsolvable for someone who has just
+/// walked in from another room, which is why there is no memorise-this kind.
 library;
 
 import 'dart:math';
-
-/// Length of a generated dismiss code. Mirrors `DISMISS_CODE_LENGTH`.
-const int kDismissCodeLength = 10;
-
-/// Seconds a flash challenge stays visible. Mirrors `DISMISS_FLASH_SECONDS`.
-const int kDismissFlashSeconds = 4;
-
-/// Uppercase alphanumerics with visually ambiguous characters removed:
-/// O/0 and I/1 are excluded so the code is legible half-asleep.
-const String _dismissChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /// Words for the reverse challenge — common, unambiguous when read half-asleep.
 const List<String> _reverseWords = <String>[
@@ -37,16 +26,13 @@ const List<String> _reverseWords = <String>[
   'WEEKEND',
 ];
 
-/// The five challenge kinds, matching the PC half's `kind` strings exactly.
+/// The four challenge kinds. All keep their prompt visible while answering.
 enum ChallengeKind {
   /// Solve an arithmetic problem.
   math,
 
   /// Type shuffled digits in ascending order.
   sort,
-
-  /// Memorise a code before it is hidden.
-  flash,
 
   /// Identify and continue a numeric pattern.
   sequence,
@@ -92,25 +78,10 @@ class ChallengeGenerator {
   final Random _random;
 
   /// Picks a challenge kind at random and generates an instance.
-  ///
-  /// [flash] is deliberately **excluded**. It hides the code after
-  /// [kDismissFlashSeconds], and on the phone that is unsolvable in practice:
-  /// the ring screen is reached by walking to another room and tapping a tag,
-  /// so the code has usually already vanished by the time the user is looking
-  /// at the screen — reported from the phone on 2026-08-27 as "impossible to
-  /// actually do". Every challenge the alarm shows must stay on screen until
-  /// it is answered. [flash] is kept as a constructor for the PC half's
-  /// parity tests, but nothing routes to it here.
   Challenge next() {
     final builders = <Challenge Function()>[math, sort, sequence, reverse];
     return builders[_random.nextInt(builders.length)]();
   }
-
-  /// Generates a random dismiss code with ambiguous characters excluded.
-  String generateCode() => List<String>.generate(
-    kDismissCodeLength,
-    (_) => _dismissChars[_random.nextInt(_dismissChars.length)],
-  ).join();
 
   /// An arithmetic problem: addition, subtraction, multiplication or division.
   Challenge math() {
@@ -172,17 +143,6 @@ class ChallengeGenerator {
       display: digits.join('  '),
       answer: ascending.join(),
       hint: 'Type digits sorted lowest → highest (no spaces)',
-    );
-  }
-
-  /// A code shown briefly, then hidden; the user types it from memory.
-  Challenge flash() {
-    final code = generateCode();
-    return Challenge(
-      kind: ChallengeKind.flash,
-      display: code,
-      answer: code,
-      hint: 'Memorise this code — it disappears in ${kDismissFlashSeconds}s',
     );
   }
 

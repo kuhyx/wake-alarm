@@ -26,12 +26,14 @@ void main() {
         });
   });
 
-  testWidgets('shows that no tag is registered on a fresh install', (
+  testWidgets('shows both slots unregistered on a fresh install', (
     tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: RoomProofScreen()));
     await tester.pumpAndSettle();
-    expect(find.textContaining('none registered'), findsOneWidget);
+    expect(find.textContaining('none registered'), findsNWidgets(2));
+    expect(find.text('Register tag 1'), findsOneWidget);
+    expect(find.text('Register tag 2'), findsOneWidget);
   });
 
   testWidgets('starting a scan puts the reader into waiting state', (
@@ -39,11 +41,29 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: RoomProofScreen()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Register NFC tag'));
+    await tester.tap(find.text('Register tag 1'));
     await tester.pumpAndSettle();
 
     expect(calls, contains('startTagRegistration'));
-    expect(find.textContaining('Tap the tag'), findsOneWidget);
+    expect(find.textContaining('Tap tag 1'), findsOneWidget);
+  });
+
+  testWidgets('only the scanning row is disabled while waiting', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: RoomProofScreen()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Register tag 2'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Waiting for tag…'), findsOneWidget);
+    final other = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Register tag 1'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(other.onPressed, isNull, reason: 'one scan at a time');
   });
 
   testWidgets('says so when the device cannot scan, rather than waiting', (
@@ -52,29 +72,21 @@ void main() {
     nfcStarts = false;
     await tester.pumpWidget(const MaterialApp(home: RoomProofScreen()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Register NFC tag'));
+    await tester.tap(find.text('Register tag 1'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('unavailable'), findsOneWidget);
   });
 
-  testWidgets('saving a QR payload persists it', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: RoomProofScreen()));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'kitchen');
-    await tester.tap(find.text('Save QR code'));
-    await tester.pumpAndSettle();
-
-    expect((await RoomProofSettings.load()).qrPayload, 'kitchen');
-    expect(find.text('QR code saved.'), findsOneWidget);
-  });
-
-  testWidgets('a registered tag is shown when reopening the screen', (
+  testWidgets('each registered tag is shown against its own slot', (
     tester,
   ) async {
-    await RoomProofSettings.saveNfcTag('04a2b3c4');
+    await RoomProofSettings.saveNfcTagAt(0, '04a2b3c4');
+    await RoomProofSettings.saveNfcTagAt(1, '04ffee11');
     await tester.pumpWidget(const MaterialApp(home: RoomProofScreen()));
     await tester.pumpAndSettle();
-    expect(find.textContaining('04a2b3c4'), findsOneWidget);
+    expect(find.text('Tag 1: 04a2b3c4'), findsOneWidget);
+    expect(find.text('Tag 2: 04ffee11'), findsOneWidget);
+    expect(find.text('Register tag 1 again'), findsOneWidget);
   });
 }
