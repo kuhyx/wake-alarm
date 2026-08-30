@@ -184,6 +184,12 @@ place, and with the alarm cache gone it falls through to
 `sudo rtcwake … ; exec systemctl hibernate` — so `shutdown now` would silently
 stop being a poweroff, every day, forever.
 
+`install.sh` calls `uninstall.sh --retired-only` as its last step, so
+**`uninstall.sh` is load-bearing for installing**, not just for removing —
+renaming or deleting it breaks a fresh install. That call is non-fatal and
+gated on `sudo -n`: the cleanup needs root, and a hard failure there would
+abort an install that had already placed the package and enabled the timer.
+
 **`/etc/sudoers.d/wake-alarm` is deliberately left in place** even by a full
 uninstall: screen-locker's own `_wake_alarm.py:_schedule_rtcwake` still shells
 out to `sudo rtcwake`, and removing the entry here breaks a live feature in
