@@ -11,7 +11,7 @@ crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.1#subdirectory=crd
 gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.7.2#subdirectory=gatelock
 mypy==2.3.1
 pre-commit==4.6.2
-pylint==4.0.7
+pylint==4.0.8
 pytest==9.1.1
 pytest-cov==7.1.0
 pytest-randomly==4.1.0
