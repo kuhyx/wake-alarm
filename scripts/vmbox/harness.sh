@@ -28,6 +28,14 @@ readonly REPO_DIR
 SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_NAME
 
+# The guest image lacks tk, and it is NOT optional even though the alarm's Tk
+# window is gone: `_state` imports `gatelock.log_integrity` for the HMAC, and
+# `gatelock/__init__.py` imports tkinter at module scope, so `import gatelock`
+# dies with "libtk8.6.so: cannot open shared object file" without it. Measured
+# in the guest, not guessed -- dropping this package is what broke the harness
+# when the alarm window was deleted.
+readonly GUEST_PACKAGES="tk"
+
 # Printed by guest_cases.sh only when every case passed. See run_cases().
 readonly GUEST_OK_SENTINEL="ALL-CASES-PASSED"
 
@@ -83,6 +91,13 @@ provision_sandbox() {
     step "Sharing the repo with the guest"
     vm share "$REPO_DIR" >/dev/null
 
+    # `vm new`/`vm reset` leave the sandbox STOPPED, and there is no `vm up`;
+    # `vm run` is what boots it, and `vm repo` needs it running.
+    step "Installing guest packages ($GUEST_PACKAGES)"
+    vm run "$VM_NAME" \
+        "sudo pacman -S --noconfirm --needed $GUEST_PACKAGES" >/dev/null ||
+        die "could not install guest packages"
+
     # --worktree, not a clone: the point of the gate is to test the edits in
     # front of you, including the ones not committed yet.
     step "Copying the working tree into the guest"
@@ -94,7 +109,14 @@ provision_sandbox() {
 # the same install.sh a machine runs, so a break in it fails the gate.
 run_install() {
     step "Running install.sh in the guest"
-    if ! vm run "$VM_NAME" 'cd ~/wake-alarm && bash install.sh' >/tmp/wa-install.log 2>&1; then
+    # `vm run` reports the VM's verdict, not the guest command's exit status,
+    # so this must confirm success from the OUTPUT. Trusting the exit code let
+    # a guest ImportError through as a pass, and the three cases downstream
+    # then failed with no hint that the install was the cause.
+    vm run "$VM_NAME" \
+        'cd ~/wake-alarm && bash install.sh && echo INSTALL-OK' \
+        >/tmp/wa-install.log 2>&1 || true
+    if ! grep -q 'INSTALL-OK' /tmp/wa-install.log; then
         tail -20 /tmp/wa-install.log >&2
         die "install.sh failed in the guest (full log: /tmp/wa-install.log)"
     fi
