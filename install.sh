@@ -60,7 +60,21 @@ systemctl --user enable --now wake-alarm-trigger.timer
 echo "  Trigger timer enabled and started (ticks once a minute)."
 
 echo "[3/3] Removing retired waking machinery from earlier installs..."
-bash "$SCRIPT_DIR/uninstall.sh" --retired-only
+# Opportunistic, and deliberately NOT fatal. This script runs under `set -e`
+# and the cleanup needs root, so on a machine without cached/passwordless sudo
+# a hard call would abort the install *after* the package and timer are
+# already in place -- reporting failure for an install that actually worked.
+# `sudo -n` rather than plain sudo so it cannot hang on a password prompt in a
+# non-TTY context either.
+if sudo -n true 2>/dev/null; then
+    bash "$SCRIPT_DIR/uninstall.sh" --retired-only ||
+        echo "  Cleanup incomplete — run: bash uninstall.sh --retired-only"
+else
+    echo "  Needs root and sudo would prompt; skipping."
+    echo "  Run it yourself:  bash uninstall.sh --retired-only"
+    echo "  This matters: /usr/local/bin/shutdown otherwise keeps turning"
+    echo "  'shutdown now' into a hibernate."
+fi
 echo
 
 echo "=== Installation complete ==="
