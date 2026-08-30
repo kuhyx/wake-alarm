@@ -45,6 +45,21 @@ passing sent the user back to the start.
   deleted, not merely unrouted: the ring screen is reached by walking in from
   another room.
 
+**`HomeScreen.initState` must stay strictly sequential.** It runs
+`_applyPolicy()` → `_loadSyncState()` → `_syncToPc()` through one
+`_bootstrapSync()`, because the last reads what the first two write and
+`AlarmPublisher.publish` takes the service as a *parameter* — captured by
+value, so a later assignment can never reach it. Running them concurrently
+(as they once were) meant the startup publish always passed `null`, and since
+that was the only publish site, **nothing published for three weeks** while
+the PC honoured a record from 2026-08-09. `_pickEarlier` must publish too, or
+the one schedule edit the app offers never reaches the PC.
+
+Relatedly: `publish()` reports a missing *backend* and a missing *store*
+differently on purpose. One string for both is what made the above look like a
+configuration the user had never done, while Firebase was connected the whole
+time.
+
 `RingScreen` takes an injectable `clock`. `Stopwatch` reads the wall clock,
 which `tester.pump()` does not advance, so without that seam no widget test
 can reach the two-minute floor or the five-minute bypass.
@@ -112,6 +127,16 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
 - Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch → stale
   cache → `FALLBACK_ALARM_HOUR`. The cache bounds remote reads to ~288/day
   despite the per-minute tick.
+- **A record older than `PUBLISHED_ALARM_MAX_AGE_SECONDS` (14 days) is skipped
+  at every step, including the cache.** The check is on when the *phone
+  stamped it*, never on when we fetched — checking the fetch is trivially
+  defeated, because the cache is rewritten from the same stale record every few
+  minutes, so `fetched_at` is always fresh however old the record behind it is.
+  That is why the winning HLC's instant is carried through `_alarm_payload` →
+  `_sync_transport` → the cache's `published_at`. Expiring is safe because
+  `FALLBACK_ALARM_HOUR` *is* the phone's baseline. An **undated** record is
+  trusted, not expired: the GitHub mirror has no per-field HLC, so treating
+  "cannot tell" as "too old" would break that backend entirely.
 - **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute,
   so a persistent condition logged loudly is 1440 identical journal lines a day.
   `_trigger` emits the single WARNING that matters: it is firing *now* on a
@@ -205,5 +230,8 @@ The dev venv lacks `gatelock`, so anything importing `_state` (including
 - Don't raise the log level of `_sync`'s degraded-read paths.
 - Don't let the bypass skip the walk, and don't add a challenge kind that
   hides its own prompt.
+- Don't make `HomeScreen.initState` concurrent again, and don't collapse
+  `publish()`'s two failure messages back into one.
+- Don't date a record by when the PC fetched it.
 - Don't delete `/etc/sudoers.d/wake-alarm`.
 - Don't commit `wake_state.json`.
