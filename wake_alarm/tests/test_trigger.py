@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-from wake_alarm import _alarm_session
 from wake_alarm._sync import Alarm
 from wake_alarm._trigger import (
     _decide,
@@ -35,14 +30,12 @@ def _at(hour: int, minute: int) -> datetime:
 def _ungated() -> None:
     """Open every gate unless a test closes one.
 
-    ``should_refire`` is stubbed here too: unstubbed it reads the *real*
+    The once-per-day latch is stubbed: unstubbed it reads the *real*
     session record on the host, so a test run started while an alarm was
     actually ringing would silently invert half these assertions.
     """
     with (
-        patch("wake_alarm._trigger.was_alarm_dismissed_today", return_value=False),
-        patch("wake_alarm._trigger.was_workout_logged_today", return_value=False),
-        patch("wake_alarm._trigger.should_refire", return_value=False),
+        patch("wake_alarm._trigger.was_trigger_fired_today", return_value=False),
     ):
         yield
 
@@ -102,18 +95,13 @@ class TestSkipReason:
         with patch("wake_alarm._trigger.ALARM_DAYS", frozenset()):
             assert _skip_reason(_at(7, 0)) == "not an alarm day"
 
-    def test_already_dismissed(self) -> None:
-        """A dismissal recorded today blocks a re-fire."""
+    def test_already_fired_today(self) -> None:
+        """The once-per-day latch blocks every later tick in the window."""
         with patch(
-            "wake_alarm._trigger.was_alarm_dismissed_today",
+            "wake_alarm._trigger.was_trigger_fired_today",
             return_value=True,
         ):
-            assert _skip_reason(_at(7, 0)) == "alarm already dismissed today"
-
-    def test_workout_already_logged(self) -> None:
-        """A logged workout means the alarm is no longer needed."""
-        with patch("wake_alarm._trigger.was_workout_logged_today", return_value=True):
-            assert _skip_reason(_at(7, 0)) == "workout already logged today"
+            assert _skip_reason(_at(7, 0)) == "already fired today"
 
 
 class TestDecide:
@@ -150,82 +138,14 @@ class TestDecide:
     def test_gate_beats_the_clock(self) -> None:
         """A closed gate wins even at the exact alarm minute."""
         with patch(
-            "wake_alarm._trigger.was_alarm_dismissed_today",
+            "wake_alarm._trigger.was_trigger_fired_today",
             return_value=True,
         ):
             fire, reason = _decide(_at(6, 45), Alarm(6, 45, "remote"))
         assert not fire
-        assert reason == "alarm already dismissed today"
+        assert reason == "already fired today"
 
     def test_alarm_moved_earlier_fires_immediately(self) -> None:
         """A phone alarm moved back before now fires on the very next tick."""
         fire, _ = _decide(_at(6, 50), Alarm(6, 40, "remote"))
         assert fire
-
-
-class TestRefireOnAnUnfinishedSession:
-    """A power-off mid-alarm must not be a way out."""
-
-    def test_refires_long_after_the_window_closed(self) -> None:
-        """The whole point: the machine may have been off for the window.
-
-        Without this, holding the power button ends the alarm for good --
-        the catch-up window closes while the PC is down and nothing on disk
-        ever said an alarm was ringing.
-        """
-        with patch("wake_alarm._trigger.should_refire", return_value=True):
-            fire, reason = _decide(_at(20, 0), Alarm(6, 45, "remote"))
-        assert fire
-        assert "cut short" in reason
-
-    def test_dismissed_gate_still_beats_a_refire(self) -> None:
-        """The ordinary gates are checked first and still win."""
-        with (
-            patch("wake_alarm._trigger.should_refire", return_value=True),
-            patch(
-                "wake_alarm._trigger.was_alarm_dismissed_today",
-                return_value=True,
-            ),
-        ):
-            fire, reason = _decide(_at(20, 0), Alarm(6, 45, "remote"))
-        assert not fire
-        assert reason == "alarm already dismissed today"
-
-    def test_end_to_end_through_a_real_session_record(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """_decide against a real record, with should_refire NOT patched.
-
-        Every other test here stubs ``should_refire``, so the wiring between
-        the record on disk and the decision was untested -- and a manual run
-        found it broken while the whole suite stayed green. This is the
-        deterministic version of that manual check.
-        """
-        monkeypatch.setattr(
-            _alarm_session, "ALARM_SESSION_FILE", tmp_path / "session.json"
-        )
-        now = _at(20, 0)
-        # The record is stamped by the alarm process, which ran at fire time --
-        # not at this tick. Pin its clock to the same fictional morning as the
-        # tick, or the two dates are years apart and the age check is
-        # meaningless.
-        monkeypatch.setattr(_alarm_session, "_now", lambda: _at(19, 30))
-        alarm = Alarm(6, 45, "remote")
-
-        with patch("wake_alarm._trigger.should_refire", _alarm_session.should_refire):
-            assert _decide(now, alarm)[0] is False  # window closed, no record
-
-            _alarm_session.start_session("wake-20260719-0645")
-            fire, reason = _decide(now, alarm)
-            assert fire, "a cut-short alarm must ring again"
-            assert "cut short" in reason
-
-            _alarm_session.finish_session()
-            assert _decide(now, alarm)[0] is False  # dismissed stays dismissed
-
-    def test_refire_is_asked_about_the_tick_instant(self) -> None:
-        """The session's age is measured against the tick, not wall-clock now."""
-        with patch("wake_alarm._trigger.should_refire") as refire:
-            refire.return_value = False
-            _decide(_at(20, 0), Alarm(6, 45, "remote"))
-        refire.assert_called_once_with(now=_at(20, 0))

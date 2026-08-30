@@ -95,7 +95,6 @@ repos:
           - --jobs=4
         additional_dependencies:
           - pytest
-          - python-kasa
           - gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.4.1#subdirectory=gatelock
         # Test suites intentionally use patterns (protected-access, magic-value
         # comparisons) that don't belong in the source-code 10/10 gate.
@@ -147,13 +146,6 @@ repos:
         entry: bash -c 'printf "%s\0" "$@" | xargs -0 -n 40 shellcheck --severity=warning' --
         language: system
         types: [shell]
-      - id: screens-fit
-        name: Every lock screen fits 1366x768 (no scrolling required)
-        entry: python3 -m scripts.verify_screen_fits
-        language: system
-        files: '^wake_alarm/.*\.py$'
-        pass_filenames: false
-        require_serial: true
       # The shared 250-line cap. This repo used to run a local script with a
       # higher limit under this same hook id, so it looked gated while letting
       # through files every other repo rejects.

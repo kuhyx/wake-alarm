@@ -34,14 +34,12 @@ def _at(hour: int, minute: int) -> datetime:
 def _ungated() -> None:
     """Open every gate unless a test closes one.
 
-    ``should_refire`` is stubbed here too: unstubbed it reads the *real*
+    The once-per-day latch is stubbed: unstubbed it reads the *real*
     session record on the host, so a test run started while an alarm was
     actually ringing would silently invert half these assertions.
     """
     with (
-        patch("wake_alarm._trigger.was_alarm_dismissed_today", return_value=False),
-        patch("wake_alarm._trigger.was_workout_logged_today", return_value=False),
-        patch("wake_alarm._trigger.should_refire", return_value=False),
+        patch("wake_alarm._trigger.was_trigger_fired_today", return_value=False),
     ):
         yield
 
@@ -96,6 +94,43 @@ class TestMain:
         ):
             main()
         return start
+
+    def test_a_successful_start_latches_the_day(self) -> None:
+        """Firing records the latch, so later ticks in the window skip.
+
+        Without this the routine is restarted on every tick for the rest of
+        ``TRIGGER_CATCHUP_MINUTES``: the unit is Type=simple, so a start while
+        it runs is a no-op, but the moment the workout lock finishes the next
+        tick relaunches it on top of the user.
+        """
+        with (
+            patch("sys.argv", ["_trigger"]),
+            patch("wake_alarm._trigger._now", return_value=_at(6, 45)),
+            patch(
+                "wake_alarm._trigger.get_alarm",
+                return_value=Alarm(6, 45, "remote"),
+            ),
+            patch("wake_alarm._trigger._start_target_unit", return_value=True),
+            patch("wake_alarm._trigger.save_trigger_fired") as saved,
+        ):
+            main()
+        assert saved.call_count == 1
+        assert saved.call_args.kwargs["fired_at"] == _at(6, 45).isoformat()
+
+    def test_a_failed_start_does_not_latch(self) -> None:
+        """A start that failed must stay retryable on the next tick."""
+        with (
+            patch("sys.argv", ["_trigger"]),
+            patch("wake_alarm._trigger._now", return_value=_at(6, 45)),
+            patch(
+                "wake_alarm._trigger.get_alarm",
+                return_value=Alarm(6, 45, "remote"),
+            ),
+            patch("wake_alarm._trigger._start_target_unit", return_value=False),
+            patch("wake_alarm._trigger.save_trigger_fired") as saved,
+        ):
+            main()
+        saved.assert_not_called()
 
     def test_fires_at_the_alarm_minute(self) -> None:
         """On the alarm minute the target unit is started."""

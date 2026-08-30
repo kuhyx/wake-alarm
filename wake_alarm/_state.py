@@ -1,4 +1,13 @@
-"""HMAC-signed state management for the weekend wake alarm."""
+"""HMAC-signed record of whether the trigger already fired today.
+
+The PC no longer wakes anyone, so this is not a record of a *dismissal* any
+more — it is the trigger's once-per-day latch. It has to exist: the tick runs
+every minute and the catch-up window is ``TRIGGER_CATCHUP_MINUTES`` wide, so
+without a latch the morning routine would be restarted on every tick for the
+rest of that window, relaunching the workout lock each time the user finished
+it. The alarm's own dismissal used to provide that latch; deleting the alarm
+without replacing it would have been a silent regression.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +20,7 @@ from gatelock.log_integrity import (
     verify_entry_hmac,
 )
 
-from wake_alarm._constants import WAKE_STATE_FILE, WORKOUT_LOG_FILE
+from wake_alarm._constants import WAKE_STATE_FILE
 
 _logger = logging.getLogger(__name__)
 
@@ -21,24 +30,18 @@ def _today_str() -> str:
     return datetime.now(tz=UTC).strftime("%Y-%m-%d")
 
 
-def save_wake_state(
-    *,
-    dismissed_at: str | None,
-    skip_workout: bool,
-) -> bool:
-    """Write today's wake state with HMAC signature.
+def save_trigger_fired(*, fired_at: str) -> bool:
+    """Record that the morning routine was started today.
 
     Args:
-        dismissed_at: ISO time when alarm was dismissed, or None.
-        skip_workout: Whether the user earned a workout skip.
+        fired_at: ISO timestamp of the tick that started the routine.
 
     Returns:
         True if saved successfully, False otherwise.
     """
     entry: dict[str, object] = {
         "date": _today_str(),
-        "dismissed_at": dismissed_at,
-        "skip_workout": skip_workout,
+        "fired_at": fired_at,
     }
     signature = compute_entry_hmac(entry)
     if signature is not None:
@@ -53,16 +56,12 @@ def save_wake_state(
         _logger.warning("Failed to save wake state: %s", exc)
         return False
 
-    _logger.info(
-        "Saved wake state: dismissed=%s skip=%s",
-        dismissed_at,
-        skip_workout,
-    )
+    _logger.info("Recorded trigger fired at %s", fired_at)
     return True
 
 
 def load_wake_state() -> dict[str, object] | None:
-    """Load and verify today's wake state.
+    """Load and verify today's trigger record.
 
     Returns the state dict if it exists, is valid (HMAC OK), and is
     for today.  Returns None otherwise.
@@ -90,40 +89,9 @@ def load_wake_state() -> dict[str, object] | None:
     return state
 
 
-def has_workout_skip_today() -> bool:
-    """Check if the user earned a workout skip for today."""
+def was_trigger_fired_today() -> bool:
+    """Check whether the morning routine was already started today."""
     state = load_wake_state()
     if state is None:
         return False
-    return bool(state.get("skip_workout"))
-
-
-def was_alarm_dismissed_today() -> bool:
-    """Check if the alarm was already dismissed today."""
-    state = load_wake_state()
-    if state is None:
-        return False
-    return state.get("dismissed_at") is not None
-
-
-def was_workout_logged_today() -> bool:
-    """Check if the workout was already logged today via the screen locker.
-
-    Reads the companion screen_locker workout_log.json.  The file is a
-    dict keyed by YYYY-MM-DD date strings; presence of today's key means
-    the workout was completed and the alarm is no longer needed.
-
-    Returns:
-        True if today's workout entry exists, False on any error or absence.
-    """
-    if not WORKOUT_LOG_FILE.exists():
-        return False
-    try:
-        with WORKOUT_LOG_FILE.open() as f:
-            log = json.load(f)
-    except OSError, json.JSONDecodeError:
-        _logger.warning("Cannot read workout log file %s", WORKOUT_LOG_FILE)
-        return False
-    if not isinstance(log, dict):
-        return False
-    return _today_str() in log
+    return state.get("fired_at") is not None

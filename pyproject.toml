@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wake-alarm"
 version = "1.0.0"
-description = "Phone-driven wake alarm with fan ramp and smart-plug control"
+description = "Trigger that starts the morning routine at the phone's alarm time"
 requires-python = ">=3.14"
 dependencies = [
     "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.7.2#subdirectory=gatelock",
@@ -13,7 +13,6 @@ dependencies = [
     # falls back to its stdlib GitHub path if the import fails, so a broken
     # install degrades the read instead of killing the per-minute trigger.
     "crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.1#subdirectory=crdt-sync",
-    "python-kasa==0.10.2",
 ]
 
 # Package discovery must be explicit: phone_app/ is a Flutter app, not a Python
@@ -130,10 +129,6 @@ disable = [
     "use-implicit-booleaness-not-comparison",
     "use-implicit-booleaness-not-comparison-to-string",
     "use-implicit-booleaness-not-comparison-to-zero",
-    # consider-using-with (R1732): several subprocess.Popen calls are
-    # intentionally fire-and-forget — the process must outlive the calling
-    # scope and is polled/killed later, so a `with` block is wrong here.
-    "consider-using-with",
 ]
 
 [tool.pylint.design]
@@ -143,9 +138,6 @@ max-attributes = 10
 
 [tool.pylint.typecheck]
 # unittest.mock.MagicMock generates assertion/introspection methods at runtime.
-# wave.open(path, "wb") returns a Wave_write, but pylint's stdlib stub infers the
-# read-mode Wave_read overload and wrongly reports its setter/writer methods as
-# missing — list them so the write API is recognised.
 generated-members = [
     ".*\\.assert_called_once_with",
     ".*\\.assert_called_once",
@@ -155,11 +147,6 @@ generated-members = [
     ".*\\.call_args",
     ".*\\.call_args_list",
     ".*\\.call_count",
-    ".*\\.setnchannels",
-    ".*\\.setsampwidth",
-    ".*\\.setframerate",
-    ".*\\.writeframes",
-    ".*\\.writeframesraw",
 ]
 
 [tool.bandit]

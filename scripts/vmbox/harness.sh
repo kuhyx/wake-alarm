@@ -11,14 +11,13 @@
 # What it deliberately cannot cover -- audio, the phone, real outputs, the
 # bootloader -- is in DOCS-vmbox.md. Read that before trusting a pass.
 #
-# Usage: bash scripts/vmbox/harness.sh [--name <sandbox>] [--keep] [--window]
+# Usage: bash scripts/vmbox/harness.sh [--name <sandbox>] [--keep]
 # ============================================================================
 
 set -euo pipefail
 
 VM_NAME="wake-alarm-harness"
 KEEP=0
-RUN_WINDOW=0
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 readonly SCRIPT_DIR
 # Absolute and symlink-resolved: `vm share` and `vm repo` both key off the
@@ -28,11 +27,6 @@ REPO_DIR="$(readlink -f "${SCRIPT_DIR}/../..")"
 readonly REPO_DIR
 SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_NAME
-
-# Packages the guest image lacks that this package genuinely needs. tk is not
-# optional: without it `import tkinter` fails with a missing libtk8.6.so and
-# the alarm cannot open its window. Measured on the stock guest, not guessed.
-readonly GUEST_PACKAGES="tk"
 
 # Printed by guest_cases.sh only when every case passed. See run_cases().
 readonly GUEST_OK_SENTINEL="ALL-CASES-PASSED"
@@ -46,7 +40,6 @@ Run wake_alarm's system-level cases in a disposable Arch VM.
 Options:
   --name <sandbox>  Sandbox name (default: $VM_NAME)
   --keep            Leave the sandbox running afterwards, for poking at
-  --window          Also open the real alarm window and screenshot it
   -h, --help        Show this help
 
 Exit codes:
@@ -90,11 +83,6 @@ provision_sandbox() {
     step "Sharing the repo with the guest"
     vm share "$REPO_DIR" >/dev/null
 
-    step "Installing guest packages ($GUEST_PACKAGES)"
-    vm run "$VM_NAME" \
-        "sudo pacman -S --noconfirm --needed $GUEST_PACKAGES" >/dev/null ||
-        die "could not install guest packages"
-
     # --worktree, not a clone: the point of the gate is to test the edits in
     # front of you, including the ones not committed yet.
     step "Copying the working tree into the guest"
@@ -125,21 +113,6 @@ run_cases() {
     grep -q "$GUEST_OK_SENTINEL" <<<"$output"
 }
 
-# The alarm's window needs a real X server, so the guest is the only place it
-# can be seen at all without hijacking the host's screen. The screenshot is
-# the artefact: it outlives the guest and is what a human actually checks.
-run_window_case() {
-    step "Opening the alarm window in the guest"
-    local output
-    output="$(vm run "$VM_NAME" \
-        'bash ~/wake-alarm/scripts/vmbox/guest_cases.sh window' 2>&1)"
-    echo "$output"
-    grep -q "$GUEST_OK_SENTINEL" <<<"$output" || return 1
-    local shot="/tmp/wake-alarm-window.png"
-    vm screenshot "$VM_NAME" "$shot"
-    echo "Alarm window screenshot: $shot"
-}
-
 cleanup() {
     if [[ $KEEP -eq 1 ]]; then
         echo "Sandbox '$VM_NAME' left running (--keep). Poke at it with: vm ssh $VM_NAME"
@@ -157,9 +130,6 @@ main() {
 
     local status=0
     run_cases || status=1
-    if [[ $RUN_WINDOW -eq 1 ]]; then
-        run_window_case || status=1
-    fi
 
     echo "============================================================"
     if [[ $status -eq 0 ]]; then
@@ -180,10 +150,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --keep)
             KEEP=1
-            shift
-            ;;
-        --window)
-            RUN_WINDOW=1
             shift
             ;;
         -h|--help)

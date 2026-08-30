@@ -1,9 +1,7 @@
 # Wake Alarm — runtime + development dependencies
-# Runtime: tkinter/json/hmac/wave/subprocess (stdlib) plus gatelock,
-# crdt-sync and python-kasa below. crdt-sync and python-kasa are both
-# optional at runtime — their modules degrade gracefully if missing (the
-# alarm read falls back to GitHub, smart-plug control disables itself) — but
-# both are required here for mypy/pylint/tests.
+# Runtime: json/hmac/subprocess (stdlib) plus gatelock and crdt-sync below.
+# crdt-sync is optional at runtime — the alarm read falls back to GitHub if
+# it is missing — but it is required here for mypy/pylint/tests.
 bandit==1.9.4
 codespell==2.4.3
 coverage==7.16.0
@@ -17,5 +15,4 @@ pytest-cov==7.1.0
 pytest-randomly==4.1.0
 pytest-sugar==1.1.1
 pytest-xdist==3.8.0
-python-kasa==0.10.2
 ruff==0.16.5

@@ -11,7 +11,7 @@ import pytest
 from wake_alarm._state import (
     _today_str,
     load_wake_state,
-    save_wake_state,
+    save_trigger_fired,
 )
 
 if TYPE_CHECKING:
@@ -46,7 +46,7 @@ class TestTodayStr:
 
 
 class TestSaveWakeState:
-    """Tests for save_wake_state."""
+    """Tests for save_trigger_fired."""
 
     def test_saves_with_hmac(self, wake_state_file: Path) -> None:
         """Save state with HMAC signature when key is available."""
@@ -54,15 +54,11 @@ class TestSaveWakeState:
             "wake_alarm._state.compute_entry_hmac",
             return_value="fakesig",
         ):
-            result = save_wake_state(
-                dismissed_at="2026-04-12T07:04:00+00:00",
-                skip_workout=True,
-            )
+            result = save_trigger_fired(fired_at="2026-04-12T07:04:00+00:00")
 
         assert result is True
         data = json.loads(wake_state_file.read_text())
-        assert data["skip_workout"] is True
-        assert data["dismissed_at"] == "2026-04-12T07:04:00+00:00"
+        assert data["fired_at"] == "2026-04-12T07:04:00+00:00"
         assert data["hmac"] == "fakesig"
         assert data["date"] == _today_str()
 
@@ -72,14 +68,10 @@ class TestSaveWakeState:
             "wake_alarm._state.compute_entry_hmac",
             return_value=None,
         ):
-            result = save_wake_state(
-                dismissed_at=None,
-                skip_workout=False,
-            )
+            result = save_trigger_fired(fired_at="07:04")
 
         assert result is True
         data = json.loads(wake_state_file.read_text())
-        assert data["skip_workout"] is False
         assert "hmac" not in data
 
     def test_returns_false_on_write_error(self, wake_state_file: Path) -> None:
@@ -94,7 +86,7 @@ class TestSaveWakeState:
                 wake_state_file / "nonexistent_dir" / "file.json",
             ),
         ):
-            result = save_wake_state(dismissed_at=None, skip_workout=False)
+            result = save_trigger_fired(fired_at="07:04")
 
         assert result is False
 
@@ -111,7 +103,7 @@ class TestLoadWakeState:
         wake_state_file: Path,
     ) -> None:
         """Return None when state is from a different day."""
-        state = {"date": "1999-01-01", "skip_workout": True, "hmac": "x"}
+        state = {"date": "1999-01-01", "hmac": "x"}
         wake_state_file.write_text(json.dumps(state))
         assert load_wake_state() is None
 
@@ -138,8 +130,7 @@ class TestLoadWakeState:
         """Return None when HMAC verification fails."""
         state = {
             "date": _today_str(),
-            "skip_workout": True,
-            "dismissed_at": "07:00",
+            "fired_at": "07:00",
             "hmac": "badsig",
         }
         wake_state_file.write_text(json.dumps(state))
@@ -156,8 +147,7 @@ class TestLoadWakeState:
         """Return state dict when file is valid and for today."""
         state = {
             "date": _today_str(),
-            "skip_workout": True,
-            "dismissed_at": "07:04",
+            "fired_at": "07:04",
             "hmac": "validsig",
         }
         wake_state_file.write_text(json.dumps(state))
@@ -168,4 +158,3 @@ class TestLoadWakeState:
             result = load_wake_state()
 
         assert result is not None
-        assert result["skip_workout"] is True

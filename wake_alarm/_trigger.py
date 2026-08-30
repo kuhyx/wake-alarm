@@ -26,7 +26,6 @@ import logging
 import subprocess
 import sys
 
-from wake_alarm._alarm_session import should_refire
 from wake_alarm._constants import (
     ALARM_DAYS,
     FALLBACK_ALARM_HOUR,
@@ -35,8 +34,8 @@ from wake_alarm._constants import (
 )
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._state import (
-    was_alarm_dismissed_today,
-    was_workout_logged_today,
+    save_trigger_fired,
+    was_trigger_fired_today,
 )
 from wake_alarm._sync import Alarm, get_alarm
 
@@ -83,7 +82,7 @@ def _skip_reason(now: datetime) -> str | None:
     """Return why the alarm must not fire right now, or None if it may.
 
     Checks only the gates that are independent of the clock: the day gate and
-    the two "already handled today" gates shared with ``_alarm.py``.
+    the once-per-day latch.
 
     Args:
         now: Current local time.
@@ -93,10 +92,8 @@ def _skip_reason(now: datetime) -> str | None:
     """
     if now.weekday() not in ALARM_DAYS:
         return "not an alarm day"
-    if was_alarm_dismissed_today():
-        return "alarm already dismissed today"
-    if was_workout_logged_today():
-        return "workout already logged today"
+    if was_trigger_fired_today():
+        return "already fired today"
     return None
 
 
@@ -139,15 +136,6 @@ def _decide(now: datetime, alarm: Alarm) -> tuple[bool, str]:
     skip = _skip_reason(now)
     if skip is not None:
         return False, skip
-
-    # An alarm that was cut short -- almost always a power-button press or a
-    # hard power-off -- left a "ringing" session record that nothing cleared.
-    # It re-fires regardless of the catch-up window, because the whole point is
-    # that the machine may have been off for the rest of that window. The day /
-    # dismissed / workout gates above still apply, and the record itself is
-    # age-bounded, so this cannot loop forever on a crashed alarm.
-    if should_refire(now=now):
-        return True, "an earlier alarm was cut short and never dismissed"
 
     fire_at, window_end = _fire_window(alarm, now)
     if now < fire_at:
@@ -235,7 +223,12 @@ def main() -> None:
         )
 
     _logger.warning("Firing %s: %s", TRIGGER_TARGET_UNIT, reason)
-    _start_target_unit()
+    if _start_target_unit():
+        # Latch immediately. The tick runs every minute for the rest of the
+        # catch-up window, and the unit is Type=simple: a start while it is
+        # running is a no-op, but the moment the workout lock finishes the
+        # next tick would relaunch it on top of the user.
+        save_trigger_fired(fired_at=now.isoformat())
 
 
 if __name__ == "__main__":

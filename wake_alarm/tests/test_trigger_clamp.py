@@ -28,14 +28,12 @@ def _at(hour: int, minute: int) -> datetime:
 def _ungated() -> None:
     """Open every gate unless a test closes one.
 
-    ``should_refire`` is stubbed here too: unstubbed it reads the *real*
+    The once-per-day latch is stubbed: unstubbed it reads the *real*
     session record on the host, so a test run started while an alarm was
     actually ringing would silently invert half these assertions.
     """
     with (
-        patch("wake_alarm._trigger.was_alarm_dismissed_today", return_value=False),
-        patch("wake_alarm._trigger.was_workout_logged_today", return_value=False),
-        patch("wake_alarm._trigger.should_refire", return_value=False),
+        patch("wake_alarm._trigger.was_trigger_fired_today", return_value=False),
     ):
         yield
 

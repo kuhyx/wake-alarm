@@ -2,249 +2,208 @@
 
 ## What this does
 
-A wake alarm: on alarm days (`ALARM_DAYS` in `_constants.py` — currently
-**every day**, `frozenset({0..6})`), the machine hibernates overnight and
-wakes itself via `rtcwake` at the configured alarm time. `wake-alarm.service`
-then opens a fullscreen Tk window that must be dismissed (with a typed challenge — see
-`_challenges.py`), plays audio through every real sink, and optionally
-toggles a TP-Link Tapo P110 smart plug via `python-kasa`.
+**The phone is the alarm.** `phone_app/` arms and rings it and gates the
+dismissal; this repo's Python half only reads the alarm time the phone
+published and starts the morning routine at that time.
 
-## Scheduling — a per-minute timer, with hibernate as the fallback
+The PC's waking role was deleted on 2026-08-30: no alarm window, no audio
+escalation, no smart plug, no curtains, no `rtcwake`, no `shutdown` wrapper,
+no sleep hook. Making the PC wake someone reliably cost more than it returned.
+Everything about it is in git history; do not reintroduce a piece of it
+without saying why the phone cannot do that job.
 
-The PC is **always on**. The alarm time comes from the phone, which can change
-it at any hour, so nothing about the schedule may be baked in ahead of time.
+## The dismiss sequence (phone)
 
-**Primary path — `wake-alarm-trigger.timer`:**
+```
+tag 1  ->  25 steps + 2 min  ->  tag 2  ->  3 challenges
+```
 
-1. The timer ticks every minute (`OnCalendar=*:*:00`, `Persistent=true`) and
-   runs `python -m wake_alarm._trigger` — a short, stateless check-and-fire.
-2. `_trigger` resolves the alarm via `_sync.get_alarm()`, builds today's fire
-   instant in **local** time, and fires iff `now` is in
-   `[fire_time, fire_time + TRIGGER_CATCHUP_MINUTES)`. The catch-up window is
-   what makes a suspended or just-booted machine still fire.
-3. Firing = `systemctl --user start morning-routine.service`. **Never**
-   `wake-alarm.service` directly — see the orchestrator section below.
-   Starting an already-active unit is a no-op, so an alarm on screen needs no
-   extra dedupe state; the `was_alarm_dismissed_today()` /
-   `was_workout_logged_today()` gates cover the rest.
+Owned by `phone_app/lib/services/dismiss_gate.dart`. **Strict order, and every
+stage latches** — an unknown or out-of-order tag is ignored, never a reset.
+`room_proof.dart` answers only "did this one check pass just now"; the
+ordering lives in the gate. Keep it that way: the previous version smeared the
+decision across `setState` calls and had a real bug where a wrong tap after
+passing sent the user back to the start.
 
-A timer, not a resident daemon: each tick is a fresh process, so there is no
-long-lived scheduler to die silently and no wall-clock jump to handle across
-suspend/resume.
+- **Two *distinct* tags.** The same id in both slots is refused at
+  registration — one tag satisfying both stages removes the walk, which is the
+  entire point. Stored as a JSON list under `roomProof.nfcTagIds`; a legacy
+  single `roomProof.nfcTagId` migrates into slot 1.
+- **Steps are unchanged** (`requiredSteps = 25`, `requiredElapsed = 2 min`),
+  and are counted from ring start, *not* re-baselined at tag 1. Consequence:
+  walking to tag 1 already banks the steps, so only the elapsed floor really
+  binds — which is why the steps stage auto-polls instead of offering a button.
+- **Answers are cumulative, not consecutive.** A wrong one costs the attempt
+  and nothing else.
+- **The bypass skips the tags, never the walk.** After
+  `DismissGate.bypassAfter` (5 min), or immediately when NFC is off or fewer
+  than two distinct tags are registered, the tag stages are skipped and the
+  count rises to 6. Jumping straight to the challenges would let someone lie in
+  bed for five minutes and answer questions without standing up — weaker than
+  the gate this replaced. Do not "simplify" it into that.
+- **No challenge may hide its prompt.** The memorise-then-hide kind was
+  deleted, not merely unrouted: the ring screen is reached by walking in from
+  another room.
 
-**Fallback path — hibernate (only when the PC really is powered down):**
+`RingScreen` takes an injectable `clock`. `Stopwatch` reads the wall clock,
+which `tester.pump()` does not advance, so without that seam no widget test
+can reach the two-minute floor or the five-minute bypass.
 
-`shutdown-wrapper.sh` (installed to `/usr/local/bin/shutdown`, shadowing
-`/usr/bin/shutdown` via PATH order) still intercepts shutdown/poweroff, reads
-the same synced alarm, and sets `rtcwake`. `sleep-hook.sh` (in
-`/usr/lib/systemd/system-sleep/`) fires on resume (`$1 == post`) and starts
-`morning-routine.service`. This is now a backstop, not the main mechanism.
+More, including everything that is a hard crash or a silent no-ring:
+**`DOCS-phone-alarm.md`**.
 
-If you change `WAKE_AFTER_HOURS` in `_constants.py`, you must also update the
-duplicate constant in `shutdown-wrapper.sh` (`WAKE_AFTER_HOURS=8`) — they are
-not wired together, by design (the shell wrapper has no Python runtime
-available at the point it intercepts `shutdown`).
+## Scheduling — a per-minute timer
 
-**The wrapper no longer talks to the network or handles a token.** It reads
-`~/.config/wake_alarm/alarm_cache.json` — the cache `_sync.py` already
-refreshes every minute — and falls back to `WAKE_AFTER_HOURS` if that file is
-absent, malformed, or more than 2 days old. This removed the duplicated token
-search order (`read_sync_token()` used to mirror `SYNC_CONFIG_FILE` /
-`SYNC_TOKEN_FALLBACK_FILES`), and it is what makes the wrapper survive the
-move to Firebase unchanged: an ID token expires in about an hour, and a shell
-script at shutdown time has no safe way to refresh one. The only coupling left
-is the cache's `{"hour","minute","fetched_at"}` shape — keep the reader in the
-wrapper in step with `_write_cache()` in `_sync.py`.
+`wake-alarm-trigger.timer` ticks every minute (`OnCalendar=*:*:00`,
+`Persistent=true`) and runs `python -m wake_alarm._trigger` — a short,
+stateless check-and-fire. It resolves the alarm via `_sync.get_alarm()`, builds
+today's fire instant in **local** time, and fires iff `now` is in
+`[fire_time, fire_time + TRIGGER_CATCHUP_MINUTES)`. Firing means
+`systemctl --user start morning-routine.service`, which runs the workout lock.
 
-## `wake-alarm.service` must never auto-start
+**The once-per-day latch is load-bearing.** After a successful start,
+`_trigger` writes `save_trigger_fired()` and `_skip_reason` gates on
+`was_trigger_fired_today()`. Without it the routine restarts on every tick for
+the rest of the 60-minute window: the unit is `Type=simple`, so a start while
+it runs is a no-op, but the moment the workout lock finishes the next tick
+relaunches it on top of the user. This latch replaced the alarm's own
+dismissal record when `_alarm.py` was deleted — deleting one without adding the
+other is a silent regression, and that is exactly the trap.
 
-`wake-alarm.service` deliberately has **no `[Install]` section** and nothing
-starts it automatically. `_should_run_alarm()` gates on day / dismissed /
-workout-logged but has **no time gate**, so a
-`WantedBy=graphical-session.target` there fires the alarm at *login* time on
-any alarm day — which is every day now that the machine no longer reboots into
-the alarm. `install.sh` explicitly runs `systemctl --user disable
-wake-alarm.service` to clear the stale symlink from older installs.
-
-The unit survives only as a manual test handle. Do not "fix" its missing
-auto-start.
+`Persistent=true` plus the 60-minute window is also what replaced the deleted
+systemd-sleep hook: a suspended or just-booted machine still fires.
 
 ## Reading the phone's alarm
 
-`_sync.py` is the only reader of the remote alarm. `shutdown-wrapper.sh` reads
-`_sync.py`'s local cache instead of the remote file, so there is no second
-remote reader to keep in step.
+`_sync.py` is the only reader.
 
 - Source of truth: a `crdt_sync` log written by `phone_app/` under
-  `wake-alarm-sync/devices/<device-id>/alarm.json`. The value lives at
-  `.alarm.fields.alarm_hour[0]` / `.alarm_minute[0]`. **The same logical path
-  on both backends** — Firebase's namespace mirrors the repo layout — so only
-  the transport differs, never the parse.
+  `wake-alarm-sync/devices/<device-id>/alarm.json`, at
+  `.alarm.fields.alarm_hour[0]` / `.alarm_minute[0]`. Same logical path on both
+  backends, so only the transport differs, never the parse.
 - **The Firebase reader discovers device directories; it is not pinned to
   `devices/phone/`.** The phone's device id is migrating from the fixed
-  constant `phone` to a per-install uuid, and a reader pinned to the old path
-  would silently stop seeing the alarm the moment the phone migrated — then
-  fall back to `FALLBACK_ALARM_HOUR`, i.e. wake at the wrong time. So
-  `_fetch_firebase_alarm()` lists `SYNC_DEVICES_PREFIX`, reads every device's
-  `alarm.json`, and picks the newest by the hour field's **HLC** (not by
-  listing order), with `device_id` breaking exact ties so two devices stamped
-  in the same millisecond don't alternate between ticks. A device whose
-  payload doesn't parse is skipped rather than allowed to win.
-  `SYNC_ALARM_PATH` remains as a last-resort read for a backend that lists
-  nothing — keep it until every install has migrated. The **GitHub** fallback
-  still reads the single fixed path; it is the mirror, not the primary.
-- Payload parsing/ranking lives in `_alarm_payload.py`, split out of `_sync.py`
-  so the wire format is testable without network or disk (and to keep both
-  files under the 500-line cap). `_sync.py` owns fetching, caching and
-  fallback; `_alarm_payload.py` owns "what did the phone actually say".
-- **Firebase first, GitHub as the cutover mirror** (`fetch_remote_alarm()` is
-  just `_fetch_firebase_alarm() or _fetch_github_alarm()`). Retiring the
-  mirror is deleting the GitHub branch plus `SYNC_API_BASE`/`SYNC_REPO_*`.
-- Firebase config: the shared `~/.config/crdt-sync/firebase.json`; the
-  refresh token is cached per app under `SYNC_APP_NAME` (`wake_alarm`), so
-  this app's credential is separate from its siblings'. The config file is
-  checked **before** anything is constructed, so an unconfigured machine
+  constant `phone` to a per-install uuid, and a pinned reader would silently
+  stop seeing the alarm and fall back to `FALLBACK_ALARM_HOUR` — i.e. the wrong
+  time. `_fetch_firebase_alarm()` lists `SYNC_DEVICES_PREFIX`, reads every
+  device's `alarm.json`, and picks the newest by the hour field's **HLC**, with
+  `device_id` breaking exact ties. A payload that does not parse is skipped
+  rather than allowed to win. `SYNC_ALARM_PATH` remains as a last-resort read
+  for a backend that lists nothing.
+- Payload parsing/ranking lives in `_alarm_payload.py`: `_sync.py` owns
+  fetching, caching and fallback; `_alarm_payload.py` owns "what did the phone
+  actually say".
+- **Firebase first, GitHub as the cutover mirror.** Retiring the mirror is
+  deleting the GitHub branch plus `SYNC_API_BASE`/`SYNC_REPO_*`.
+- Firebase config: shared `~/.config/crdt-sync/firebase.json`; the refresh
+  token is cached per app under `SYNC_APP_NAME` (`wake_alarm`). The config file
+  is checked **before** anything is constructed, so an unconfigured machine
   never touches the network.
-- GitHub token (fallback path only): `~/.config/wake_alarm/sync.json` key
-  `token`, else a sibling app's raw
-  `~/.config/{diet_guard,screen_locker}/sync_token`. Needs `repo` scope — the
-  repo is private, and a token without access returns **404, not 403**.
+- GitHub token (fallback only): `~/.config/wake_alarm/sync.json` key `token`,
+  else a sibling app's raw `~/.config/{diet_guard,screen_locker}/sync_token`.
+  Needs `repo` scope — the repo is private, so a token without access returns
+  **404, not 403**.
 - `crdt_sync` is imported at module scope but **guarded by
-  `try/except ImportError`**, exactly like `python-kasa` in `_smart_plug.py`:
-  the service runs `/usr/bin/python`, not a venv, so a dependency that failed
-  to install must degrade the read to the GitHub path rather than crash the
-  per-minute trigger. The GitHub path stays stdlib-only for that reason.
-  Verify with `/usr/bin/python3 -c "import crdt_sync"`, not the dev venv.
-- Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch →
-  stale cache → `FALLBACK_ALARM_HOUR`. The cache
-  (`~/.config/wake_alarm/alarm_cache.json`) is what bounds remote reads to
-  ~288/day despite the per-minute tick, and what keeps a network blip from
-  costing a wake-up.
+  `try/except ImportError`**: the service runs `/usr/bin/python`, not a venv, so
+  a dependency that failed to install must degrade the read to the GitHub path
+  rather than crash the per-minute trigger. The GitHub path stays stdlib-only
+  for that reason. Verify with `/usr/bin/python3 -c "import crdt_sync"`, not the
+  dev venv.
+- Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch → stale
+  cache → `FALLBACK_ALARM_HOUR`. The cache bounds remote reads to ~288/day
+  despite the per-minute tick.
 - **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute,
-  so a persistent condition logged loudly is 1440 identical journal lines a
-  day. `_trigger` emits the single WARNING that matters: it is firing *now* on
-  a non-phone alarm time.
-
-Check what the PC currently resolves: `python -m wake_alarm._sync --show`.
-Check what it would do right now: `python -m wake_alarm._trigger --dry-run`.
-
-## The phone rings on its own
-
-`phone_app/` is no longer a time picker: it arms and rings its own alarm
-(items 1/4) via five Kotlin files behind **one** MethodChannel, gating
-dismissal behind a room proof plus a challenge. **Never replace that with a
-pub plugin, and never move the ring off `STREAM_ALARM`.** Everything that is
-a hard crash or a silent no-ring is in **`DOCS-phone-alarm.md`**.
-
-## Module map
-
-`_alarm.py` owns the window and the dismiss flow and nothing else. The full
-map of which module answers which question, the HDMI-silence root cause, and
-the timing constants that must not collide are in **`DOCS-architecture.md`**.
-Read it before changing the escalation or the failsafe.
-
-## Cross-repo coupling — not a bug
-
-`_constants.py`'s `WORKOUT_LOG_FILE` points at
-`~/screen-locker/screen_locker/workout_log.json` — a file owned by the
-separate, already-standalone `screen-locker` repo
-(https://github.com/kuhyx/screen-locker). This is intentional: the alarm
-reads whether today's workout was already logged by screen-locker to decide
-whether the morning routine should also lock the workout screen. If this
-path ever raises `ModuleNotFoundError`-style confusion, the bug is almost
-certainly in the **orchestrator** (`morning_routine` in testsAndMisc), not
-here — see the next section.
+  so a persistent condition logged loudly is 1440 identical journal lines a day.
+  `_trigger` emits the single WARNING that matters: it is firing *now* on a
+  non-phone alarm time.
 
 ## The morning_routine orchestrator lives elsewhere
 
 `morning_routine._orchestrator` (in `testsAndMisc/python_pkg/morning_routine/`)
-runs this package and `screen_locker` as two sequential subprocesses. When
-either package is extracted to its own repo, **the orchestrator's module
-reference must be updated in the same change** — this exact mistake
-(orchestrator left pointing at `python_pkg.screen_locker.screen_lock` after
-screen-locker's extraction on 2026-05-28) caused a month-long silent
-production failure where the alarm fired and dismissed correctly but the
-workout lock crashed with `ModuleNotFoundError` on every run. Once both
-`wake_alarm` and `screen_locker` are pip-installed system-wide, the
-orchestrator needs no `PYTHONPATH`/`cwd` plumbing — plain
-`subprocess.run([sys.executable, "-m", module, "--production"])` resolves
-both.
+is what `_trigger` starts, and it now runs one leg: `screen_locker.screen_lock`.
+Its alarm leg was removed in the same change that deleted `_alarm.py`.
 
-## Production dependency installation — read this before adding any dependency
+**When this package's module paths change, the orchestrator must change in the
+same commit.** Leaving it pointing at a module that no longer exists caused a
+month-long silent production failure once already (2026-05-28, orchestrator
+still on `python_pkg.screen_locker.screen_lock` after screen-locker's
+extraction): the alarm fired and dismissed correctly while the workout lock
+crashed with `ModuleNotFoundError` on every run.
 
-`wake-alarm.service` runs `/usr/bin/python` directly — **not** a venv. Any
-new non-stdlib dependency (this package itself, `gatelock`, `python-kasa`,
-anything added later) must be installed into system Python's *user*
+## Production dependency installation
+
+`wake-alarm-trigger.service` runs `/usr/bin/python` directly — **not** a venv.
+Any new non-stdlib dependency must go into system Python's *user*
 site-packages:
 
 ```bash
 /usr/bin/python3 -m pip install --user --break-system-packages -e .
 ```
 
-**Always run `install.sh` (or `pip install -e`) from a durable clone, not a
-scratch directory.** `install.sh` does `pip install -e "$REPO_DIR"` —
-editable, so a later `git pull` in that same clone updates the running
-production code with no reinstall needed. The clone must live somewhere
-permanent (this repo's convention: `~/wake-alarm`, mirroring `~/screen-locker`
-for the screen-locker package) — if you `pip install -e` from `/tmp/...` or
-run `pip install "wake_alarm @ git+https://..."` as a one-off, you get a
-non-editable snapshot frozen at that commit, and the next `git push` here
-silently does **not** reach the running service.
+**Run `install.sh` (or `pip install -e`) from a durable clone**, not a scratch
+directory — it is editable, so a later `git pull` in that clone updates the
+running production code. From `/tmp` or via `pip install "wake_alarm @ git+..."`
+you get a snapshot frozen at that commit, and the next push silently does not
+reach the running service. Convention: `~/wake-alarm`, mirroring
+`~/screen-locker`.
 
-`install.sh` already does this. **If you add a dependency and only install it
-into a dev venv, the production service will silently fail with
-`ModuleNotFoundError` on its next run** — this exact gap caused a 3-day
-diet_guard production outage (2026-06-19 to 2026-06-22) for the sibling
-`gatelock` migration. Always verify against
-`/usr/bin/python3 -c "import <new_dep>"`, not just the dev venv, before
-considering a dependency change done.
+If you add a dependency and only install it into a dev venv, the service fails
+with `ModuleNotFoundError` on its next run — this exact gap caused a 3-day
+diet_guard outage. Verify against `/usr/bin/python3 -c "import <dep>"`.
+
+## Uninstalling
+
+`uninstall.sh`, never `rm -rf` on the repo. `/usr/local/bin/shutdown` is
+root-owned and shadows `/usr/bin/shutdown`; deleting the repo leaves it in
+place, and with the alarm cache gone it falls through to
+`sudo rtcwake … ; exec systemctl hibernate` — so `shutdown now` would silently
+stop being a poweroff, every day, forever.
+
+**`/etc/sudoers.d/wake-alarm` is deliberately left in place** even by a full
+uninstall: screen-locker's own `_wake_alarm.py:_schedule_rtcwake` still shells
+out to `sudo rtcwake`, and removing the entry here breaks a live feature in
+another repo with no error message anywhere.
 
 ## Operational gotchas
 
-- **`python-kasa` is optional at runtime** (`_smart_plug.py` catches
-  `ImportError` and disables smart-plug control with a warning log), but it
-  *is* a hard dependency for this repo's own tooling (mypy/pylint/tests need
-  it importable) — see `pyproject.toml`/`requirements.txt`.
-- **The `wave` module needs special pylint handling.** `_audio.py` opens WAV
-  files in write mode; pylint's stdlib stub infers the read-mode overload and
-  wrongly flags `setnchannels`/`setsampwidth`/`setframerate`/`writeframes` as
-  missing. See the `generated-members` list in `pyproject.toml`'s
-  `[tool.pylint.typecheck]` — don't remove it if pylint starts complaining
-  about `wave.Wave_write`.
 - **`wake_state.json` is runtime state, not tracked.** It holds the
-  HMAC-signed dismissal record for the current alarm day, was accidentally
-  committed in the monorepo, and must stay gitignored here.
+  HMAC-signed once-per-day latch. It was accidentally committed in the
+  monorepo and must stay gitignored here.
+- **`WAKE_STATE_FILE` is redirected in `tests/conftest.py`, not per-file.**
+  `_trigger` writes it now, and the trigger tests never redirected it — a
+  per-file redirect is exactly the kind that gets forgotten when a new writer
+  appears, and the failure is silent: a green suite that quietly stamped the
+  live state file.
 
 ## Commands
 
 - Run tests: `python -m pytest wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-fail-under=100`
+- Phone tests: `cd phone_app && flutter test && flutter analyze`
 - Lint: `pre-commit run --all-files`
-- Test the lock manually (safe, closeable): `python -m wake_alarm._alarm --demo`
-- Show the resolved alarm: `python -m wake_alarm._sync --show` (add
-  `--no-cache` to force a live GitHub read)
+- Show the resolved alarm: `python -m wake_alarm._sync --show` (`--no-cache` forces a live read)
 - Show what the next tick would do: `python -m wake_alarm._trigger --dry-run`
 - Watch it live: `journalctl --user -fu wake-alarm-trigger.service`
-- Install for production: `bash install.sh`
+- Install: `bash install.sh` — Uninstall: `bash uninstall.sh`
 - Gate the shell/system scripts: `bash scripts/vmbox/harness.sh`
-  (disposable Arch VM; coverage and limits in **`DOCS-vmbox.md`** — notably
-  *not* audio, the phone, or the bootloader).
+  (disposable Arch VM; see **`DOCS-vmbox.md`**)
+- Ring the phone for a manual test: `lib/main_ring_probe.dart` (see
+  `DOCS-phone-alarm.md` — it starts a **real** alarm, and the new sequence is
+  what stops it)
 
 The dev venv lacks `gatelock`, so anything importing `_state` (including
 `_trigger`) needs `/usr/bin/python3`, not `.venv/bin/python`.
 
 ## Do NOT
 
-- Don't add a dependency without doing the production install-path check
-  above. `_sync.py`'s **GitHub** path is stdlib-only for exactly this reason —
-  don't "improve" it to `requests`, and don't make the `crdt_sync` import
-  unconditional: the `try/except ImportError` guard is what keeps a failed
-  install from killing the trigger.
-- Don't forget the orchestrator when changing this package's module path —
-  see "The morning_routine orchestrator lives elsewhere" above.
-- Don't give `wake-alarm.service` an `[Install]` section: it fires at login
-  time, not alarm time.
-- Don't point the trigger at `wake-alarm.service`; it must start
-  `morning-routine.service`, or the workout lock never runs.
-- Don't raise the log level of `_sync`'s degraded-read paths: the per-minute
-  tick turns any WARNING there into 1440 journal lines a day.
+- Don't add a dependency without the production install-path check above.
+  `_sync.py`'s GitHub path is stdlib-only for that reason — don't "improve" it
+  to `requests`, and don't make the `crdt_sync` import unconditional.
+- Don't forget the orchestrator when changing this package's module paths.
+- Don't point the trigger at anything but `morning-routine.service`, or the
+  workout lock never runs.
+- Don't remove the trigger's once-per-day latch.
+- Don't raise the log level of `_sync`'s degraded-read paths.
+- Don't let the bypass skip the walk, and don't add a challenge kind that
+  hides its own prompt.
+- Don't delete `/etc/sudoers.d/wake-alarm`.
 - Don't commit `wake_state.json`.

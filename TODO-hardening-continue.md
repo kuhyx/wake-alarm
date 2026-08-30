@@ -25,11 +25,12 @@ starting; this file deliberately does not duplicate it.
 
 ## Remaining, in order
 
-1. **Item 3 leftover: the QR scanner UI only.** `mobile_scanner`, feeding
-   `RingScreen.onQrScanned`, which already exists and is unit-tested. The
-   payload is registered in Settings → "Room proof" and persisted. NFC and the
-   steps fallback both work, so the alarm is dismissable without this — QR is
-   the third mechanism, not a missing one.
+1. ~~QR scanner UI~~ — **cancelled 2026-08-30.** QR was deleted rather than
+   finished: it had never been reachable at ring time (no scanner package, no
+   CAMERA permission, `onQrScanned` had no caller), and a printed code is
+   photographable, so completing it would have added a bypass to the very gate
+   the same change was hardening. The dismiss path is now a strict sequence:
+   tag 1 → 25 steps + 2 min → tag 2 → 3 challenges.
 2. **Item 8, mutual gating.** Phone half is now in place. This is the phase
    that legitimately touches `_sync.py`, so it carries that split (see below).
 3. **Item 13, black screen.** Different repo (`~/testsAndMisc/
@@ -118,8 +119,9 @@ Two harness traps found while testing this, worth keeping:
 
 ### Still unverified
 
-- The **QR** proof has no scanner UI (`mobile_scanner`); `checkQr` and its
-  persistence are unit-tested only.
+- The **two-tag sequence** has not been walked end to end on the phone: only
+  one physical tag is registered, so every on-device run so far has fallen
+  through to the 5-minute bypass. Needs a second tag.
 - The **locked-keyguard** dismiss was not run to completion: the confirmed run
   was on an unlocked phone. The PIN-prompt path is implemented but unproven.
 
