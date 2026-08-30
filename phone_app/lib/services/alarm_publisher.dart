@@ -32,8 +32,15 @@ class AlarmPublisher {
     // syncBackend() falls back to GitHub alone, or pushes to Firebase alone
     // via the mirror, so either credential is enough to proceed.
     final hasFirebase = await loadAccount() != null;
-    if ((!settings.isConfigured && !hasFirebase) || service == null) {
+    if (!settings.isConfigured && !hasFirebase) {
       return 'Connect a sync backend in Settings first.';
+    }
+    // Distinct from the above on purpose. Both used to report "connect a
+    // backend", so a store that failed to open looked like a configuration
+    // the user had never done -- and the advice was to fix something that
+    // was not broken.
+    if (service == null) {
+      return 'Sync store unavailable — reopen the app.';
     }
     try {
       await service.setLocal(hour, minute);

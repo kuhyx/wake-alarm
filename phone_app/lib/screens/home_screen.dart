@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 
+import 'package:wake_alarm_sync/screens/home_body.dart';
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_publisher.dart';
@@ -9,7 +11,6 @@ import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
-import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// Main screen: displays the current alarm time and syncs it to the PC via
 /// the shared crdt_sync transport.
@@ -41,11 +42,23 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_applyPolicy());
-    unawaited(_loadSyncState());
-    // Publishing to the PC is automatic too: it used to require the same tap
-    // that armed the alarm, so a forgotten tap left the PC on its fallback.
-    unawaited(_syncToPc());
+    // STRICTLY SEQUENTIAL. These three used to run concurrently, and the
+    // last one reads what the first two write: `publish` takes the service as
+    // a *parameter*, so it captured `_service` while it was still null and
+    // every startup publish returned "connect a backend" while a backend was
+    // connected. `_applyPolicy` has the same shape -- publishing before it
+    // resolves would send the baseline instead of an active override.
+    unawaited(_bootstrapSync());
+  }
+
+  /// Resolves the policy and the sync store, then publishes -- in that order.
+  ///
+  /// Publishing to the PC is automatic: it used to require the same tap that
+  /// armed the alarm, so a forgotten tap left the PC on its fallback.
+  Future<void> _bootstrapSync() async {
+    await _applyPolicy();
+    await _loadSyncState();
+    await _syncToPc();
   }
 
   /// Opens the sync store and records whether a backend is connected.
@@ -60,9 +73,17 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       settings = await SyncSettings.load();
       service = await AlarmSyncService.open();
-    } on Exception catch (_) {
+    } on Exception catch (e, stack) {
       // Storage/plugins unavailable (e.g. under a widget test, or a keystore
-      // hiccup): keep the on-screen defaults rather than crashing.
+      // hiccup): keep the on-screen defaults rather than crashing. Logged
+      // rather than swallowed -- silence here is what made a broken store
+      // look like an unconfigured backend for weeks.
+      developer.log(
+        'sync store unavailable: $e',
+        name: 'WakeAlarmSync',
+        error: e,
+        stackTrace: stack,
+      );
       return;
     }
     // Either backend counts: a device connected only to Firebase is fully
@@ -103,6 +124,10 @@ class _HomeScreenState extends State<HomeScreen> {
     await _applyPolicy();
     if (!mounted) return;
     setState(() => _status = 'Armed for ${_fmt(_hour, _minute)} tomorrow.');
+    // The PC has to learn about the new time too. Without this the only
+    // publish attempt was the one at startup, so an alarm moved earlier here
+    // never reached the PC at all.
+    await _syncToPc();
   }
 
   /// Re-reads the policy and arms the alarm to match it.
@@ -168,81 +193,14 @@ class _HomeScreenState extends State<HomeScreen> {
       // happened: phone landscape leaves only ~360px of body height for ~405px
       // of content, and the status line renders an unbounded raw
       // `'Error: \$e'` with no maxLines, which overflows even in portrait.
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Alarm is armed for',
-                  style: TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  _fmt(_hour, _minute),
-                  style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _isOverridden
-                      ? 'One-shot early start — back to $_baseline '
-                            'after it rings'
-                      : 'Every day. It cannot be turned off.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _busy ? null : _pickEarlier,
-                    icon: const Icon(Icons.arrow_upward),
-                    label: const Text('Wake me earlier tomorrow'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                if (_status.isNotEmpty)
-                  Text(
-                    _status,
-                    textAlign: TextAlign.center,
-                    // Bounded: _status can be a raw `'Error: $e'`, i.e. an
-                    // arbitrarily long exception toString(). Unbounded, that
-                    // alone added 100-150px and pushed this column past the
-                    // viewport even in portrait. The scroll view above makes
-                    // the overflow recoverable; this keeps it from happening.
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: _status.contains('Error')
-                          ? Theme.of(context).colorScheme.error
-                          : Theme.of(
-                              context,
-                            ).extension<AppStatusColors>()!.success,
-                    ),
-                  ),
-                if (!_configured) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Open Settings (gear icon) to connect Firebase.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).extension<AppStatusColors>()!.warning,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+      body: HomeBody(
+        time: _fmt(_hour, _minute),
+        baseline: _baseline,
+        isOverridden: _isOverridden,
+        busy: _busy,
+        status: _status,
+        configured: _configured,
+        onPickEarlier: () => unawaited(_pickEarlier()),
       ),
     );
   }
