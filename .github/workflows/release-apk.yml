@@ -39,9 +39,22 @@ jobs:
           # versionCode is the commit count; a shallow clone would report 1.
           fetch-depth: 0
 
-      - name: Derive versionCode from the commit count
+      # `.versioncode-offset` is the recovery valve for a phone stranded
+      # above CI by a hand-numbered local build. Android only ever compares
+      # versionCode upward, so a device ahead of CI locks CI out permanently
+      # and the only other escape is an uninstall, which wipes app data.
+      # ~/.claude/scripts/lib/phone_deploy_version.sh reads the SAME file, so
+      # raising it moves both sides together; raising either alone re-strands
+      # the device. Never lower it.
+      - name: Derive versionCode from the commit count plus the offset
         id: vc
-        run: echo "code=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          offset=0
+          if [[ -r .versioncode-offset ]]; then
+            read -r offset < .versioncode-offset
+          fi
+          [[ "$offset" =~ ^[0-9]+$ ]] || offset=0
+          echo "code=$(( $(git rev-list --count HEAD) + offset ))" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
         with:
