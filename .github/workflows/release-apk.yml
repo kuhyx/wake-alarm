@@ -48,12 +48,26 @@ jobs:
       # the device. Never lower it.
       - name: Derive versionCode from the commit count plus the offset
         id: vc
+        # working-directory overrides the job default of phone_app. The offset
+        # file lives at the REPO ROOT, and reading it from the app subdirectory
+        # silently finds nothing and yields 0 -- git rev-list still works there
+        # because git searches upward, so the step goes green with the wrong
+        # number. That exact mistake shipped versionCode 108 instead of 209 on
+        # 2026-08-31; it is also the failure phone_deploy_version.sh warns
+        # about on its own side.
+        working-directory: ${{ github.workspace }}
         run: |
           offset=0
           if [[ -r .versioncode-offset ]]; then
             read -r offset < .versioncode-offset
           fi
           [[ "$offset" =~ ^[0-9]+$ ]] || offset=0
+          # Fail loudly rather than mint a too-low code: a silent 0 here is
+          # what leaves the phone unreachable by CI.
+          if [[ -r .versioncode-offset && "$offset" == 0 ]]; then
+            echo "::error::.versioncode-offset exists but parsed as 0" >&2
+            exit 1
+          fi
           echo "code=$(( $(git rev-list --count HEAD) + offset ))" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
