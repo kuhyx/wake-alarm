@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
-import 'package:wake_alarm_sync/screens/ring_challenge.dart';
-import 'package:wake_alarm_sync/screens/ring_checklist.dart';
+import 'package:wake_alarm_sync/screens/ring_body.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
+import 'package:wake_alarm_sync/services/home_presence.dart';
+import 'package:wake_alarm_sync/services/ring_startup.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
-import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 
 /// How often the live steps stage re-reads the step counter.
 const Duration kStepPollInterval = Duration(seconds: 2);
@@ -25,6 +25,7 @@ class RingScreen extends StatefulWidget {
     this.scheduler,
     this.generator,
     this.clock,
+    this.presence,
   });
 
   /// Platform bridge; defaults to the real MethodChannel.
@@ -32,6 +33,9 @@ class RingScreen extends StatefulWidget {
 
   /// Challenge source; defaults to a secure-random generator.
   final ChallengeGenerator? generator;
+
+  /// Home-presence resolver; defaults to the real one.
+  final HomePresence? presence;
 
   /// Time since the ring started; defaults to a real `Stopwatch`.
   ///
@@ -48,6 +52,8 @@ class _RingScreenState extends State<RingScreen> {
   late final AlarmScheduler _scheduler = widget.scheduler ?? AlarmScheduler();
   late final ChallengeGenerator _generator =
       widget.generator ?? ChallengeGenerator();
+  late final HomePresence _presence =
+      widget.presence ?? HomePresence(scheduler: _scheduler);
   late RoomProof _proof = RoomProof(scheduler: _scheduler);
   final DismissGate _gate = DismissGate();
   late Challenge _challenge = _generator.next();
@@ -72,22 +78,27 @@ class _RingScreenState extends State<RingScreen> {
     _stepTimer = Timer.periodic(kStepPollInterval, (_) => _pollSteps());
   }
 
-  /// Loads the registered tags and starts listening for NFC taps.
+  /// Resolves presence and the registered tags, then applies the verdict.
+  ///
+  /// The ordering lives in `resolveRingStartup`; this only applies what it
+  /// decided, in one `setState`.
   Future<void> _loadRoomProof() async {
-    final settings = await RoomProofSettings.load();
-    final hasNfc = await _scheduler.hasNfc();
+    final startup = await resolveRingStartup(
+      scheduler: _scheduler,
+      presence: _presence,
+    );
     if (!mounted) return;
     setState(() {
-      _proof = RoomProof(scheduler: _scheduler, settings: settings);
-      // Nothing to wait for: without NFC or without two distinct tags the
-      // tag stages can never be satisfied, so making the user sit through
-      // the full timer would be pure punishment for a config problem.
-      if (!hasNfc || !settings.isComplete) {
-        _gate.activateBypass();
-        _status = hasNfc
-            ? 'Register two NFC tags in Settings.'
-            : 'NFC is off or unavailable.';
+      _proof = RoomProof(scheduler: _scheduler, settings: startup.settings);
+      switch (startup.skip) {
+        case RingSkip.away:
+          _gate.activateAwayProfile();
+        case RingSkip.noTags:
+          _gate.activateBypass();
+        case RingSkip.none:
+          break;
       }
+      _status = startup.status;
     });
     _scheduler.onNfcTag(_onNfcTag);
   }
@@ -196,39 +207,11 @@ class _RingScreenState extends State<RingScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final inChallenges = _gate.stage == DismissStage.challenges;
-    return PopScope(
-      // The alarm cannot be escaped with back; dismissing is the only way out.
-      canPop: false,
-      child: Scaffold(
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text('Wake up', style: theme.textTheme.headlineMedium),
-                const SizedBox(height: 24),
-                if (inChallenges)
-                  RingChallenge(
-                    challenge: _challenge,
-                    controller: _input,
-                    passed: _gate.challengesPassed,
-                    total: _gate.challengesRequired,
-                    onSubmit: _submit,
-                  )
-                else
-                  RingChecklist(gate: _gate),
-                const SizedBox(height: 16),
-                Text(_status, style: theme.textTheme.bodyMedium),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
+  Widget build(BuildContext context) => RingBody(
+    gate: _gate,
+    challenge: _challenge,
+    controller: _input,
+    status: _status,
+    onSubmit: _submit,
+  );
 }

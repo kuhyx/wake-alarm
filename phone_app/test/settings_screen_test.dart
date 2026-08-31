@@ -13,6 +13,8 @@ void main() {
 
     expect(find.text('Sync settings'), findsOneWidget);
     expect(find.text('Advanced sync (GitHub)'), findsOneWidget);
+    expect(find.text('Room proof'), findsOneWidget);
+    expect(find.text('Home location'), findsOneWidget);
 
     await tester.tap(find.text('Advanced sync (GitHub)'));
     await tester.pumpAndSettle();

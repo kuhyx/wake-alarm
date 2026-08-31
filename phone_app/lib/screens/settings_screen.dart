@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sync_settings_ui/sync_settings_ui.dart';
 
 import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
+import 'package:wake_alarm_sync/screens/home_location_screen.dart';
 import 'package:wake_alarm_sync/screens/room_proof_screen.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
@@ -13,6 +14,8 @@ import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
 /// "Advanced sync (GitHub)" stays app-local ([GitHubMirrorScreen]), and
 /// "Room proof" registers the two NFC tags ([RoomProofScreen]) — without
 /// a registered tag, NFC can never satisfy the dismiss room proof.
+/// "Home location" ([HomeLocationScreen]) registers where the tags are, so
+/// the alarm can skip them when it rings somewhere else.
 class SettingsScreen extends StatelessWidget {
   /// Creates a [SettingsScreen].
   const SettingsScreen({super.key});
@@ -50,6 +53,15 @@ class SettingsScreen extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(builder: (_) => const RoomProofScreen()),
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Home location'),
+            subtitle: const Text('The Wi-Fi and place that mean you are home'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const HomeLocationScreen()),
             ),
           ),
           ListTile(

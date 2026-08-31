@@ -62,6 +62,16 @@ object AlarmChannel {
                 result.success(null)
             }
             "hasNfc" -> result.success(NfcReader.isAvailable(context))
+            // Raw observations only; home_presence.dart decides what they mean.
+            // Lives here rather than in MainActivity's override (as NfcReader
+            // does) because WifiManager/LocationManager need no Activity, and
+            // the ring screen must be able to reach it through AlarmActivity.
+            "readPresence" -> HomePresence.read(
+                context,
+                call.argument<Double>("homeLat"),
+                call.argument<Double>("homeLon"),
+                call.argument<Boolean>("withFix") ?: false,
+            ) { observations -> result.success(observations) }
             // Handled by AlarmActivity, which owns the window; reaching here
             // means the picker asked, where there is no ring screen to close.
             "closeRingScreen" -> result.success(null)

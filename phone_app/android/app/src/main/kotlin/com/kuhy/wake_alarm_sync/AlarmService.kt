@@ -9,11 +9,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import android.os.VibrationEffect
@@ -31,6 +32,9 @@ import android.os.VibratorManager
 class AlarmService : Service() {
 
     private var player: MediaPlayer? = null
+
+    /** Drives the volume ramp; cleared in [stopSound]. */
+    private val rampHandler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var vibrator: Vibrator? = null
 
@@ -149,30 +153,20 @@ class AlarmService : Service() {
             )
             isLooping = true
             prepare()
+            // Start almost silent. The stream still goes to max below, so a
+            // stream muted to zero cannot silence the alarm -- it is the
+            // player's own gain that climbs.
+            setVolume(AlarmVolume.RAMP_START_GAIN, AlarmVolume.RAMP_START_GAIN)
             start()
         }
-        raiseAlarmVolume()
-    }
-
-    /**
-     * Alarm stream turned down to zero must not silence the alarm.
-     *
-     * Guarded: setStreamVolume can throw under an active zen rule, and by this
-     * point startForeground() has already posted — an exception here would
-     * take the whole ring down over a volume bump that is only an
-     * improvement, not the mechanism.
-     */
-    private fun raiseAlarmVolume() {
-        try {
-            val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val max = audio.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            audio.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
-        } catch (e: SecurityException) {
-            Log.w(TAG, "could not raise the alarm volume; ringing anyway", e)
-        }
+        AlarmVolume.raiseStream(this)
+        AlarmVolume.startRamp(rampHandler) { player }
     }
 
     private fun stopSound() {
+        // Before releasing the player: a queued step that runs afterwards
+        // would touch a released MediaPlayer.
+        rampHandler.removeCallbacksAndMessages(null)
         player?.run {
             if (isPlaying) stop()
             release()

@@ -35,11 +35,18 @@ class MainActivity : FlutterActivity() {
      * without it, so the steps fallback would report "sensor unavailable"
      * forever. That matters because a room proof that can never be satisfied
      * makes the alarm undismissable, not merely degraded.
+     *
+     * ACCESS_FINE_LOCATION (API 23+): without it the connected Wi-Fi's BSSID
+     * comes back redacted and every provider is silent, so HomePresence can
+     * never answer. Unreadable means away, so a missing grant would drop the
+     * strict tag stages at home too. This is the ONLY place it is asked for:
+     * a permission dialog must never appear over a ringing alarm.
      */
     private fun requestAlarmPermissions() {
         val wanted = arrayOf(
             Manifest.permission.POST_NOTIFICATIONS,
             Manifest.permission.ACTIVITY_RECOGNITION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
         )
         val missing = wanted.filter {
             ContextCompat.checkSelfPermission(this, it) !=

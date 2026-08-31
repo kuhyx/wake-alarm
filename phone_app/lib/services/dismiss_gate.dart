@@ -50,6 +50,7 @@ class DismissGate {
   int _challengesPassed = 0;
   int _challengesRequired = challengesNormal;
   bool _bypassed = false;
+  bool _away = false;
 
   /// The stage currently awaiting satisfaction.
   DismissStage get stage => _stage;
@@ -62,6 +63,13 @@ class DismissGate {
 
   /// Whether the NFC stages have been skipped.
   bool get bypassActive => _bypassed;
+
+  /// Whether they were skipped because the phone is away from home.
+  ///
+  /// Purely for wording: "tags unavailable" reads as a hardware fault, which
+  /// is the wrong thing to tell someone in a hotel. Kept off the latch so it
+  /// cannot affect [challengesRequired] or the stage arithmetic.
+  bool get awayActive => _away;
 
   /// Whether the alarm may now be dismissed.
   bool get isDone => _stage == DismissStage.done;
@@ -122,21 +130,48 @@ class DismissGate {
 
   /// Drops the NFC requirement, raising the challenge count instead.
   ///
+  /// The escape hatch for tags that cannot be read: a dead tag, an NFC radio
+  /// that will not poll, a tag that fell off the wall. The count rises so
+  /// skipping the walk is never the cheap option.
+  ///
+  /// Refused once [activateAwayProfile] has fired: away from home the tags
+  /// are already gone, so the only remaining effect would be the punitive
+  /// 3 -> 6, which is exactly what the away morning must not get. That guard
+  /// is load-bearing, not defensive — the ring screen's [bypassAfter] timer
+  /// fires unconditionally, and an away morning is a two-minute walk plus
+  /// three questions, which crosses five minutes routinely.
+  bool activateBypass() => _skipTags(challengesBypass);
+
+  /// Skips the tag stages because the tags are somewhere else entirely.
+  ///
+  /// Being away from home is not cheating, so unlike [activateBypass] the
+  /// count stays at [challengesNormal]. **The walk is still required**: the
+  /// tags are what cannot be reached in a hotel, not the standing up.
+  bool activateAwayProfile() {
+    final skipped = _skipTags(challengesNormal);
+    if (skipped) _away = true;
+    return skipped;
+  }
+
+  /// Skips the two tag stages and fixes the challenge count at [required].
+  ///
   /// **Only the two tag stages are skipped — the walk still counts.** Jumping
   /// straight to the challenges would let someone lie in bed for
   /// [bypassAfter] and then answer questions without ever standing up, which
   /// is a weaker gate than the one this change replaced.
   ///
-  /// One-way and idempotent. Deliberately refused once the challenge stage is
-  /// live: the user has already done the walk by then, and raising 3 to 6
-  /// mid-answer would punish them for being slow at arithmetic.
-  bool activateBypass() {
+  /// One-way and idempotent, so whichever reason arrives first wins and no
+  /// later one can raise the count behind the user's back. Deliberately
+  /// refused once the challenge stage is live: the user has already done the
+  /// walk by then, and raising 3 to 6 mid-answer would punish them for being
+  /// slow at arithmetic.
+  bool _skipTags(int required) {
     if (_bypassed) return false;
     if (_stage == DismissStage.challenges || _stage == DismissStage.done) {
       return false;
     }
     _bypassed = true;
-    _challengesRequired = challengesBypass;
+    _challengesRequired = required;
     // Past tag 2 the steps are already banked; otherwise fall back to them.
     _stage = _stage == DismissStage.tag2
         ? DismissStage.challenges

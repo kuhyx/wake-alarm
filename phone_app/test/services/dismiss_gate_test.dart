@@ -162,4 +162,77 @@ void main() {
       greaterThan(DismissGate.challengesNormal),
     );
   });
+
+  group('away from home', () {
+    test('skips the tags but keeps the normal challenge count', () {
+      final gate = DismissGate()..activateAwayProfile();
+      expect(gate.bypassActive, isTrue);
+      expect(gate.challengesRequired, DismissGate.challengesNormal);
+      expect(gate.stage, DismissStage.steps);
+    });
+
+    test('still requires the walk', () {
+      final gate = DismissGate()..activateAwayProfile();
+      expect(gate.stage, DismissStage.steps);
+      expect(gate.passStepsStage(), isTrue);
+      expect(gate.stage, DismissStage.challenges);
+    });
+
+    test('the five-minute bypass cannot raise an away morning to 6', () {
+      // The ring screen's bypass timer fires unconditionally, and an away
+      // morning is a two-minute walk plus three questions -- it crosses five
+      // minutes routinely. If this ever returns true the user is punished
+      // for travelling, and the only symptom is one wrong digit on screen.
+      final gate = DismissGate()..activateAwayProfile();
+      expect(gate.activateBypass(), isFalse);
+      expect(gate.challengesRequired, DismissGate.challengesNormal);
+    });
+
+    test('a missing-tags bypass already at 6 is not lowered by away', () {
+      final gate = DismissGate()..activateBypass();
+      expect(gate.activateAwayProfile(), isFalse);
+      expect(gate.challengesRequired, DismissGate.challengesBypass);
+    });
+
+    test('is idempotent', () {
+      final gate = DismissGate()..activateAwayProfile();
+      expect(gate.activateAwayProfile(), isFalse);
+    });
+
+    test('says away, not "tags unavailable", and only when it is', () {
+      // Wording only -- a hotel is not a hardware fault. Must stay off the
+      // latch, so it can never move the challenge count.
+      expect(DismissGate().awayActive, isFalse);
+      expect((DismissGate()..activateBypass()).awayActive, isFalse);
+      final away = DismissGate()..activateAwayProfile();
+      expect(away.awayActive, isTrue);
+      expect(away.challengesRequired, DismissGate.challengesNormal);
+    });
+
+    test('a refused away skip does not claim to be away', () {
+      final gate = DismissGate()..activateBypass();
+      expect(gate.activateAwayProfile(), isFalse);
+      expect(gate.awayActive, isFalse);
+      expect(gate.challengesRequired, DismissGate.challengesBypass);
+    });
+
+    test('is refused once the challenges are live', () {
+      final gate = DismissGate()
+        ..passTagStage()
+        ..passStepsStage()
+        ..passTagStage();
+      expect(gate.stage, DismissStage.challenges);
+      expect(gate.activateAwayProfile(), isFalse);
+      expect(gate.challengesRequired, DismissGate.challengesNormal);
+    });
+
+    test('past tag 2 the banked steps are not asked for again', () {
+      final gate = DismissGate()..passTagStage();
+      expect(gate.passStepsStage(), isTrue);
+      expect(gate.stage, DismissStage.tag2);
+      expect(gate.activateAwayProfile(), isTrue);
+      expect(gate.stage, DismissStage.challenges);
+      expect(gate.challengesRequired, DismissGate.challengesNormal);
+    });
+  });
 }

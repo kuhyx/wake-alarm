@@ -81,6 +81,8 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('Tags unavailable'), findsOneWidget);
+    // A hardware bypass must not borrow the away wording.
+    expect(find.textContaining('Away from home'), findsNothing);
     expect(find.text('Tap tag 1'), findsNothing);
     expect(find.text('Walk 25 steps'), findsOneWidget);
     expect(find.text('Submit'), findsNothing);

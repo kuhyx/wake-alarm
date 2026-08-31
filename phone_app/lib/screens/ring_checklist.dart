@@ -56,8 +56,14 @@ class RingChecklist extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'Tags unavailable — walk, then answer '
-              '${gate.challengesRequired} questions instead.',
+              // This line persists; the status below it is overwritten by the
+              // live step count within seconds, so the reason the tags went
+              // away has to live here or the user never sees it.
+              gate.awayActive
+                  ? 'Away from home — the tags are elsewhere. Walk, then '
+                        'answer ${gate.challengesRequired} questions.'
+                  : 'Tags unavailable — walk, then answer '
+                        '${gate.challengesRequired} questions instead.',
               style: theme.textTheme.bodyMedium,
             ),
           ),

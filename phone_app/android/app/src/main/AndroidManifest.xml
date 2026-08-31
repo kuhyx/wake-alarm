@@ -19,6 +19,19 @@
     <!-- Room proof (item 3): steps are the fallback, NFC the real proof. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
     <uses-permission android:name="android.permission.NFC"/>
+    <!-- Home presence: the BSSID of the connected Wi-Fi is redacted to
+         02:00:00:00:00:00 without fine location, so this gates the Wi-Fi
+         check as much as the GPS fallback. While-in-use only: the read
+         runs from AlarmActivity, which is foregrounded over the
+         lockscreen, so no ACCESS_BACKGROUND_LOCATION and no change to
+         AlarmService's foregroundServiceType. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Install-time, no prompt. WifiManager/ConnectivityManager throw
+         SecurityException without these, which would look exactly like
+         "not at home". -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
         android:label="wake_alarm_sync"
         android:name="${applicationName}"

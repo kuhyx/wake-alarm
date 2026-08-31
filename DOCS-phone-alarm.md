@@ -43,6 +43,16 @@ Things that are a hard crash or a silent no-ring, not a warning:
   change. `raiseAlarmVolume()` does run on this hardware (observed raising
   `oldIndex:0` → 7, no `SecurityException`), which recovers a stream turned
   down to zero but not one muted by total silence.
+- **The ring fades in; the stream still goes to max.** Two different knobs,
+  and merging them trades a gentle start for a silent alarm.
+  `raiseAlarmVolume()` fixes the *system stream* — a stream left at 0 would
+  silence the alarm outright. `startVolumeRamp()` climbs the *player's own
+  gain* from `RAMP_START_GAIN` (0.04) to full over `RAMP_DURATION_MS` (60 s),
+  quadratically, because perceived loudness is not linear in amplitude.
+  Measured on the Pixel 6a (2026-08-31) from `dumpsys media.audio_flinger`
+  track gain: −28 dB at 3 s, −21 dB at 15 s, −12 dB at 30 s, 0 dB at 62 s.
+  Every step re-reads `player`, and `stopSound()` drops the queue before
+  releasing it, so a dismissal mid-ramp cannot touch a released `MediaPlayer`.
 - **`android:foregroundServiceType="mediaPlayback"` must be on the `<service>`
   in the manifest AND passed to `startForeground()`.** Omitting either is a
   hard crash the moment the alarm fires on API 34+ — and it is invisible on an
@@ -104,6 +114,49 @@ minutes and answer questions without standing up, which is weaker than the
 gate this replaced. Without some such hatch a dead tag at 06:00 leaves an
 alarm that literally cannot be switched off.
 
+## Home presence — the alarm knows where it is
+
+Away from home the two tags are screwed to walls in another city, so the
+sequence is unsatisfiable. `HomePresence.read` (Kotlin) reports raw
+observations and `lib/services/home_presence.dart` decides; away skips the two
+*tag* stages and **keeps the normal 3 challenges**. The walk still counts.
+
+- **Never "modernise" `WifiManager.getConnectionInfo()`.** It is deprecated at
+  API 31 in favour of `NetworkCapabilities.getTransportInfo()`, and that
+  replacement does not work here: the *synchronous*
+  `ConnectivityManager.getNetworkCapabilities()` redacts every
+  location-sensitive field, so `transportInfo` is null and the BSSID silently
+  vanishes. Measured on the Pixel 6a (API 36, 2026-08-31) — connected to a
+  known AP, fine location granted, location services on — the capabilities
+  route returned `ssid=null bssid=null` while the GPS fallback quietly covered
+  for it. Un-redacted `transportInfo` needs a `registerNetworkCallback`.
+- **A redacted BSSID is `02:00:00:00:00:00`, not null and not an error.**
+  Android returns it when fine location is missing *or* location services are
+  off. Untreated it is a valid-looking MAC that never matches, so every
+  morning reads "away" and the ritual silently stops happening.
+- **Unreadable means away** — the user's explicit choice. A revoked permission
+  therefore weakens the alarm rather than breaking it loudly, which is why
+  `HomePresenceLine` puts the verdict *and its cause* on the home screen.
+  **Unconfigured is not unreadable:** an install that never captured a home
+  keeps the strict sequence, or shipping this would have deleted the gate.
+- **Presence resolves before the missing-tags bypass** (`ring_startup.dart`).
+  Both skips latch one-way, so whichever fires first fixes the count; the
+  other order would give every away morning with NFC off the punitive 6.
+  Equally, `activateBypass()` is refused after `activateAwayProfile()` — the
+  ring screen's 5-minute timer fires unconditionally and an away morning
+  crosses 5 minutes routinely.
+- **Registration passes `withFix: true`; the ring screen does not.** A Wi-Fi
+  answer short-circuits GPS, which is what makes the verdict instant at home —
+  but it also meant capture never recorded a coordinate, so the GPS fallback
+  could only ever be configured with Wi-Fi off, i.e. never.
+- **BSSIDs are a list, and the SSID matches too.** A dual-band router answers
+  to a different BSSID per band and the phone roams overnight; one stored
+  address would call a band switch "travelling".
+- The read runs from `AlarmActivity` (foregrounded, so while-in-use location
+  suffices). **Do not move it into `AlarmService`** — that would mean
+  `foregroundServiceType="mediaPlayback|location"` plus
+  `FOREGROUND_SERVICE_LOCATION`, on the one path that must not break.
+
 **`ringNow` + `lib/main_ring_probe.dart` are a deliberate manual test
 handle**, the phone-side equivalent of `wake-alarm.service` on the PC: the
 normal arm path needs a sync backend connected, so there is no other way to
@@ -120,6 +173,17 @@ Emulator: `wake_alarm_api36` (Pixel 6a profile, API 36). The SDK tools are at
 phone (Pixel 6a, `23181JEGR08034`) holds a **release-signed** build, so
 `phone_deploy.sh` needs `--release` or the install fails with
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+
+**Never pass `--build-number` by hand**, including for the probes: use
+`phone_deploy.sh <app> --release --target lib/main_ring_probe.dart` and let it
+pick. Android compares versionCode only upward, so a hand-picked number puts
+the phone above what CI will mint and locks CI out until the commit count
+catches up — the only other escape is an uninstall, which wipes the NFC tags,
+the home location and the sync identity. This happened on 2026-08-31 (probe
+builds at 200/201 stranded the phone at 207 against a ceiling of 156).
+`.versioncode-offset` at the repo root is the recovery valve, read by **both**
+`release-apk.yml` and the local gate so the two can only move together; it is
+currently 101. `hooks/build_number_guard_pretool.sh` now blocks the bypass.
 
 **The ring screen must close itself on dismiss.** `AlarmActivity` handles
 `closeRingScreen` (the shared `AlarmChannel` holds `applicationContext` and

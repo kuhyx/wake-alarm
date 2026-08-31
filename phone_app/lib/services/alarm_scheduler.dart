@@ -112,4 +112,29 @@ class AlarmScheduler {
   /// Steps since [beginStepCount], or -1 when unavailable.
   Future<int> stepsSinceRingStart() async =>
       await _channel.invokeMethod<int>('stepCount') ?? -1;
+
+  /// Raw presence observations: `ssid`, `bssid`, `lat`, `lon`, `accuracy`,
+  /// `distanceMeters`, `reason`.
+  ///
+  /// The home coordinate goes *in* so Kotlin can return `distanceMeters` from
+  /// `Location.distanceBetween` — otherwise the policy file would have to
+  /// hand-roll Haversine to be unit testable. Null when the platform is
+  /// absent, which `HomePresence` reads as unreadable, i.e. away.
+  ///
+  /// [withFix] makes it wait for a location fix even when Wi-Fi already
+  /// answered. Registration wants that; the ring screen does not, because
+  /// skipping GPS is what makes the verdict instant at home.
+  Future<Map<String, Object?>?> readPresence({
+    double? homeLat,
+    double? homeLon,
+    bool withFix = false,
+  }) async {
+    final result = await _channel
+        .invokeMapMethod<String, Object?>('readPresence', <String, Object?>{
+          'homeLat': homeLat,
+          'homeLon': homeLon,
+          'withFix': withFix,
+        });
+    return result;
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/screens/home_presence_line.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// The home screen's body: the armed time, the earlier-only control and the
@@ -54,6 +55,7 @@ class HomeBody extends StatelessWidget {
                 'Alarm is armed for',
                 style: TextStyle(fontSize: 16),
               ),
+              const HomePresenceLine(),
               const SizedBox(height: 16),
               Text(
                 time,
