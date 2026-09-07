@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import freedays
 import pytest
 
 if TYPE_CHECKING:
@@ -36,5 +37,12 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
     with (
         patch("gatelock.log_integrity.DEFAULT_HMAC_KEY_FILE", key_file),
         patch("wake_alarm._state.WAKE_STATE_FILE", tmp_path / "wake_state.json"),
+        # The shared free-day pool lives under ~/.local/share, outside every
+        # path above. Without this, a real free day on the developer's
+        # machine would silence the alarm in every trigger test here.
+        patch(
+            "freedays._api.resolve_paths",
+            lambda paths: paths or freedays.Paths.under(tmp_path / "freedays"),
+        ),
     ):
         yield

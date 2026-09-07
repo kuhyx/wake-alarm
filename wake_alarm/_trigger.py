@@ -26,6 +26,8 @@ import logging
 import subprocess
 import sys
 
+import freedays
+
 from wake_alarm._constants import (
     ALARM_DAYS,
     FALLBACK_ALARM_HOUR,
@@ -81,8 +83,13 @@ def _fire_window(alarm: Alarm, now: datetime) -> tuple[datetime, datetime]:
 def _skip_reason(now: datetime) -> str | None:
     """Return why the alarm must not fire right now, or None if it may.
 
-    Checks only the gates that are independent of the clock: the day gate and
-    the once-per-day latch.
+    Checks only the gates that are independent of the clock: the shared
+    free-day pool, the day gate and the once-per-day latch.
+
+    A free day means the alarm does not ring at all -- the orchestrator is
+    never started, so neither the alarm nor the workout lock behind it
+    appears. The pool is one local file read, never the network, so this
+    stays a millisecond-scale tick.
 
     Args:
         now: Current local time.
@@ -90,6 +97,8 @@ def _skip_reason(now: datetime) -> str | None:
     Returns:
         A human-readable reason, or None when nothing blocks firing.
     """
+    if freedays.is_free_day(now.date()):
+        return "free day"
     if now.weekday() not in ALARM_DAYS:
         return "not an alarm day"
     if was_trigger_fired_today():

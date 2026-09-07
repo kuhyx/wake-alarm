@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import freedays
 import pytest
 
 from wake_alarm._sync import Alarm
@@ -14,6 +16,9 @@ from wake_alarm._trigger import (
     _now,
     _skip_reason,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _at(hour: int, minute: int) -> datetime:
@@ -102,6 +107,36 @@ class TestSkipReason:
             return_value=True,
         ):
             assert _skip_reason(_at(7, 0)) == "already fired today"
+
+    def test_a_free_day_silences_the_alarm(self, tmp_path: Path) -> None:
+        """A free day means it does not ring at all, not that it rings later."""
+        moment = _at(7, 0)
+        assert _skip_reason(moment) is None, "precondition: nothing else blocks"
+
+        freedays.mark(
+            moment.date(),
+            paths=freedays.Paths.under(tmp_path / "freedays"),
+            now=moment.date(),
+        )
+        assert _skip_reason(moment) == "free day"
+
+    def test_a_free_day_on_another_date_does_not_silence_it(
+        self, tmp_path: Path
+    ) -> None:
+        moment = _at(7, 0)
+        freedays.mark(
+            date(2026, 12, 24),
+            paths=freedays.Paths.under(tmp_path / "freedays"),
+            now=moment.date(),
+        )
+        assert _skip_reason(moment) is None
+
+    def test_an_unreadable_pool_still_lets_the_alarm_ring(self, tmp_path: Path) -> None:
+        """Fail closed: a corrupt pool must not silence the morning routine."""
+        pool_dir = tmp_path / "freedays"
+        pool_dir.mkdir(exist_ok=True)
+        (pool_dir / "free_days.json").write_text("{ not json", encoding="utf-8")
+        assert _skip_reason(_at(7, 0)) is None
 
 
 class TestDecide:
