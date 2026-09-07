@@ -88,7 +88,7 @@ Future<FirebaseRestClient?> openFirebase() async {
     // marker beside it. Treating the marker as the source of truth is what
     // made a phone with a live session sync over GitHub and 401 forever --
     // the credential was in the keystore the whole time, unused.
-    return _clientFromStoredSession();
+    return await _clientFromStoredSession();
   }
   try {
     return await firebaseClientFor(
