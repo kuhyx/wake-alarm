@@ -2,6 +2,7 @@ import 'package:wake_alarm_sync/services/alarm_arming.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
+import 'package:wake_alarm_sync/services/settings_sync.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
 
 /// Publishes the armed alarm to the PC and arms the phone's own alarm.
@@ -44,7 +45,12 @@ class AlarmPublisher {
     }
     try {
       await service.setLocal(hour, minute);
+      // Tags and home ride on the same record: stage local edits, sync
+      // (pull, merge, push), then take whatever won back into prefs. That
+      // last step is how a fresh install gets its tags back.
+      await stageLocalSettings(service);
       await service.push(settings.token);
+      await applySyncedSettings(service);
       final problem = await arming.arm(hour, minute);
       if (problem != null) return problem;
       await arming.registerWithClockApp(hour, minute);

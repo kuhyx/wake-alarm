@@ -18,6 +18,7 @@ class HomeBody extends StatelessWidget {
     required this.status,
     required this.configured,
     required this.onPickEarlier,
+    this.syncEpoch = 0,
     super.key,
   });
 
@@ -42,6 +43,11 @@ class HomeBody extends StatelessWidget {
   /// Called when the user asks to wake earlier tomorrow.
   final VoidCallback onPickEarlier;
 
+  /// Bumped after every sync so the presence line re-reads the home location
+  /// a pull may just have restored, instead of showing the pre-sync verdict
+  /// until the next cold start.
+  final int syncEpoch;
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -51,17 +57,14 @@ class HomeBody extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Alarm is armed for',
-                style: TextStyle(fontSize: 16),
-              ),
-              const HomePresenceLine(),
+              const Text('Alarm is armed for', style: TextStyle(fontSize: 16)),
+              HomePresenceLine(key: ValueKey<int>(syncEpoch)),
               const SizedBox(height: 16),
               Text(
                 time,
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.displayLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(

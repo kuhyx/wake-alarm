@@ -178,8 +178,9 @@ phone (Pixel 6a, `23181JEGR08034`) holds a **release-signed** build, so
 `phone_deploy.sh <app> --release --target lib/main_ring_probe.dart` and let it
 pick. Android compares versionCode only upward, so a hand-picked number puts
 the phone above what CI will mint and locks CI out until the commit count
-catches up — the only other escape is an uninstall, which wipes the NFC tags,
-the home location and the sync identity. This happened on 2026-08-31 (probe
+catches up — the only other escape is an uninstall, which wipes the sync
+identity (the tags and home come back from sync since 2026-09-11, see
+below). This happened on 2026-08-31 (probe
 builds at 200/201 stranded the phone at 207 against a ceiling of 156).
 `.versioncode-offset` at the repo root is the recovery valve, read by **both**
 `release-apk.yml` and the local gate so the two can only move together; it is
@@ -191,3 +192,33 @@ cannot finish an activity). Without it the dismiss screen stays up over the
 lockscreen forever — back is disabled by design in both halves — and the live
 instance would carry a satisfied room proof and the solved answer into the
 next ring.
+
+## Tags and home location survive a reinstall
+
+Both used to live only in SharedPreferences, and a reinstall on 2026-09-11
+lost them. They are properties of the flat, not of one install, so
+`lib/services/settings_sync.dart` carries them as two extra per-field entries
+on the same `alarm.json` record the PC reads (`nfc_tag_ids`,
+`home_location`); the PC parser reads only the hour/minute fields and ignores
+the rest. `AlarmSyncService.pushWith` is a real `syncLog` tick now — pull every
+device directory, merge per field by HLC, push — and `AlarmPublisher.publish`
+wraps it: stage local edits → sync → apply the winners back into prefs. That
+last step is the restore. Verified 2026-09-11 on a fresh `wake_alarm_api36`
+install: both tags and the home appeared with zero taps after Google sign-in.
+
+- **Last-writer-wins by wall time, from the local `editedAt`** stamps
+  (`roomProof.editedAt`, `homeLocation.editedAt`). A value applied *from* the
+  log is stamped with the log's wall time, and comparisons are on wall time
+  only — comparing counter/node id on that tie would push the same value
+  straight back every tick.
+- A value from before stamps existed is staged at epoch+1 ms: pushed when
+  nothing else is known, loses to any real edit.
+- **Registering a tag pushes on the Back to the home screen** — the Settings
+  pop now runs `_syncToPc()`, not just `_loadSyncState()`. Without that the
+  push waited for the next cold start, which is the same "it vanished" again.
+- `setLocal` merges into the existing record; a whole-record upsert there
+  would drop the settings fields from every push. `HomeBody.syncEpoch`
+  remounts the presence line after each sync so a restored home shows at once.
+- The emulator is a real peer: its device directory outranks the phone by
+  HLC while it exists. Delete `wake-alarm-sync/devices/<emulator-uuid>` after
+  a restore test.

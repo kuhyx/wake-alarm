@@ -29,9 +29,10 @@ typedef Alarm = ({int hour, int minute});
 /// regardless of which directory it landed in.
 ///
 /// The PC side is read-only (`wake_alarm/_sync.py`, which tries Firebase then
-/// GitHub, caching the result for `shutdown-wrapper.sh`). There is no
-/// pull/merge here: the phone is the only writer, so its local store is
-/// always the source of truth.
+/// GitHub). The phone does pull and merge, though — not for the alarm time,
+/// which it always owns, but for the NFC tags and home location that ride on
+/// the same record (`settings_sync.dart`): a reinstalled phone gets them back
+/// from whichever previous install pushed them last.
 class AlarmSyncService {
   /// Wraps an already-loaded log store pushing under [deviceId].
   AlarmSyncService(this._store, {required this.deviceId});
@@ -65,8 +66,6 @@ class AlarmSyncService {
   /// CRDT identity. The PC reader discovers device directories, so it finds
   /// whatever uuid this turns out to be.
   final String deviceId;
-
-  String get _remotePath => 'wake-alarm-sync/devices/$deviceId/alarm.json';
 
   static const _recordId = 'alarm';
   static const _hourField = 'alarm_hour';
@@ -122,26 +121,55 @@ class AlarmSyncService {
   ///
   /// Both fields share one clock tick — they are always set together, so a
   /// concurrent per-field merge would never split them.
-  Future<void> setLocal(int hour, int minute) async {
-    final hlc = _store.nextHlc();
+  Future<void> setLocal(int hour, int minute) =>
+      setFields({_hourField: hour, _minuteField: minute}, _store.nextHlc());
+
+  /// Upserts [values] onto the alarm record at [hlc], keeping every other
+  /// field.
+  ///
+  /// Preserving is the point: the record also carries the synced settings
+  /// (`settings_sync.dart`), and a whole-record replace on every publish
+  /// would silently drop them from the pushed log.
+  Future<void> setFields(Map<String, Object?> values, Hlc hlc) async {
+    final existing = _store.get(_recordId);
     await _store.upsert(
       Record(
         id: _recordId,
-        fields: {_hourField: (hour, hlc), _minuteField: (minute, hlc)},
+        fields: {
+          ...?existing?.fields,
+          for (final e in values.entries) e.key: (e.value, hlc),
+        },
       ),
     );
   }
 
-  /// Pushes the local alarm log using [client].
+  /// The value and clock of [field] on the alarm record, or null when unset.
+  (Object?, Hlc)? field(String field) => _store.get(_recordId)?.fields[field];
+
+  /// Syncs the local alarm log through [client]: pulls every other device's
+  /// log, merges per field by HLC, then pushes the result.
   ///
   /// Takes a [RemoteStore] rather than a `GitHubClient` so the same call
   /// serves Firebase, GitHub, or the [MirrorStore] that writes both — the
   /// backend is chosen once, in [syncBackend].
-  Future<void> pushWith(RemoteStore client) => client.putFileText(
-    _remotePath,
-    logToJson(_store.snapshot()),
-    message: 'wake_alarm_sync: update alarm',
-  );
+  ///
+  /// The pull is what brings the tags and home location back to a fresh
+  /// install. The alarm time itself is unaffected: [setLocal] runs first on
+  /// every publish, so the local time is always the newest and wins.
+  Future<void> pushWith(RemoteStore client) async {
+    final merged = await syncLog(
+      client: client,
+      deviceId: deviceId,
+      pathPrefix: 'wake-alarm-sync/devices',
+      filename: 'alarm.json',
+      localLog: _store.snapshot(),
+      encode: logToJson,
+      decode: logFromJson,
+      commitMessage: 'wake_alarm_sync: update alarm',
+      legacyDeviceId: legacyDeviceId,
+    );
+    await _store.replaceAll(merged);
+  }
 
   /// Pushes to Firebase when this device is set up for it, mirroring to
   /// GitHub during the cutover; to GitHub alone when it is not.

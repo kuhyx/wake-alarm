@@ -28,7 +28,9 @@ passing sent the user back to the start.
 - **Two *distinct* tags.** The same id in both slots is refused at
   registration — one tag satisfying both stages removes the walk, which is the
   entire point. Stored as a JSON list under `roomProof.nfcTagIds`; a legacy
-  single `roomProof.nfcTagId` migrates into slot 1.
+  single `roomProof.nfcTagId` migrates into slot 1. **Tags and home location
+  sync** (`settings_sync.dart`, see `DOCS-phone-alarm.md`) — a reinstall
+  gets them back; do not make either local-only again.
 - **Steps are unchanged** (`requiredSteps = 25`, `requiredElapsed = 2 min`),
   and are counted from ring start, *not* re-baselined at tag 1. Consequence:
   walking to tag 1 already banks the steps, so only the elapsed floor really

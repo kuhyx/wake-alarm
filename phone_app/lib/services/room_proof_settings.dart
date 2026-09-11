@@ -10,13 +10,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// screen drops straight to the bypass when [isComplete] is false.
 class RoomProofSettings {
   /// Creates settings from the registered tag ids, one per slot.
-  const RoomProofSettings({this.nfcTagIds = const <String>['', '']});
+  const RoomProofSettings({
+    this.nfcTagIds = const <String>['', ''],
+    this.editedAt = '',
+  });
 
   /// SharedPreferences key holding the tag ids as a JSON list.
   static const String kNfcTagsKey = 'roomProof.nfcTagIds';
 
   /// The pre-two-tag key, migrated into slot 0 on first load.
   static const String kLegacyNfcTagKey = 'roomProof.nfcTagId';
+
+  /// SharedPreferences key holding when the tags were last changed (ISO).
+  ///
+  /// This is the stamp the cross-device merge compares (`settings_sync.dart`),
+  /// so a registration here beats an older one from a previous install and
+  /// vice versa. Empty means never edited on this install.
+  static const String kEditedAtKey = 'roomProof.editedAt';
 
   /// How many tags the strict sequence needs.
   static const int requiredTagCount = 2;
@@ -25,6 +35,9 @@ class RoomProofSettings {
   ///
   /// Always [requiredTagCount] long, so slot writes never have to grow it.
   final List<String> nfcTagIds;
+
+  /// When [nfcTagIds] was last set, ISO format, or '' when never.
+  final String editedAt;
 
   /// The tag registered for [slot], or null when that slot is unset.
   String? tagAt(int slot) {
@@ -57,15 +70,16 @@ class RoomProofSettings {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(kNfcTagsKey);
     if (stored != null) {
-      return RoomProofSettings(nfcTagIds: _padded(_decode(stored)));
+      return RoomProofSettings(
+        nfcTagIds: _padded(_decode(stored)),
+        editedAt: prefs.getString(kEditedAtKey) ?? '',
+      );
     }
     // One-time migration: an existing install has a tag registered under the
     // old key, and silently losing it would leave the user unable to dismiss
     // by the normal path on the first morning after the update.
     final legacy = prefs.getString(kLegacyNfcTagKey);
-    return RoomProofSettings(
-      nfcTagIds: _padded(<String>[?legacy]),
-    );
+    return RoomProofSettings(nfcTagIds: _padded(<String>[?legacy]));
   }
 
   /// Decodes the stored JSON list, treating anything malformed as unset.
@@ -79,13 +93,23 @@ class RoomProofSettings {
     }
   }
 
-  /// Stores [tagId] in [slot], leaving the other slot untouched.
+  /// Stores [tagId] in [slot], leaving the other slot untouched, stamped now.
   static Future<void> saveNfcTagAt(int slot, String tagId) async {
     final current = await load();
     final next = List<String>.of(current.nfcTagIds);
     if (slot < 0 || slot >= next.length) return;
     next[slot] = tagId;
+    await replaceAll(next, DateTime.now().toIso8601String());
+  }
+
+  /// Stores [tagIds] wholesale with the given [editedAt].
+  ///
+  /// The sync merge uses this to apply a winner from another install, keeping
+  /// that side's real edit time rather than "now" -- otherwise the next merge
+  /// would see a fresher local stamp and push the same value straight back.
+  static Future<void> replaceAll(List<String> tagIds, String editedAt) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(kNfcTagsKey, jsonEncode(next));
+    await prefs.setString(kNfcTagsKey, jsonEncode(_padded(tagIds)));
+    await prefs.setString(kEditedAtKey, editedAt);
   }
 }

@@ -20,10 +20,33 @@ class HomeLocationSettings {
     this.lat,
     this.lon,
     this.radiusMeters = defaultRadiusMeters,
+    this.editedAt = '',
   });
+
+  /// Decodes the JSON shape written by [toJson]; anything malformed reads as
+  /// unset rather than throwing, matching [load].
+  factory HomeLocationSettings.fromJson(Map<String, dynamic> decoded) {
+    final bssids = decoded['bssids'];
+    return HomeLocationSettings(
+      ssid: decoded['ssid'] as String?,
+      bssids: bssids is List
+          ? bssids.whereType<String>().map((b) => b.toLowerCase()).toList()
+          : const <String>[],
+      lat: (decoded['lat'] as num?)?.toDouble(),
+      lon: (decoded['lon'] as num?)?.toDouble(),
+      radiusMeters:
+          (decoded['radiusMeters'] as num?)?.toDouble() ?? defaultRadiusMeters,
+    );
+  }
 
   /// SharedPreferences key holding the whole record as JSON.
   static const String kKey = 'homeLocation.value';
+
+  /// SharedPreferences key holding when home was last captured/cleared (ISO).
+  ///
+  /// The cross-device merge compares this stamp (`settings_sync.dart`), so
+  /// the newest capture on any install wins. Empty means never edited here.
+  static const String kEditedAtKey = 'homeLocation.editedAt';
 
   /// How far from the stored coordinate still counts as home.
   static const double defaultRadiusMeters = 150;
@@ -47,6 +70,9 @@ class HomeLocationSettings {
   /// Radius around ([lat], [lon]) that counts as home.
   final double radiusMeters;
 
+  /// When this record was last captured or cleared, ISO, or '' when never.
+  final String editedAt;
+
   /// Whether a home has ever been captured.
   bool get isConfigured => ssid != null || bssids.isNotEmpty || hasCoordinate;
 
@@ -66,26 +92,35 @@ class HomeLocationSettings {
   static Future<HomeLocationSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(kKey);
-    if (stored == null) return const HomeLocationSettings();
+    final editedAt = prefs.getString(kEditedAtKey) ?? '';
+    if (stored == null) return HomeLocationSettings(editedAt: editedAt);
     try {
       final decoded = jsonDecode(stored);
       if (decoded is! Map<String, dynamic>) return const HomeLocationSettings();
-      final bssids = decoded['bssids'];
-      return HomeLocationSettings(
-        ssid: decoded['ssid'] as String?,
-        bssids: bssids is List
-            ? bssids.whereType<String>().map((b) => b.toLowerCase()).toList()
-            : const <String>[],
-        lat: (decoded['lat'] as num?)?.toDouble(),
-        lon: (decoded['lon'] as num?)?.toDouble(),
-        radiusMeters:
-            (decoded['radiusMeters'] as num?)?.toDouble() ??
-            defaultRadiusMeters,
-      );
+      return HomeLocationSettings.fromJson(decoded).withEditedAt(editedAt);
     } on FormatException {
       return const HomeLocationSettings();
     }
   }
+
+  /// The same location carrying [editedAt].
+  HomeLocationSettings withEditedAt(String editedAt) => HomeLocationSettings(
+    ssid: ssid,
+    bssids: bssids,
+    lat: lat,
+    lon: lon,
+    radiusMeters: radiusMeters,
+    editedAt: editedAt,
+  );
+
+  /// The wire/storage shape; the inverse of [HomeLocationSettings.fromJson].
+  Map<String, Object?> toJson() => <String, Object?>{
+    'ssid': ssid,
+    'bssids': bssids,
+    'lat': lat,
+    'lon': lon,
+    'radiusMeters': radiusMeters,
+  };
 
   /// Records this place as home, merging [bssid] into any already captured.
   ///
@@ -108,8 +143,9 @@ class HomeLocationSettings {
       lat: lat ?? current.lat,
       lon: lon ?? current.lon,
       radiusMeters: current.radiusMeters,
+      editedAt: DateTime.now().toIso8601String(),
     );
-    await _save(next);
+    await applySynced(next);
     return next;
   }
 
@@ -117,19 +153,19 @@ class HomeLocationSettings {
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(kKey);
+    // A clear is an edit too: without a fresh stamp the merge would read the
+    // still-newer remote copy straight back in.
+    await prefs.setString(kEditedAtKey, DateTime.now().toIso8601String());
   }
 
-  static Future<void> _save(HomeLocationSettings value) async {
+  /// Stores [value] verbatim, including its [editedAt].
+  ///
+  /// The sync merge uses this to apply a winner from another install with
+  /// that side's real edit time, so re-syncing an unchanged home is a no-op
+  /// instead of a fresh push every tick.
+  static Future<void> applySynced(HomeLocationSettings value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      kKey,
-      jsonEncode(<String, Object?>{
-        'ssid': value.ssid,
-        'bssids': value.bssids,
-        'lat': value.lat,
-        'lon': value.lon,
-        'radiusMeters': value.radiusMeters,
-      }),
-    );
+    await prefs.setString(kKey, jsonEncode(value.toJson()));
+    await prefs.setString(kEditedAtKey, value.editedAt);
   }
 }

@@ -31,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _busy = false;
   String _status = '';
   bool _configured = false;
+  int _syncEpoch = 0;
   AlarmSyncService? _service;
 
   /// Platform bridge that arms the app's own alarm (item 1).
@@ -156,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _status = message;
       _busy = false;
+      _syncEpoch++;
     });
   }
 
@@ -182,7 +184,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
               );
+              // Publish too, not just reload: a tag registered in Settings
+              // reaches the backend now, not on the next cold start.
               await _loadSyncState();
+              await _syncToPc();
             },
           ),
         ],
@@ -200,6 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
         busy: _busy,
         status: _status,
         configured: _configured,
+        syncEpoch: _syncEpoch,
         onPickEarlier: () => unawaited(_pickEarlier()),
       ),
     );
