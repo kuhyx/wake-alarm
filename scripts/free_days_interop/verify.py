@@ -1,6 +1,6 @@
 """Replay the fixture's edits through the Python rules and compare the pools.
 
-The Dart port in phone_app is a second implementation of ~/utils/freedays'
+The Dart port in phone_app is a second implementation of ~/src/utils/freedays'
 policy, so it is checked against the original rather than against itself.
 Comparing Dart's *own* count to what Python reads from Dart's file cannot
 catch a drift in what Dart writes -- both sides would agree on the wrong

@@ -55,7 +55,7 @@ flutter:
   uses-material-design: true
 
 # Launcher icon generation. Source art is produced by the shared generator:
-#   PYTHONPATH=~/testsAndMisc python3 -m python_pkg.app_icons generate --app <key>
+#   PYTHONPATH=~/src/testsAndMisc python3 -m python_pkg.app_icons generate --app <key>
 # then run: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true

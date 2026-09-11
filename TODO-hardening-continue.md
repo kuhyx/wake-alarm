@@ -33,7 +33,7 @@ starting; this file deliberately does not duplicate it.
    tag 1 → 25 steps + 2 min → tag 2 → 3 challenges.
 2. **Item 8, mutual gating.** Phone half is now in place. This is the phase
    that legitimately touches `_sync.py`, so it carries that split (see below).
-3. **Item 13, black screen.** Different repo (`~/testsAndMisc/
+3. **Item 13, black screen.** Different repo (`~/src/testsAndMisc/
    linux_configuration`), host-only, blocks nothing.
 
 ### Verified end to end on the Pixel 6a, 2026-08-27
@@ -150,7 +150,7 @@ Two harness traps found while testing this, worth keeping:
   Stream at all. Re-arm therefore needs three explicit hooks — startup,
   BOOT_COMPLETED, dismiss — and dropping any one makes the alarm ring once
   and then silently stop forever.
-- **The Android SDK was never missing, only unexported.** `~/Android/Sdk` has
+- **The Android SDK was never missing, only unexported.** `~/sdk/Android/Sdk` has
   `cmdline-tools`, `emulator` and `platform-tools`; only `adb` was on PATH.
   Export `ANDROID_HOME` rather than installing anything.
 - **A permission declared in the manifest is not a permission granted.**
@@ -171,7 +171,7 @@ Two harness traps found while testing this, worth keeping:
   `test_state.py` 314. Budget for it. `test_trigger.py` is now split and
   under.
 - **`morning_routine/_orchestrator.py:39` hardcodes `"wake_alarm._alarm"`**
-  (different repo, `~/testsAndMisc`). Any module-path change updates it in the
+  (different repo, `~/src/testsAndMisc`). Any module-path change updates it in the
   *same* commit. This exact omission caused a month-long silent outage. Keep
   `main()` in `_alarm.py`.
 - **Splitting a test file loses its fixtures.** `_make_mock_tk`,

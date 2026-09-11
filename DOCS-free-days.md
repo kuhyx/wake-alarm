@@ -1,6 +1,6 @@
 # Free days — the phone picker for the shared pool
 
-The pool itself is `~/utils/freedays` (Python): one global set of days on
+The pool itself is `~/src/utils/freedays` (Python): one global set of days on
 which every gate app stands down, 35 per calendar year, declared for today or
 later, never backdated, refunded only while still in the future. Read its
 README for the rules. This file covers the phone half, which lives in this
@@ -55,7 +55,7 @@ are never the reference: comparing them to what Python reads from Dart's
 file cannot see a drift in what Dart *writes*. Proved on 2026-09-11 by
 dropping the sticky `consumed` from `release` — the gate reported
 `remaining: dart=33 python=32`. Needs the freedays venv
-(`~/utils/freedays/install.sh`).
+(`~/src/utils/freedays/install.sh`).
 
 ## Do NOT
 

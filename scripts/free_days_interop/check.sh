@@ -4,13 +4,13 @@
 # Cross-language gate for the free-day pool.
 #
 # phone_app/lib/services/free_day_pool.dart reimplements the rules that
-# ~/utils/freedays (Python) owns. Two implementations of one policy drift,
+# ~/src/utils/freedays (Python) owns. Two implementations of one policy drift,
 # and a Dart-only test cannot see it: it is self-consistent with the port.
 # This writes a pool through the Dart rules and reads it back through the
 # Python ones, and fails on any disagreement about what is free, what is
 # spent and how many days are left.
 #
-# Requires the freedays venv that install.sh in ~/utils/freedays creates.
+# Requires the freedays venv that install.sh in ~/src/utils/freedays creates.
 #
 # Usage: scripts/free_days_interop/check.sh
 # ============================================================================
@@ -32,7 +32,7 @@ trap cleanup EXIT
 
 validate_requirements() {
     if [[ ! -x "$FREEDAYS_PYTHON" ]]; then
-        echo "Error: no freedays venv at $FREEDAYS_PYTHON (run ~/utils/freedays/install.sh)" >&2
+        echo "Error: no freedays venv at $FREEDAYS_PYTHON (run ~/src/utils/freedays/install.sh)" >&2
         exit 1
     fi
     command -v flutter >/dev/null || { echo "Error: flutter not on PATH" >&2; exit 1; }

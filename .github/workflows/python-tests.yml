@@ -23,7 +23,7 @@ jobs:
       - name: Run tests with coverage
         run: python -m pytest -v
 
-  # The Dart free-day rules are a port of ~/utils/freedays. This is the
+  # The Dart free-day rules are a port of ~/src/utils/freedays. This is the
   # cross-language gate (scripts/free_days_interop/check.sh): it needs both
   # Flutter and the Python package, which the pre-commit job does not have,
   # so it runs here and the pre-commit job SKIPs that one hook.

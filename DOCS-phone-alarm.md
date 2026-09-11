@@ -168,7 +168,7 @@ channel and arms nothing. Do not "clean these up" without replacing the
 capability.
 
 Emulator: `wake_alarm_api36` (Pixel 6a profile, API 36). The SDK tools are at
-`~/Android/Sdk` but **not on PATH** — export `ANDROID_HOME` and add
+`~/sdk/Android/Sdk` but **not on PATH** — export `ANDROID_HOME` and add
 `cmdline-tools/latest/bin`, `emulator` and `platform-tools` yourself. The
 phone (Pixel 6a, `23181JEGR08034`) holds a **release-signed** build, so
 `phone_deploy.sh` needs `--release` or the install fails with

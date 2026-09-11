@@ -69,7 +69,7 @@ can reach the two-minute floor or the five-minute bypass.
 More, including everything that is a hard crash or a silent no-ring:
 **`DOCS-phone-alarm.md`**.
 
-**Free days.** On a day in the shared pool (`~/utils/freedays`) the phone
+**Free days.** On a day in the shared pool (`~/src/utils/freedays`) the phone
 does not ring at all: `AlarmReceiver` checks a native cache Dart rewrites
 after every mark/release/sync. Picker, cache and its fail-closed contract:
 **`DOCS-free-days.md`**.
@@ -176,8 +176,8 @@ site-packages:
 directory — it is editable, so a later `git pull` in that clone updates the
 running production code. From `/tmp` or via `pip install "wake_alarm @ git+..."`
 you get a snapshot frozen at that commit, and the next push silently does not
-reach the running service. Convention: `~/wake-alarm`, mirroring
-`~/screen-locker`.
+reach the running service. Convention: `~/src/wake-alarm`, mirroring
+`~/src/screen-locker`.
 
 If you add a dependency and only install it into a dev venv, the service fails
 with `ModuleNotFoundError` on its next run — this exact gap caused a 3-day

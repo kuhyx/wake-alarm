@@ -8,7 +8,7 @@ import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 
 /// The shared free-day pool, as the phone sees it.
 ///
-/// A Dart port of `~/utils/freedays` (Python), which owns the rules: one
+/// A Dart port of `~/src/utils/freedays` (Python), which owns the rules: one
 /// global pool for every gate app, 35 days per calendar year resetting on
 /// Jan 1, declared for today or later and never backdated, releasing refunds
 /// only a day that has not arrived, and `consumed` is sticky. The record

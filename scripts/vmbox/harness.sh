@@ -69,7 +69,7 @@ step() {
 
 validate_requirements() {
     command -v vm >/dev/null 2>&1 ||
-        die "vmbox is not installed. Run: bash ~/utils/vmbox/install.sh"
+        die "vmbox is not installed. Run: bash ~/src/utils/vmbox/install.sh"
     [[ -f "$REPO_DIR/install.sh" ]] ||
         die "cannot find install.sh; run this from the wake-alarm repo"
 }
@@ -114,7 +114,7 @@ run_install() {
     # a guest ImportError through as a pass, and the three cases downstream
     # then failed with no hint that the install was the cause.
     vm run "$VM_NAME" \
-        'cd ~/wake-alarm && bash install.sh && echo INSTALL-OK' \
+        'cd ~/src/wake-alarm && bash install.sh && echo INSTALL-OK' \
         >/tmp/wa-install.log 2>&1 || true
     if ! grep -q 'INSTALL-OK' /tmp/wa-install.log; then
         tail -20 /tmp/wa-install.log >&2
@@ -130,7 +130,7 @@ run_cases() {
     step "Running the guest cases"
     local output
     output="$(vm run "$VM_NAME" \
-        'bash ~/wake-alarm/scripts/vmbox/guest_cases.sh all' 2>&1)"
+        'bash ~/src/wake-alarm/scripts/vmbox/guest_cases.sh all' 2>&1)"
     echo "$output"
     grep -q "$GUEST_OK_SENTINEL" <<<"$output"
 }

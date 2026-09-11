@@ -3,7 +3,7 @@
 `scripts/vmbox/harness.sh` is this repo's default gate for the shell and
 system pieces — `install.sh`, the systemd units, `shutdown-wrapper.sh`, the
 power-key inhibitor and the re-fire path. It provisions a throwaway Arch guest
-(`~/utils/vmbox`), installs this repo into it exactly the way a real machine
+(`~/src/utils/vmbox`), installs this repo into it exactly the way a real machine
 does, runs the cases, and returns a host-side verdict.
 
 ```bash
