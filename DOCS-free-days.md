@@ -45,13 +45,17 @@ date → service start; a garbage XML file → service start.
 ## Cross-language check
 
 The Dart port is a second implementation of the rules, so it is verified
-against the Python one rather than against itself: a log written by
-`FreeDayPool` (mark, mark today, mark+release future, mark+release after
-arrival) read back with `freedays.is_free_day` / `remaining` gives the same
-verdicts and the same count (32 of 35), and the PC's live pool read by Dart
-gives the same 27 of 35 that `freedays status` prints. Rerun that whenever
-either side's policy changes — the shape test in `free_day_pool_test.dart`
-only checks field names, not semantics.
+against the Python one rather than against itself:
+`scripts/free_days_interop/check.sh` (a pre-commit hook on both inputs)
+writes one pool through `FreeDayPool` — mark, mark today, mark+release a
+future day, mark+release after arrival — replays the same edits through
+`freedays.mark`/`release` into a scratch pool, and fails unless the free set,
+spent set, `remaining` and `is_free_day` verdicts agree. Dart's own numbers
+are never the reference: comparing them to what Python reads from Dart's
+file cannot see a drift in what Dart *writes*. Proved on 2026-09-11 by
+dropping the sticky `consumed` from `release` — the gate reported
+`remaining: dart=33 python=32`. Needs the freedays venv
+(`~/utils/freedays/install.sh`).
 
 ## Do NOT
 

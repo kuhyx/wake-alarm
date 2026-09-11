@@ -140,6 +140,43 @@ void main() {
     expect(syncs, 1);
   });
 
+  testWidgets('the picker opens even when today is already free', (
+    tester,
+  ) async {
+    await pool.mark(_today, now: _today);
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Take a day'));
+    await tester.pumpAndSettle();
+    // The cursor moved to the 12th; today is disabled, not asserted on.
+    expect(find.text('Take a free day'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark free'));
+    await tester.pumpAndSettle();
+
+    expect(pool.isFree(DateTime(2026, 9, 12)), isTrue);
+    expect(find.text('33 of 35'), findsOneWidget);
+  });
+
+  testWidgets('cancelling the reason dialog marks nothing', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Take a day'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('12'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(pool.freeDays(), isEmpty);
+    expect(find.text('35 of 35'), findsOneWidget);
+    expect(syncs, 1);
+  });
+
   testWidgets('a pool that cannot open reports it', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

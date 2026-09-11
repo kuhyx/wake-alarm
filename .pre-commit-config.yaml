@@ -147,6 +147,15 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      # The Dart free-day rules are a port of ~/utils/freedays; this replays
+      # one edit sequence through both and fails on any semantic disagreement.
+      # Only fires when either implementation's inputs change.
+      - id: free-days-interop
+        name: free-day rules agree with the Python package
+        entry: scripts/free_days_interop/check.sh
+        language: system
+        pass_filenames: false
+        files: (phone_app/lib/services/free_day_pool\.dart|phone_app/test/free_day_interop_writer_test\.dart|scripts/free_days_interop/.*)$
       - id: shellcheck
         name: shellcheck
         entry: bash -c 'printf "%s\0" "$@" | xargs -0 -n 40 shellcheck --severity=warning' --

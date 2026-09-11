@@ -83,9 +83,17 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
     final pool = _pool;
     if (pool == null) return;
     final today = _today;
+    // showDatePicker asserts that initialDate satisfies the predicate, so
+    // when today is already free the cursor starts on the next day that is
+    // not. Day arithmetic, not Duration: adding 24h across a DST change
+    // lands on the same date twice.
+    var initial = today;
+    while (pool.isFree(initial)) {
+      initial = DateTime(initial.year, initial.month, initial.day + 1);
+    }
     final picked = await showDatePicker(
       context: context,
-      initialDate: today,
+      initialDate: initial,
       firstDate: today,
       lastDate: DateTime(today.year + 1, 12, 31),
       helpText: 'Take a free day',
@@ -93,8 +101,9 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
     );
     if (picked == null || !mounted) return;
     final reason = await _askReason();
-    if (!mounted) return;
-    await _apply(() => pool.mark(picked, reason: reason ?? '', now: today));
+    // Null is Cancel or a barrier tap; an empty string is "no reason".
+    if (reason == null || !mounted) return;
+    await _apply(() => pool.mark(picked, reason: reason, now: today));
   }
 
   /// Optional, by design. Enter with an empty field and nothing is stored.
@@ -110,6 +119,10 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
           decoration: const InputDecoration(hintText: 'e.g. travelling'),
         ),
         actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
             child: const Text('Mark free'),
