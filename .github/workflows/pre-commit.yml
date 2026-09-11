@@ -29,4 +29,8 @@ jobs:
           python-version: "3.x"
       - name: Install dependencies
         run: pip install -r requirements.txt
+      # free-days-interop needs Flutter and the freedays venv; it runs as its
+      # own job in python-tests.yml, so skipping it here is not fail-open.
       - uses: pre-commit/action@v3.0.1
+        env:
+          SKIP: free-days-interop

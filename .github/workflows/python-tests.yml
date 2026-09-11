@@ -22,3 +22,37 @@ jobs:
 
       - name: Run tests with coverage
         run: python -m pytest -v
+
+  # The Dart free-day rules are a port of ~/utils/freedays. This is the
+  # cross-language gate (scripts/free_days_interop/check.sh): it needs both
+  # Flutter and the Python package, which the pre-commit job does not have,
+  # so it runs here and the pre-commit job SKIPs that one hook.
+  free-days-interop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the Python side of the pool
+        uses: actions/checkout@v4
+        with:
+          repository: kuhyx/utils
+          path: .utils
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install freedays into its own venv
+        run: |
+          python -m venv .freedays-venv
+          .freedays-venv/bin/pip install --quiet .utils/crdt-sync
+          .freedays-venv/bin/pip install --quiet --no-deps .utils/freedays
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.3
+          channel: stable
+          cache: true
+
+      - name: Dart writes, Python replays, both must agree
+        run: FREEDAYS_PYTHON="$PWD/.freedays-venv/bin/python" bash scripts/free_days_interop/check.sh
