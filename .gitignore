@@ -21,3 +21,6 @@ wake_alarm/wake_state.json
 
 # ci_mirror.sh cached requirements.txt venv (rebuilt on demand)
 .ci-mirror-venv/
+
+# FVM Version Cache
+.fvm/
