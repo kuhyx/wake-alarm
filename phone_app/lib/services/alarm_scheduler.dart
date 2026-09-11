@@ -20,11 +20,10 @@ class AlarmScheduler {
   /// days) and its baked-in fallback hour. Callers pass a time resolved by
   /// `AlarmPolicy`, never a user-chosen one: the schedule is fixed at 08:00
   /// and only ever ratchets earlier.
-  Future<void> schedule(int hour, int minute) =>
-      _channel.invokeMethod<void>('schedule', <String, int>{
-        'hour': hour,
-        'minute': minute,
-      });
+  Future<void> schedule(int hour, int minute) => _channel.invokeMethod<void>(
+    'schedule',
+    <String, int>{'hour': hour, 'minute': minute},
+  );
 
   // There is deliberately NO cancel(). The alarm cannot be switched off from
   // the app: the only way past it is the full dismiss ritual at ring time.
@@ -35,11 +34,10 @@ class AlarmScheduler {
   ///
   /// Called from the app's init seam, so simply launching the app arms the
   /// alarm — there is no button to forget to press.
-  Future<void> armSchedule(int hour, int minute) =>
-      _channel.invokeMethod<void>('armSchedule', <String, int>{
-        'hour': hour,
-        'minute': minute,
-      });
+  Future<void> armSchedule(int hour, int minute) => _channel.invokeMethod<void>(
+    'armSchedule',
+    <String, int>{'hour': hour, 'minute': minute},
+  );
 
   /// Re-arms from the stored time; false when no alarm was ever set.
   ///
@@ -99,6 +97,15 @@ class AlarmScheduler {
   Future<void> closeRingScreen() =>
       _channel.invokeMethod<void>('closeRingScreen');
 
+  /// Hands the native ring path the current set of free ISO dates.
+  ///
+  /// The alarm fires from Kotlin with no Flutter engine running, so the
+  /// Dart-side pool is invisible at 08:00. This is the cache `AlarmReceiver`
+  /// consults before making any noise; it is rewritten after every local
+  /// change and every sync, so it is only ever as stale as the last launch.
+  Future<void> setFreeDays(List<String> isoDates) => _channel
+      .invokeMethod<void>('setFreeDays', <String, Object>{'dates': isoDates});
+
   /// Starts the ring immediately, without waiting for the alarm instant.
   ///
   /// Exists so the foreground-service and full-screen-intent path can be
@@ -129,12 +136,14 @@ class AlarmScheduler {
     double? homeLon,
     bool withFix = false,
   }) async {
-    final result = await _channel
-        .invokeMapMethod<String, Object?>('readPresence', <String, Object?>{
-          'homeLat': homeLat,
-          'homeLon': homeLon,
-          'withFix': withFix,
-        });
+    final result = await _channel.invokeMapMethod<String, Object?>(
+      'readPresence',
+      <String, Object?>{
+        'homeLat': homeLat,
+        'homeLon': homeLon,
+        'withFix': withFix,
+      },
+    );
     return result;
   }
 }

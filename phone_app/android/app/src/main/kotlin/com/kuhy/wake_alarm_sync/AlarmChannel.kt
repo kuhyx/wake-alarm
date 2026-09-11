@@ -61,6 +61,18 @@ object AlarmChannel {
                 AlarmService.start(context)
                 result.success(null)
             }
+            // The Dart pool's free dates, cached where AlarmReceiver can
+            // read them with no engine running. Dart calls this after every
+            // mark, release and sync; see FreeDays.kt.
+            "setFreeDays" -> {
+                val dates = call.argument<List<String>>("dates")
+                if (dates == null) {
+                    result.error("bad_args", "dates is required", null)
+                } else {
+                    FreeDays.store(context, dates)
+                    result.success(null)
+                }
+            }
             "hasNfc" -> result.success(NfcReader.isAvailable(context))
             // Raw observations only; home_presence.dart decides what they mean.
             // Lives here rather than in MainActivity's override (as NfcReader

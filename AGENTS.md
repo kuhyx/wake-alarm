@@ -69,6 +69,11 @@ can reach the two-minute floor or the five-minute bypass.
 More, including everything that is a hard crash or a silent no-ring:
 **`DOCS-phone-alarm.md`**.
 
+**Free days.** On a day in the shared pool (`~/utils/freedays`) the phone
+does not ring at all: `AlarmReceiver` checks a native cache Dart rewrites
+after every mark/release/sync. Picker, cache and its fail-closed contract:
+**`DOCS-free-days.md`**.
+
 ## Scheduling — a per-minute timer
 
 `wake-alarm-trigger.timer` ticks every minute (`OnCalendar=*:*:00`,

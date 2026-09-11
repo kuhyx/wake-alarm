@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 
+import 'package:wake_alarm_sync/screens/free_days_screen.dart';
 import 'package:wake_alarm_sync/screens/home_body.dart';
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
@@ -10,6 +11,8 @@ import 'package:wake_alarm_sync/services/alarm_publisher.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
+import 'package:wake_alarm_sync/services/free_day_pool.dart';
+import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
 
 /// Main screen: displays the current alarm time and syncs it to the PC via
@@ -60,6 +63,27 @@ class _HomeScreenState extends State<HomeScreen> {
     await _applyPolicy();
     await _loadSyncState();
     await _syncToPc();
+    await _refreshFreeDays();
+  }
+
+  /// Pulls the shared free-day pool and hands it to the native ring path.
+  ///
+  /// Last, and silent: a day marked on the PC reaches the phone here, and
+  /// nothing on this screen reports it -- the pool is only ever consulted,
+  /// never announced. Failures are logged by [FreeDaySync] and swallowed;
+  /// an unreadable pool means the alarm rings as normal.
+  Future<void> _refreshFreeDays() async {
+    try {
+      final pool = await FreeDayPool.open();
+      await FreeDaySync().sync(pool);
+    } on Exception catch (e, stack) {
+      developer.log(
+        'free-day pool unavailable: $e',
+        name: 'WakeAlarmSync',
+        error: e,
+        stackTrace: stack,
+      );
+    }
   }
 
   /// Opens the sync store and records whether a backend is connected.
@@ -173,6 +197,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Wake Alarm Sync'),
         actions: [
+          IconButton(
+            icon: Icon(
+              Icons.event_available,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            tooltip: 'Free days',
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const FreeDaysScreen()),
+            ),
+          ),
           IconButton(
             icon: Icon(
               Icons.settings,

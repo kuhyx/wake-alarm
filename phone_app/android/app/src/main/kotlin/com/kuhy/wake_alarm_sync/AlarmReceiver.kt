@@ -3,6 +3,7 @@ package com.kuhy.wake_alarm_sync
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 
 /**
  * Receives the exact alarm and hands straight off to [AlarmService].
@@ -15,6 +16,18 @@ import android.content.Intent
  */
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // A shared free day means the alarm does not ring -- not later, not
+        // quieter, not at all. Re-arm for tomorrow (nextOccurrence rolls over
+        // because the armed instant has passed) so the day after is normal.
+        if (FreeDays.isToday(context)) {
+            Log.i(TAG, "free day: not ringing; re-armed for tomorrow")
+            AlarmScheduler.rearmFromStorage(context)
+            return
+        }
         AlarmService.start(context)
+    }
+
+    private companion object {
+        const val TAG = "WakeAlarmReceiver"
     }
 }
