@@ -17,7 +17,7 @@ dependencies:
   cupertino_icons: 1.0.9
   flutter:
     sdk: flutter
-  flutter_secure_storage: 11.1.1
+  flutter_secure_storage: 11.2.0
 
   # One-tap sign-in for the sync account. App-side only: crdt_sync stays pure
   # Dart so it keeps working on Linux desktop and headless.
