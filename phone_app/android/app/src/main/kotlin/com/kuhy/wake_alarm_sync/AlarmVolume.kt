@@ -24,10 +24,16 @@ object AlarmVolume {
     /** Player gain the ring starts at: audible in a quiet room, not a jolt. */
     const val RAMP_START_GAIN = 0.04f
 
-    /** How long the climb from [RAMP_START_GAIN] to full takes. */
-    private const val RAMP_DURATION_MS = 60_000L
+    /**
+     * How long the climb from [RAMP_START_GAIN] to full takes.
+     *
+     * Ten minutes, up from one on 2026-09-16: a minute to full blast is a
+     * jolt, not a wake-up, and with the dismiss walk taking a few minutes
+     * the whole sequence was done at maximum volume.
+     */
+    private const val RAMP_DURATION_MS = 600_000L
 
-    /** Gap between ramp steps; 30 steps over the full duration. */
+    /** Gap between ramp steps; 300 steps over the full duration. */
     private const val RAMP_STEP_MS = 2_000L
 
     /**
@@ -55,8 +61,9 @@ object AlarmVolume {
      * Waking someone at full blast is not more effective, only harsher. The
      * climb is quadratic because perceived loudness is not linear in
      * amplitude: a linear ramp lurches at the start and crawls at the end.
-     * Measured on the Pixel 6a: -28 dB at 3s, -21 dB at 15s, -12 dB at 30s,
-     * 0 dB at 62s.
+     * Measured on the Pixel 6a at the old one-minute duration: -28 dB at
+     * 3s, -21 dB at 15s, -12 dB at 30s, 0 dB at 62s; the shape is the same,
+     * stretched tenfold.
      *
      * [player] is re-read every step and a null one ends that step, so a
      * dismissal mid-ramp cannot touch a released MediaPlayer — provided the

@@ -21,6 +21,7 @@ import 'package:crdt_sync/crdt_sync.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
+import 'package:wake_alarm_sync/services/session_sync.dart';
 
 /// Field holding the registered tag ids, one string per slot.
 const nfcTagsField = 'nfc_tag_ids';
@@ -34,7 +35,7 @@ int _msOf(String editedAt) =>
     DateTime.tryParse(editedAt)?.toUtc().millisecondsSinceEpoch ?? 0;
 
 /// The stamp a value applied from the log carries locally.
-String _stampOf(Hlc hlc) => DateTime.fromMillisecondsSinceEpoch(
+String stampOf(Hlc hlc) => DateTime.fromMillisecondsSinceEpoch(
   hlc.wallTimeMs,
   isUtc: true,
 ).toIso8601String();
@@ -49,7 +50,7 @@ String _stampOf(Hlc hlc) => DateTime.fromMillisecondsSinceEpoch(
 /// stamped peer.
 Future<void> stageLocalSettings(AlarmSyncService service) async {
   final tags = await RoomProofSettings.load();
-  await _stage(
+  await stageField(
     service,
     nfcTagsField,
     tags.editedAt,
@@ -57,20 +58,22 @@ Future<void> stageLocalSettings(AlarmSyncService service) async {
     configured: tags.nfcTagIds.any((id) => id.isNotEmpty),
   );
   final home = await HomeLocationSettings.load();
-  await _stage(
+  await stageField(
     service,
     homeLocationField,
     home.editedAt,
     home.toJson(),
     configured: home.isConfigured,
   );
+  await stageSessionData(service);
 }
 
 /// The stamp of a pre-stamp value: just above the epoch, so any real edit
 /// wins, but present, so it is pushed rather than silently dropped.
 const _legacyMs = 1;
 
-Future<void> _stage(
+/// Stages one field if the local [editedAt] beats the log's stamp.
+Future<void> stageField(
   AlarmSyncService service,
   String field,
   String editedAt,
@@ -94,28 +97,30 @@ Future<void> _stage(
 Future<void> applySyncedSettings(AlarmSyncService service) async {
   final tags = await RoomProofSettings.load();
   final tagField = service.field(nfcTagsField);
-  if (tagField != null && _newer(tagField.$2, tags.editedAt)) {
+  if (tagField != null && isNewer(tagField.$2, tags.editedAt)) {
     final ids = tagField.$1;
     if (ids is List) {
       await RoomProofSettings.replaceAll(
         ids.whereType<String>().toList(),
-        _stampOf(tagField.$2),
+        stampOf(tagField.$2),
       );
     }
   }
   final home = await HomeLocationSettings.load();
   final homeField = service.field(homeLocationField);
-  if (homeField != null && _newer(homeField.$2, home.editedAt)) {
+  if (homeField != null && isNewer(homeField.$2, home.editedAt)) {
     final json = homeField.$1;
     if (json is Map) {
       await HomeLocationSettings.applySynced(
         HomeLocationSettings.fromJson(
           Map<String, dynamic>.from(json),
-        ).withEditedAt(_stampOf(homeField.$2)),
+        ).withEditedAt(stampOf(homeField.$2)),
       );
     }
   }
+  await applySyncedSessionData(service);
 }
 
-bool _newer(Hlc remote, String localEditedAt) =>
+/// Whether [remote]'s wall time beats the local ISO [localEditedAt].
+bool isNewer(Hlc remote, String localEditedAt) =>
     localEditedAt.isEmpty || remote.wallTimeMs > _msOf(localEditedAt);

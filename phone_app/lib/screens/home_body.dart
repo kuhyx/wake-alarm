@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/screens/home_history_card.dart';
 import 'package:wake_alarm_sync/screens/home_presence_line.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
@@ -107,6 +108,12 @@ class HomeBody extends StatelessWidget {
                           ).extension<AppStatusColors>()!.success,
                   ),
                 ),
+              const SizedBox(height: 24),
+              // Not `ValueKey<int>(syncEpoch)`: the presence line above
+              // already carries that key in this Column, and two children
+              // with one key mis-reconcile silently in release -- the old
+              // presence element was painted here.
+              HomeHistoryCard(key: ValueKey<String>('history-$syncEpoch')),
               if (!configured) ...[
                 const SizedBox(height: 16),
                 Text(

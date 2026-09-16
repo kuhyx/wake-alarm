@@ -49,7 +49,12 @@ class RoomProof {
   /// Steps required, counted since the alarm started ringing.
   static const int requiredSteps = 25;
 
-  /// Elapsed time also required, so shaking the phone cannot pass.
+  /// Elapsed time also required **under bypass**, so shaking the phone
+  /// cannot pass when no tag proved the walk.
+  ///
+  /// Not applied on the normal path since 2026-09-16: tag 1 has already
+  /// banked the steps by the time this stage is live, so the floor was two
+  /// minutes of ringing that nothing the user did could shorten.
   static const Duration requiredElapsed = Duration(minutes: 2);
 
   /// Whether [tagId] is the tag registered for [slot].
@@ -66,10 +71,7 @@ class RoomProof {
       );
     }
     if (tagId != expected) {
-      return RoomProofResult(
-        satisfied: false,
-        detail: 'Not tag ${slot + 1}',
-      );
+      return RoomProofResult(satisfied: false, detail: 'Not tag ${slot + 1}');
     }
     return RoomProofResult(
       satisfied: true,
@@ -78,11 +80,15 @@ class RoomProof {
     );
   }
 
-  /// Enough steps AND enough elapsed time since the ring started.
+  /// Enough steps, and — when [floor] is set — enough elapsed time too.
   ///
-  /// Both are required together. [elapsed] is passed in rather than measured
-  /// here so the ring screen owns the single clock.
-  Future<RoomProofResult> checkSteps(Duration elapsed) async {
+  /// [elapsed] is passed in rather than measured here so the ring screen
+  /// owns the single clock. [floor] is the bypass profile's anti-shake
+  /// guard; with a tag stage passed the walk is already proven.
+  Future<RoomProofResult> checkSteps(
+    Duration elapsed, {
+    bool floor = true,
+  }) async {
     final steps = await scheduler.stepsSinceRingStart();
     if (steps < 0) {
       return const RoomProofResult(
@@ -96,7 +102,7 @@ class RoomProof {
         detail: '$steps/$requiredSteps steps',
       );
     }
-    if (elapsed < requiredElapsed) {
+    if (floor && elapsed < requiredElapsed) {
       final left = requiredElapsed - elapsed;
       return RoomProofResult(
         satisfied: false,

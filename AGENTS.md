@@ -31,10 +31,12 @@ passing sent the user back to the start.
   single `roomProof.nfcTagId` migrates into slot 1. **Tags and home location
   sync** (`settings_sync.dart`, see `DOCS-phone-alarm.md`) — a reinstall
   gets them back; do not make either local-only again.
-- **Steps are unchanged** (`requiredSteps = 25`, `requiredElapsed = 2 min`),
-  and are counted from ring start, *not* re-baselined at tag 1. Consequence:
-  walking to tag 1 already banks the steps, so only the elapsed floor really
-  binds — which is why the steps stage auto-polls instead of offering a button.
+- **Steps** (`requiredSteps = 25`) are counted from ring start, *not*
+  re-baselined at tag 1, so walking to tag 1 already banks them and the stage
+  passes on its first poll. The 2-minute elapsed floor (`requiredElapsed`)
+  applies **only under bypass/away**, where no tag proved the walk and a
+  shaken phone would count; on the normal path it was two minutes of ringing
+  nothing could shorten (dropped 2026-09-16).
 - **Answers are cumulative, not consecutive.** A wrong one costs the attempt
   and nothing else.
 - **The bypass skips the tags, never the walk.** After
@@ -47,26 +49,19 @@ passing sent the user back to the start.
   deleted, not merely unrouted: the ring screen is reached by walking in from
   another room.
 
-**`HomeScreen.initState` must stay strictly sequential.** It runs
-`_applyPolicy()` → `_loadSyncState()` → `_syncToPc()` through one
-`_bootstrapSync()`, because the last reads what the first two write and
-`AlarmPublisher.publish` takes the service as a *parameter* — captured by
-value, so a later assignment can never reach it. Running them concurrently
-(as they once were) meant the startup publish always passed `null`, and since
-that was the only publish site, **nothing published for three weeks** while
-the PC honoured a record from 2026-08-09. `_pickEarlier` must publish too, or
-the one schedule edit the app offers never reaches the PC.
+**The dismiss does not end the morning.** Since 2026-09-16 it hands over, in
+the same activity, to the silent **morning session**: weigh in → bathroom tag
+→ shower → bathroom tag again → wardrobe tag → desk tag. A missed window
+(AlarmManager, request code 1003) or a phone still for 4 min re-rings, and
+silencing that is the full sequence above again; three re-rings fail the
+session. State is persisted after every change and driven by wall-clock
+instants, never Dart timers: **`DOCS-morning-session.md`**.
 
-Relatedly: `publish()` reports a missing *backend* and a missing *store*
-differently on purpose. One string for both is what made the above look like a
-configuration the user had never done, while Firebase was connected the whole
-time.
-
-`RingScreen` takes an injectable `clock`. `Stopwatch` reads the wall clock,
-which `tester.pump()` does not advance, so without that seam no widget test
-can reach the two-minute floor or the five-minute bypass.
-
-More, including everything that is a hard crash or a silent no-ring:
+**`HomeScreen.initState` must stay strictly sequential** (`_applyPolicy` →
+`_loadSyncState` → `_syncToPc`): run concurrently, the startup publish
+captured a null store and **nothing published for three weeks**. Why, the
+two deliberately distinct `publish()` failure strings, the ring's injectable
+clock, and everything that is a hard crash or a silent no-ring:
 **`DOCS-phone-alarm.md`**.
 
 **Free days.** On a day in the shared pool (`~/src/utils/freedays`) the phone
@@ -217,6 +212,8 @@ another repo with no error message anywhere.
 
 - Run tests: `python -m pytest wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-fail-under=100`
 - Phone tests: `cd phone_app && flutter test && flutter analyze`
+- Walk the whole morning on the emulator: `phone_app/scripts/emu_morning.py`
+  against `lib/main_session_probe.dart` (see `DOCS-morning-session.md`)
 - Lint: `pre-commit run --all-files`
 - Show the resolved alarm: `python -m wake_alarm._sync --show` (`--no-cache` forces a live read)
 - Show what the next tick would do: `python -m wake_alarm._trigger --dry-run`
@@ -243,6 +240,9 @@ The dev venv lacks `gatelock`, so anything importing `_state` (including
 - Don't raise the log level of `_sync`'s degraded-read paths.
 - Don't let the bypass skip the walk, and don't add a challenge kind that
   hides its own prompt.
+- Don't close the ring screen on dismiss when a session should follow, don't
+  add a re-ring cancel beyond the session's own `finishSession`, and don't
+  restore a re-ring instant that has passed (BOOT_COMPLETED replays on launch).
 - Don't make `HomeScreen.initState` concurrent again, and don't collapse
   `publish()`'s two failure messages back into one.
 - Don't date a record by when the PC fetched it.

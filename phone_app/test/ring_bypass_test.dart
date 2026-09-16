@@ -93,6 +93,21 @@ void main() {
     expect(find.text('Question 1 of 6'), findsOneWidget);
   });
 
+  testWidgets('under bypass the walk still needs elapsed time', (tester) async {
+    // The anti-shake floor lives here now and only here: with no tag to
+    // prove the walk, 25 "steps" in five seconds is a phone shaken in bed.
+    // Only an immediate bypass can hit it -- the five-minute one has already
+    // outlasted the floor by the time it fires.
+    hasNfc = false;
+    mockChannel();
+    await pumpRing(tester);
+    steps = 500;
+    elapsed = const Duration(seconds: 5);
+    await pollSteps(tester);
+    expect(find.textContaining('Keep moving'), findsOneWidget);
+    expect(find.text('Submit'), findsNothing);
+  });
+
   testWidgets('an unregistered second tag bypasses immediately', (
     tester,
   ) async {

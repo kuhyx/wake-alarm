@@ -14,6 +14,16 @@ class AlarmScheduler {
 
   final MethodChannel _channel;
 
+  /// Which scheduler instance currently owns the NFC handler.
+  ///
+  /// The handler is per *channel name*, i.e. global, but screens register
+  /// and clear it through their own instances. Route replacement runs the
+  /// new screen's `initState` before the old screen's `dispose`, so without
+  /// ownership the ring screen's dispose wiped the session screen's freshly
+  /// registered listener and no session tag was ever heard (2026-09-16, on
+  /// the Pixel).
+  static AlarmScheduler? _nfcOwner;
+
   /// Arms the alarm for the next occurrence of [hour]:[minute] in local time.
   ///
   /// The phone rings **daily**, matching the PC's `ALARM_DAYS` (all seven
@@ -66,6 +76,7 @@ class AlarmScheduler {
   /// Reader mode is driven from Kotlin, so the tap does not restart the
   /// activity — a restart would reset the challenge.
   void onNfcTag(void Function(String tagId) onTag) {
+    _nfcOwner = this;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onNfcTag') {
         final id = call.arguments;
@@ -86,8 +97,12 @@ class AlarmScheduler {
   Future<void> stopTagRegistration() =>
       _channel.invokeMethod<void>('stopTagRegistration');
 
-  /// Stops listening for NFC taps.
-  void clearNfcListener() => _channel.setMethodCallHandler(null);
+  /// Stops listening for NFC taps — only if this instance registered them.
+  void clearNfcListener() {
+    if (_nfcOwner != this) return;
+    _nfcOwner = null;
+    _channel.setMethodCallHandler(null);
+  }
 
   /// Closes the ring screen after a successful dismiss.
   ///
@@ -119,6 +134,37 @@ class AlarmScheduler {
   /// Steps since [beginStepCount], or -1 when unavailable.
   Future<int> stepsSinceRingStart() async =>
       await _channel.invokeMethod<int>('stepCount') ?? -1;
+
+  /// Arms the morning session's re-ring for the absolute instant [at], or
+  /// drops it when [at] is null.
+  ///
+  /// An AlarmManager alarm, not a Dart timer: the session screen can be
+  /// killed, paused or rebooted away mid-session, and the deadline must
+  /// survive all three. Replaces any earlier re-ring. Null exists because a
+  /// leg can have no deadline (its re-ring is spent, or the morning's are),
+  /// and the previous leg's alarm must not fire into it.
+  Future<void> armReRing(DateTime? at) => _channel.invokeMethod<void>(
+    'armReRing',
+    <String, int?>{'atMillis': at?.millisecondsSinceEpoch},
+  );
+
+  /// Ends the session: drops the pending re-ring and the motion watch.
+  ///
+  /// The only path that clears a re-ring. Called from the session's own
+  /// finish, never from a button — the wake alarm still has no off switch.
+  Future<void> finishSession() => _channel.invokeMethod<void>('finishSession');
+
+  /// Starts sampling the accelerometer; the idle clock starts now.
+  Future<void> beginMotionWatch() =>
+      _channel.invokeMethod<void>('beginMotionWatch');
+
+  /// How long the phone has lain still, or null when nothing is watching.
+  ///
+  /// Null is "unknown", never "still": a missing sensor must not re-ring.
+  Future<Duration?> motionIdle() async {
+    final millis = await _channel.invokeMethod<int>('motionIdleMillis') ?? -1;
+    return millis < 0 ? null : Duration(milliseconds: millis);
+  }
 
   /// Raw presence observations: `ssid`, `bssid`, `lat`, `lon`, `accuracy`,
   /// `distanceMeters`, `reason`.

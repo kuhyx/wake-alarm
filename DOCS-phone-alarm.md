@@ -222,3 +222,27 @@ install: both tags and the home appeared with zero taps after Google sign-in.
 - The emulator is a real peer: its device directory outranks the phone by
   HLC while it exists. Delete `wake-alarm-sync/devices/<emulator-uuid>` after
   a restore test.
+
+## The home screen's startup order, and the ring's clock
+
+Moved here from `CLAUDE.md` on 2026-09-16 for its line cap; nothing below
+has changed.
+
+**`HomeScreen.initState` must stay strictly sequential.** It runs
+`_applyPolicy()` → `_loadSyncState()` → `_syncToPc()` through one
+`_bootstrapSync()`, because the last reads what the first two write and
+`AlarmPublisher.publish` takes the service as a *parameter* — captured by
+value, so a later assignment can never reach it. Running them concurrently
+(as they once were) meant the startup publish always passed `null`, and since
+that was the only publish site, **nothing published for three weeks** while
+the PC honoured a record from 2026-08-09. `_pickEarlier` must publish too, or
+the one schedule edit the app offers never reaches the PC.
+
+Relatedly: `publish()` reports a missing *backend* and a missing *store*
+differently on purpose. One string for both is what made the above look like a
+configuration the user had never done, while Firebase was connected the whole
+time.
+
+`RingScreen` takes an injectable `clock`. `Stopwatch` reads the wall clock,
+which `tester.pump()` does not advance, so without that seam no widget test
+can reach the two-minute floor or the five-minute bypass.

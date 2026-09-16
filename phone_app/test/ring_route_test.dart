@@ -74,6 +74,9 @@ void main() {
           generator: ChallengeGenerator(random: Random(1)),
           clock: () => elapsed,
         ),
+        routes: <String, WidgetBuilder>{
+          kSessionRoute: (_) => const Scaffold(body: Text('SESSION')),
+        },
       ),
     );
     await tester.pump();
@@ -139,15 +142,20 @@ void main() {
     expect(find.textContaining('Not tag 1'), findsOneWidget);
   });
 
-  testWidgets('the walk needs elapsed time, not just a step count', (
+  testWidgets('after tag 1 the banked steps pass the walk at once', (
     tester,
   ) async {
+    // No elapsed-time floor on the normal path (2026-09-16): tag 1 already
+    // proved the walk, and the floor was two minutes of ringing that nothing
+    // the user did could shorten. It still applies under bypass -- see
+    // ring_bypass_test.
     await pumpRing(tester);
     await tapTag(tester, _tag1);
     steps = 500;
     elapsed = const Duration(seconds: 5);
     await pollSteps(tester);
-    expect(find.textContaining('Keep moving'), findsOneWidget);
+    expect(find.textContaining('Keep moving'), findsNothing);
+    expect(find.textContaining('Walked far enough'), findsOneWidget);
     expect(find.text('Tap tag 2'), findsOneWidget);
   });
 
@@ -170,10 +178,13 @@ void main() {
       await tester.pump();
     }
 
-    // Closing is load-bearing: back is disabled in both halves, so a screen
-    // left up after the last answer is a dead end over the lockscreen.
+    // The ring stops, then the morning session takes the screen over (see
+    // ring_session_handoff_test for the handoff and the away-from-home
+    // close). Back is disabled in both halves, so the dismiss must always
+    // lead *somewhere*.
     expect(calls, contains('dismiss'));
-    expect(calls, contains('closeRingScreen'));
+    await tester.pumpAndSettle();
+    expect(find.text('SESSION'), findsOneWidget);
   });
 
   testWidgets('a wrong answer costs the attempt but not the tally', (
@@ -202,7 +213,6 @@ void main() {
     );
     expect(calls, isNot(contains('closeRingScreen')));
   });
-
 }
 
 /// Local helper so the test need not import dart:async for one call.

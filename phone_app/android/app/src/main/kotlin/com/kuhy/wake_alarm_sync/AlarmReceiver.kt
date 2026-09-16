@@ -16,6 +16,14 @@ import android.util.Log
  */
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // A session deadline: the user dismissed the alarm and then stalled.
+        // No free-day check (a free day never starts a session) and no daily
+        // re-arm -- that is the wake alarm's business, not this one's.
+        if (intent.getStringExtra(AlarmScheduler.EXTRA_REASON) == AlarmScheduler.REASON_RERING) {
+            Log.i(TAG, "session deadline missed: re-ringing")
+            AlarmService.start(context)
+            return
+        }
         // A shared free day means the alarm does not ring -- not later, not
         // quieter, not at all. Re-arm for tomorrow (nextOccurrence rolls over
         // because the armed instant has passed) so the day after is normal.

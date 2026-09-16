@@ -88,6 +88,34 @@ object AlarmChannel {
             // means the picker asked, where there is no ring screen to close.
             "closeRingScreen" -> result.success(null)
             "stepCount" -> result.success(StepCounter.stepsSinceRingStart(context))
+            // The morning session's one live deadline, as an absolute epoch
+            // instant; null drops it (a leg with its re-ring spent must not
+            // inherit the previous leg's alarm). Dart ints cross the channel
+            // as Int when they fit and Long when they do not; an epoch in
+            // millis never fits.
+            "armReRing" -> {
+                val at = call.argument<Number>("atMillis")?.toLong()
+                if (at == null) {
+                    AlarmScheduler.clearReRing(context)
+                } else {
+                    AlarmScheduler.scheduleReRing(context, at)
+                }
+                result.success(null)
+            }
+            // The session's finish path, and the only thing that drops a
+            // pending re-ring. Not named "cancel" and not reachable from any
+            // screen but the session's own: the wake alarm itself still has
+            // no off switch.
+            "finishSession" -> {
+                AlarmScheduler.clearReRing(context)
+                MotionMonitor.stop(context)
+                result.success(null)
+            }
+            "beginMotionWatch" -> {
+                MotionMonitor.start(context)
+                result.success(null)
+            }
+            "motionIdleMillis" -> result.success(MotionMonitor.idleMillis())
             "beginStepCount" -> {
                 StepCounter.markRingStart(context)
                 result.success(null)

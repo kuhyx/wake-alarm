@@ -10,9 +10,13 @@ import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 import 'package:wake_alarm_sync/services/home_presence.dart';
 import 'package:wake_alarm_sync/services/ring_startup.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
+import 'package:wake_alarm_sync/services/session_handoff.dart';
 
 /// How often the live steps stage re-reads the step counter.
 const Duration kStepPollInterval = Duration(seconds: 2);
+
+/// Route of the session screen the dismiss hands over to.
+const String kSessionRoute = '/session';
 
 /// The dismiss screen shown over the lockscreen while the alarm rings.
 ///
@@ -26,6 +30,7 @@ class RingScreen extends StatefulWidget {
     this.generator,
     this.clock,
     this.presence,
+    this.handoff,
   });
 
   /// Platform bridge; defaults to the real MethodChannel.
@@ -36,6 +41,9 @@ class RingScreen extends StatefulWidget {
 
   /// Home-presence resolver; defaults to the real one.
   final HomePresence? presence;
+
+  /// Starts or resumes the morning session; defaults to the real handoff.
+  final SessionHandoff? handoff;
 
   /// Time since the ring started; defaults to a real `Stopwatch`.
   ///
@@ -132,12 +140,15 @@ class _RingScreenState extends State<RingScreen> {
   /// Re-reads the step counter while the steps stage is live.
   ///
   /// Polled rather than button-driven: the walk to tag 1 has usually already
-  /// banked the steps, so the only thing still binding is the elapsed-time
-  /// floor. Making the user hunt for a button to discover that is friction
-  /// without difficulty.
+  /// banked the steps, so on the normal path this passes on the first poll.
+  /// The elapsed-time floor applies only under bypass, where no tag proved
+  /// the walk and a shaken phone would otherwise count.
   Future<void> _pollSteps() async {
     if (_gate.stage != DismissStage.steps) return;
-    final result = await _proof.checkSteps(_elapsed());
+    final result = await _proof.checkSteps(
+      _elapsed(),
+      floor: _gate.bypassActive,
+    );
     if (!mounted || _gate.stage != DismissStage.steps) return;
     setState(() {
       if (result.satisfied) _gate.passStepsStage();
@@ -149,13 +160,14 @@ class _RingScreenState extends State<RingScreen> {
   /// Logs the current challenge so a hardware test can be scripted.
   ///
   /// Debug aid only: the answer is already on screen for whoever is holding
-  /// the phone, so this leaks nothing the user cannot see.
+  /// the phone, so this leaks nothing the user cannot see. `debugPrint`
+  /// rather than `developer.log` so it reaches logcat, which is what the
+  /// emulator harness reads the answer from.
   void _logChallenge() {
-    developer.log(
-      'challenge kind=${_challenge.kind.name} display="${_challenge.display}" '
-      'answer=${_challenge.answer} '
+    debugPrint(
+      'WakeAlarmRing: challenge kind=${_challenge.kind.name} '
+      'display="${_challenge.display}" answer=${_challenge.answer} '
       '${_gate.challengesPassed}/${_gate.challengesRequired}',
-      name: 'WakeAlarmRing',
     );
   }
 
@@ -191,9 +203,12 @@ class _RingScreenState extends State<RingScreen> {
     }
   }
 
-  /// Stops the ring, then closes this screen.
+  /// Stops the ring, then hands over to the session — or closes.
   ///
-  /// Ordered: the sound must stop even if closing the window fails.
+  /// Ordered: the sound must stop even if what follows fails. The session
+  /// screen replaces this one *inside* the activity, so NFC reader mode and
+  /// the kept-on screen carry over; closing only happens when there is no
+  /// session to run (away from home, or a ring after the day's session).
   Future<void> _finishDismiss() async {
     developer.log('dismiss: stopping ring', name: 'WakeAlarmRing');
     await _scheduler.dismiss();
@@ -202,6 +217,13 @@ class _RingScreenState extends State<RingScreen> {
     // 08:00 baseline short of reinstalling — a ratchet with no reset is a
     // trap, not a defence.
     await AlarmPolicy.resetAfterFire();
+    final handoff = widget.handoff ?? SessionHandoff(scheduler: _scheduler);
+    final session = await handoff.afterDismiss(away: _gate.awayActive);
+    if (session && mounted) {
+      developer.log('dismiss: opening session', name: 'WakeAlarmRing');
+      await Navigator.of(context).pushReplacementNamed(kSessionRoute);
+      return;
+    }
     developer.log('dismiss: closing screen', name: 'WakeAlarmRing');
     await _scheduler.closeRingScreen();
   }

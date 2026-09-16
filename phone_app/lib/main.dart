@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wake_alarm_sync/screens/home_screen.dart';
 import 'package:wake_alarm_sync/screens/ring_screen.dart';
+import 'package:wake_alarm_sync/screens/session_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
@@ -29,8 +30,18 @@ Future<void> main() async {
 
 /// Root application widget.
 class WakeAlarmSyncApp extends StatelessWidget {
-  /// Creates a [WakeAlarmSyncApp].
-  const WakeAlarmSyncApp({super.key});
+  /// Creates a [WakeAlarmSyncApp]; [newScheduler] is the probes' seam.
+  const WakeAlarmSyncApp({super.key, this.newScheduler});
+
+  /// Builds the platform bridge for the ring and session screens.
+  ///
+  /// Null in production (each screen builds the real one). The emulator
+  /// harness supplies a file-driven bridge so a machine with no NFC and no
+  /// step sensor can still walk the whole morning. A factory rather than an
+  /// instance so each screen owns its own, as in production: the NFC
+  /// listener's ownership is per instance, and sharing one instance hid the
+  /// ring-dispose-wipes-session-listener bug the phone had just shown.
+  final AlarmScheduler Function()? newScheduler;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +53,10 @@ class WakeAlarmSyncApp extends StatelessWidget {
       // is what comes up over the lockscreen; the launcher still gets home.
       routes: <String, WidgetBuilder>{
         '/': (_) => const HomeScreen(),
-        kRingRoute: (_) => const RingScreen(),
+        kRingRoute: (_) => RingScreen(scheduler: newScheduler?.call()),
+        // Reached only by pushReplacement from the ring screen, inside
+        // AlarmActivity; it is never an initial route.
+        kSessionRoute: (_) => SessionScreen(scheduler: newScheduler?.call()),
       },
     );
   }

@@ -4,6 +4,7 @@ import 'package:sync_settings_ui/sync_settings_ui.dart';
 import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
 import 'package:wake_alarm_sync/screens/home_location_screen.dart';
 import 'package:wake_alarm_sync/screens/room_proof_screen.dart';
+import 'package:wake_alarm_sync/screens/session_tags_screen.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
 
@@ -53,6 +54,15 @@ class SettingsScreen extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(builder: (_) => const RoomProofScreen()),
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Morning session tags'),
+            subtitle: const Text('Bathroom, wardrobe, desk — after the ring'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const SessionTagsScreen()),
             ),
           ),
           ListTile(

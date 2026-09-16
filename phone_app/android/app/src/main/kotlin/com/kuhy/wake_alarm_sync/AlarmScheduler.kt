@@ -22,10 +22,28 @@ object AlarmScheduler {
     /** Request code for the single alarm PendingIntent; reused so re-arming replaces. */
     private const val REQUEST_CODE = 1001
 
+    /**
+     * Request code for the morning session's re-ring.
+     *
+     * Distinct from [REQUEST_CODE] on purpose: a PendingIntent is keyed by
+     * request code, so arming the re-ring under 1001 would silently replace
+     * tomorrow's wake alarm with a one-shot twenty minutes from now.
+     */
+    private const val RERING_REQUEST_CODE = 1003
+
+    /** Intent extra naming why the receiver fired; absent on the daily alarm. */
+    const val EXTRA_REASON = "reason"
+
+    /** [EXTRA_REASON] value for a session deadline. */
+    const val REASON_RERING = "rering"
+
     /** SharedPreferences file holding the armed time, so boot can re-arm it. */
     private const val PREFS = "wake_alarm_scheduler"
     private const val KEY_HOUR = "hour"
     private const val KEY_MINUTE = "minute"
+
+    /** Epoch millis of the armed re-ring, so a reboot mid-session restores it. */
+    private const val KEY_RERING_AT = "rering_at"
 
     /** Sentinel for "no alarm stored", distinguishable from a valid 0. */
     private const val NONE = -1
@@ -65,6 +83,57 @@ object AlarmScheduler {
         val minute = prefs.getInt(KEY_MINUTE, NONE)
         if (hour == NONE || minute == NONE) return false
         schedule(context, hour, minute)
+        return true
+    }
+
+    /**
+     * Arms the morning session's re-ring for the absolute instant [atMillis].
+     *
+     * Same [AlarmManager.setAlarmClock] path as the daily alarm: it is the
+     * one this repo has proved starts the foreground service with the screen
+     * off. Replaces any earlier re-ring — the session has exactly one live
+     * deadline at a time.
+     */
+    fun scheduleReRing(context: Context, atMillis: Long) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(KEY_RERING_AT, atMillis).apply()
+        val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        manager.setAlarmClock(
+            AlarmManager.AlarmClockInfo(atMillis, showIntent(context)),
+            reRingPendingIntent(context),
+        )
+    }
+
+    /**
+     * Drops the pending re-ring. Reached only from the session's own finish
+     * path (`finishSession`); there is no Dart-facing cancel for the alarm
+     * itself.
+     */
+    fun clearReRing(context: Context) {
+        val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        manager.cancel(reRingPendingIntent(context))
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(KEY_RERING_AT).apply()
+    }
+
+    /**
+     * Re-arms a stored re-ring after a reboot; false when none is still due.
+     *
+     * A past instant is dropped, never fired: a session whose deadline
+     * passed while the phone was off is over, and a stale instant is not
+     * confined to reboots -- Android re-delivered BOOT_COMPLETED to a
+     * force-stopped app on its next launch (Pixel 6a, 2026-09-16), which
+     * fired a nine-minute-old deadline into an evening with no session.
+     */
+    fun restoreReRing(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val at = prefs.getLong(KEY_RERING_AT, NONE.toLong())
+        if (at == NONE.toLong()) return false
+        if (at <= System.currentTimeMillis()) {
+            prefs.edit().remove(KEY_RERING_AT).apply()
+            return false
+        }
+        scheduleReRing(context, at)
         return true
     }
 
@@ -111,6 +180,14 @@ object AlarmScheduler {
         context,
         REQUEST_CODE,
         Intent(context, AlarmReceiver::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /** The re-ring's own PendingIntent; the extra is how the receiver tells them apart. */
+    private fun reRingPendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        RERING_REQUEST_CODE,
+        Intent(context, AlarmReceiver::class.java).putExtra(EXTRA_REASON, REASON_RERING),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 

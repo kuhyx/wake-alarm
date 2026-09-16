@@ -3,6 +3,7 @@ package com.kuhy.wake_alarm_sync
 import android.app.KeyguardManager
 import android.content.Context
 import android.os.Bundle
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -28,6 +29,11 @@ class AlarmActivity : FlutterActivity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         super.onCreate(savedInstanceState)
+        // The morning session lives in this activity for half an hour after
+        // the ring stops. With the screen allowed to sleep the activity
+        // pauses, NFC stops polling and the motion watch stops sampling, so
+        // the only thing left working would be the AlarmManager backstop.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         dismissKeyguard()
     }
 
@@ -95,6 +101,10 @@ class AlarmActivity : FlutterActivity() {
         // pauses this one and takes reader mode down with it, and the tag tap
         // must keep working once the ring screen is back in front.
         alarmChannel?.let { NfcReader.start(this, it) }
+        // The user can still lock the phone mid-session with the power
+        // button. Coming back, the keyguard is up again and NFC is back in
+        // ON_LOCKED -- the same dead state onCreate handles.
+        dismissKeyguard()
     }
 
     override fun onPause() {
