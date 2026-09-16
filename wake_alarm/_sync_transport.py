@@ -103,8 +103,8 @@ def _read_token() -> str | None:
     return _read_token_config() or _read_token_fallback()
 
 
-def _fetch_firebase_alarm() -> tuple[int, int, float | None] | None:
-    """Fetch the newest alarm any device has pushed to Firebase.
+def fetch_firebase_logs() -> list[tuple[str, str]] | None:
+    """Fetch every device's raw ``alarm.json`` from Firebase.
 
     Discovers device directories rather than reading one fixed path: the
     phone's device id is migrating from the constant "phone" to a per-install
@@ -113,12 +113,15 @@ def _fetch_firebase_alarm() -> tuple[int, int, float | None] | None:
     waking the user at the wrong time. Listing covers both ids, and
     SYNC_ALARM_PATH remains as a last resort for a backend that cannot list.
 
+    Shared by the alarm reader and ``_weight``: the morning session's
+    weigh-in rides on the same record, so one fetch serves both.
+
     Returns None — never raises — for every failure mode, including
     ``crdt_sync`` not being importable on this interpreter, so the caller can
     fall back to GitHub and then to the cache.
 
     Returns:
-        ``(hour, minute, published_at)``, or None if unconfigured or
+        ``(device_id, raw_json)`` per device, or None if unconfigured or
         unreadable.
     """
     if not _FIREBASE_AVAILABLE:
@@ -150,8 +153,13 @@ def _fetch_firebase_alarm() -> tuple[int, int, float | None] | None:
     except (ConfigError, FirebaseAuthError, RemoteSyncError, OSError) as exc:
         _logger.info("Cannot fetch the alarm from Firebase: %s", exc)
         return None
+    return published
 
-    return newest_alarm(published)
+
+def _fetch_firebase_alarm() -> tuple[int, int, float | None] | None:
+    """The newest alarm any device has pushed to Firebase, or None."""
+    published = fetch_firebase_logs()
+    return None if published is None else newest_alarm(published)
 
 
 def _fetch_github_alarm() -> tuple[int, int, float | None] | None:

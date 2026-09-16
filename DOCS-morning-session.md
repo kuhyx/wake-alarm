@@ -70,9 +70,11 @@ Finished sessions go to `session.history` (30 kept). The home screen shows
 the last seven (`home_history_card.dart`) with weight deltas. The record
 rides on the synced `alarm.json` like the ring tags do
 (`session_sync.dart`): `session_tag_ids`, `morning_sessions` (14) and
-`latest_weight_kg` (`{date, kg}`, for diet-guard's budget — the reader on
-that side is a separate change). The PC alarm parser ignores every field it
-does not name. Sessions merge per date, newest `updatedAt` wins, so a
+`latest_weight_kg` (`{date, kg}`). The PC reads it with
+`python -m wake_alarm._weight` (`wake_alarm/_weight.py`, Firebase only, same
+device discovery as the alarm); diet-guard's `sync` imports that lazily to
+refresh the weight behind its protein target. The PC alarm parser ignores
+every field it does not name. Sessions merge per date, newest `updatedAt` wins, so a
 reinstall gets its history back.
 
 ## Gotchas — each one cost a real run
