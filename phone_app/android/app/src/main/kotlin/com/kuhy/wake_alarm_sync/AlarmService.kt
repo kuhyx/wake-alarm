@@ -46,6 +46,15 @@ class AlarmService : Service() {
         /** Vibration: 1s buzz, 1s gap, repeating from index 0. */
         private val VIBRATION_PATTERN = longArrayOf(0, 1000, 1000)
 
+        /**
+         * Whether the ring is sounding right now. Same process as both
+         * activities, so a launch during a ring can route to the dismiss
+         * screen instead of the home screen or a session checklist.
+         */
+        @Volatile
+        var running: Boolean = false
+            private set
+
         /** Starts the ring. Safe to call when already ringing — start is idempotent. */
         fun start(context: Context) {
             val intent = Intent(context, AlarmService::class.java)
@@ -54,6 +63,11 @@ class AlarmService : Service() {
 
         /** Stops the ring and releases every resource it holds. */
         fun stop(context: Context) {
+            // Cleared here, not only in onDestroy: stopService is
+            // asynchronous, and the session screen that follows a dismiss
+            // polls this flag from its first tick -- a stale true would
+            // re-ring the alarm it had just silenced.
+            running = false
             context.stopService(Intent(context, AlarmService::class.java))
         }
     }
@@ -72,12 +86,14 @@ class AlarmService : Service() {
         acquireWakeLock()
         startSound()
         startVibration()
+        running = true
         // START_STICKY: if the system kills us under memory pressure while the
         // user is still asleep, the alarm comes back rather than going silent.
         return START_STICKY
     }
 
     override fun onDestroy() {
+        running = false
         stopSound()
         stopVibration()
         releaseWakeLock()

@@ -20,7 +20,26 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (resumeMorning()) return
         requestAlarmPermissions()
+    }
+
+    /**
+     * Steps aside into [AlarmActivity] while the morning is live: a ring is
+     * sounding, or today's session is still on a leg.
+     *
+     * Decided here, natively, before any Dart runs: the home screen must
+     * never come up mid-session (a home gesture used to be a way out with
+     * no way back, 2026-09-17), and the permission prompt above must never
+     * appear over a ring. Checked on resume as well as create -- this
+     * activity is `singleTop`, and a warm instance brought back from the
+     * launcher never re-runs onCreate.
+     */
+    private fun resumeMorning(): Boolean {
+        if (!AlarmService.running && !SessionNotice.isLiveToday(this)) return false
+        startActivity(SessionNotice.resumeIntent(this))
+        finishAndRemoveTask()
+        return true
     }
 
     /**
@@ -114,6 +133,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (resumeMorning()) return
         if (registeringTag) alarmChannel?.let { NfcReader.start(this, it) }
     }
 

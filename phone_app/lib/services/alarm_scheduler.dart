@@ -148,23 +148,43 @@ class AlarmScheduler {
     <String, int?>{'atMillis': at?.millisecondsSinceEpoch},
   );
 
-  /// Ends the session: drops the pending re-ring and the motion watch.
+  /// Ends the session: drops the pending re-ring and the session notice.
   ///
   /// The only path that clears a re-ring. Called from the session's own
   /// finish, never from a button — the wake alarm still has no off switch.
   Future<void> finishSession() => _channel.invokeMethod<void>('finishSession');
 
-  /// Starts sampling the accelerometer; the idle clock starts now.
-  Future<void> beginMotionWatch() =>
-      _channel.invokeMethod<void>('beginMotionWatch');
-
-  /// How long the phone has lain still, or null when nothing is watching.
+  /// Hands the native side the live leg: [date] (`yyyy-mm-dd`), its [label]
+  /// and the instant it re-rings at, or null when it has no deadline.
   ///
-  /// Null is "unknown", never "still": a missing sensor must not re-ring.
-  Future<Duration?> motionIdle() async {
-    final millis = await _channel.invokeMethod<int>('motionIdleMillis') ?? -1;
-    return millis < 0 ? null : Duration(milliseconds: millis);
-  }
+  /// This is what the launcher redirect and the ongoing notification read
+  /// (`SessionNotice.kt`), so it must follow every leg change; the
+  /// notification counts down by itself, so it need not follow the tick.
+  Future<void> updateSessionNotice({
+    required String date,
+    required String label,
+    DateTime? deadline,
+  }) => _channel.invokeMethod<void>('updateSessionNotice', <String, Object?>{
+    'date': date,
+    'label': label,
+    'deadlineMillis': deadline?.millisecondsSinceEpoch,
+  });
+
+  /// Whether a launch right now is redirected into the morning: a ring is
+  /// sounding, or today's session is still on a leg. The probes ask before
+  /// starting a test ring on top of it.
+  Future<bool> morningLive() async =>
+      await _channel.invokeMethod<bool>('morningLive') ?? false;
+
+  /// Whether the ring is sounding right now.
+  ///
+  /// The session screen polls this every tick. A deadline that fires while
+  /// the checklist sits in the background is a heads-up notification plus
+  /// sound (an unlocked, in-use phone downgrades the full-screen intent) and
+  /// the live `singleInstance` activity is not recreated, so nothing else
+  /// would put the dismiss sequence in front of the noise.
+  Future<bool> isRinging() async =>
+      await _channel.invokeMethod<bool>('isRinging') ?? false;
 
   /// Raw presence observations: `ssid`, `bssid`, `lat`, `lon`, `accuracy`,
   /// `distanceMeters`, `reason`.

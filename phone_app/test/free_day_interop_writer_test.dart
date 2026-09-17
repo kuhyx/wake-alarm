@@ -7,9 +7,9 @@ import 'package:wake_alarm_sync/services/free_day_pool.dart';
 /// Half of the cross-language gate (`scripts/free_days_interop/check.sh`).
 ///
 /// Writes a pool through the Dart rules to `FREE_DAYS_INTEROP_OUT`, then the
-/// script replays the same edits through the Python package and compares. Under a plain
-/// `flutter test` the variable is unset and this does nothing: the point is
-/// the comparison, and only the script can make it.
+/// script replays the same edits through the Python package and compares.
+/// Under a plain `flutter test` the variable is unset and this does nothing:
+/// the point is the comparison, and only the script can make it.
 class _FilePersistence implements LogPersistence {
   _FilePersistence(this.file);
 

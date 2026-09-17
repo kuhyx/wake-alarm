@@ -52,8 +52,8 @@ class SessionBody extends StatelessWidget {
               Text('Stay up', style: theme.textTheme.headlineMedium),
               const SizedBox(height: 4),
               Text(
-                'The alarm is off. It comes back if a step below is missed, '
-                'or if the phone lies still.',
+                'The alarm is off. It comes back if a step below is missed. '
+                'Leaving the app is fine — the notification brings you back.',
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 24),

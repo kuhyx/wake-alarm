@@ -136,7 +136,6 @@ void main() {
         s.deadline(SessionLeg.bathroomIn),
         t0.add(const Duration(minutes: 10)),
       );
-      expect(s.stillnessSuspended, isTrue);
     });
   });
 
@@ -178,29 +177,16 @@ void main() {
     });
 
     test(
-      'a stillness ring keeps its reason and does not spend the deadline',
+      'a ring before the deadline keeps its reason and does not spend it',
       () {
         final s = fresh()
-          ..markReRing('still:bathroomIn', t0)
+          ..markReRing('deadline:bathroomIn', t0)
           ..recordReRing(t0.add(const Duration(minutes: 3)));
-        expect(s.reRingReasons, <String>['still:bathroomIn']);
+        expect(s.reRingReasons, <String>['deadline:bathroomIn']);
         expect(s.deadlineRung, isEmpty);
         expect(s.nextDeadline(), isNotNull);
       },
     );
-
-    test('stillness is due only when live, allowed and not showering', () {
-      final s = fresh();
-      expect(s.stillnessRingDue(const Duration(minutes: 4)), isTrue);
-      expect(s.stillnessRingDue(const Duration(minutes: 3)), isFalse);
-      expect(s.stillnessRingDue(null), isFalse);
-      expect(
-        inBathroom().stillnessRingDue(const Duration(minutes: 9)),
-        isFalse,
-      );
-      s.reRings = MorningSession.maxReRings;
-      expect(s.stillnessRingDue(const Duration(minutes: 9)), isFalse);
-    });
 
     test('a miss with no re-rings left fails the session', () {
       final s = fresh()..reRings = MorningSession.maxReRings;

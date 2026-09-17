@@ -5,6 +5,7 @@ import 'package:wake_alarm_sync/main.dart';
 import 'package:wake_alarm_sync/screens/session_body.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/morning_session.dart';
+import 'package:wake_alarm_sync/services/session_notice.dart';
 import 'package:wake_alarm_sync/services/session_publisher.dart';
 import 'package:wake_alarm_sync/services/session_rules.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
@@ -14,9 +15,6 @@ import 'package:wake_alarm_sync/services/weight_entry.dart';
 /// How often the clocks advance and the countdown redraws.
 const Duration kSessionTick = Duration(seconds: 1);
 
-/// Every this many ticks the motion watch is read.
-const int kMotionPollEvery = 5;
-
 /// Logs to logcat in release too: `developer.log` is invisible there, and a
 /// morning that went wrong on the phone is only ever debugged from logcat.
 void sessionLog(String message) => debugPrint('WakeAlarmSession: $message');
@@ -25,9 +23,10 @@ void sessionLog(String message) => debugPrint('WakeAlarmSession: $message');
 ///
 /// Shown in `AlarmActivity` in place of the ring screen, so NFC reader mode
 /// and the kept-on screen carry over. Nothing here rings by itself; the
-/// deadlines are AlarmManager alarms armed through [AlarmScheduler.armReRing]
-/// and this widget merely keeps them pointed at the live leg. What it does
-/// decide is the still-phone ring, which needs a live sensor.
+/// deadlines are AlarmManager alarms armed through [pointNativeAtLeg] and
+/// this widget merely keeps them, and the ongoing notification, pointed at
+/// the live leg. Leaving the app is allowed (a podcast before the shower):
+/// the launcher and the notification both come back here.
 class SessionScreen extends StatefulWidget {
   /// Creates the screen; every dependency is injectable for tests.
   const SessionScreen({
@@ -67,7 +66,6 @@ class _SessionScreenState extends State<SessionScreen> {
   double? _lastWeight;
   double? _confirming;
   Timer? _timer;
-  int _ticks = 0;
   bool _finishing = false;
   String _status = '';
 
@@ -78,11 +76,22 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   /// Loads the session the ring screen left, or starts one if reached cold.
+  ///
+  /// Cold with today's session already in history is a stale native record
+  /// (`SessionNotice.kt`) that redirected a launch here: one session per
+  /// day, so clear it and close rather than start the morning over.
   Future<void> _init() async {
     final tags = await SessionTagSettings.load();
     final now = _now();
     var session = await _store.loadCurrent();
     if (session == null) {
+      final today = SessionRules.dateKey(now);
+      if ((await _store.history()).any((s) => s.date == today)) {
+        sessionLog('already finished today; closing');
+        await _scheduler.finishSession();
+        await _scheduler.closeRingScreen();
+        return;
+      }
       session = SessionRules.start(
         now: now,
         tags: tags,
@@ -93,8 +102,7 @@ class _SessionScreenState extends State<SessionScreen> {
       await _store.save(session);
     }
     final last = await _store.lastWeightKg();
-    await _scheduler.beginMotionWatch();
-    await _scheduler.armReRing(session.nextDeadline());
+    await pointNativeAtLeg(_scheduler, session);
     if (!mounted) return;
     setState(() {
       _tags = tags;
@@ -143,7 +151,7 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _commit(String status) async {
     final session = _session!;
     await _store.save(session);
-    await _scheduler.armReRing(session.nextDeadline());
+    await pointNativeAtLeg(_scheduler, session);
     if (!mounted) return;
     setState(() => _status = status);
     if (!session.isActive) await _finish();
@@ -157,19 +165,17 @@ class _SessionScreenState extends State<SessionScreen> {
     if (tick.changed) {
       // A bypass passes a leg, so the deadline moves with it.
       await _store.save(session);
-      await _scheduler.armReRing(session.nextDeadline());
+      await pointNativeAtLeg(_scheduler, session);
     }
     if (tick.ringReason != null) {
       await _ring(tick.ringReason!, now);
       return;
     }
-    _ticks++;
-    if (_ticks % kMotionPollEvery == 0) {
-      final idle = await _scheduler.motionIdle();
-      if (session.stillnessRingDue(idle)) {
-        await _ring('still:${session.currentLeg!.name}', now);
-        return;
-      }
+    // The native deadline already rang (see [AlarmScheduler.isRinging]):
+    // the dismiss sequence belongs in front now, not after the 20 s grace.
+    if (session.isActive && await _scheduler.isRinging()) {
+      await _ring('deadline:${session.currentLeg!.name}', now);
+      return;
     }
     if (!mounted) return;
     setState(() {

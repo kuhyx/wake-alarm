@@ -42,12 +42,16 @@ value passes the first leg by itself — there is nothing to walk to.
   or rebooted away, and the deadline has to survive all three. `BootReceiver`
   restores it; `restoreReRing` drops an instant that has already passed
   (see *Gotchas*).
-- **A still phone** (accelerometer, `MotionMonitor.kt`, no motion for 4 min)
-  re-rings from Dart via `ringNow`, then routes itself to `/ring` in case the
-  full-screen intent lands on the live `singleInstance` activity instead of
-  recreating it. Suspended during the shower leg — the phone is on a shelf.
-  Only works while the session screen is up, which is why `AlarmActivity`
-  now holds `FLAG_KEEP_SCREEN_ON`; the deadline alarm is the backstop.
+- **No still-phone check.** An accelerometer watch (`MotionMonitor.kt`, 4 min
+  without motion) existed for one day and was deleted on 2026-09-17: it only
+  ran while the session screen was in front, and the real routine leaves the
+  app on purpose (a podcast before the shower), so it was off for most of the
+  session and never rang on the one morning it was watched. The deadlines are
+  the only re-ring. Do not bring it back as a foreground service without a
+  morning that shows a lie-in the ≤ 10-minute windows missed.
+- When Dart rings a deadline itself it routes to `/ring` afterwards, in case
+  the full-screen intent lands on the live `singleInstance` activity instead
+  of recreating it.
 - **Silencing a re-ring is the full dismiss sequence**: tag 1, the walk,
   tag 2, three questions. The ring screen's `_finishDismiss` sees a live
   session for today and resumes it with `reRings + 1`.
@@ -63,6 +67,39 @@ value passes the first leg by itself — there is nothing to walk to.
 Everything is **persisted after every change** (`session_store.dart`,
 `session.current`) and driven by wall-clock instants, because a re-ring
 replaces the whole Flutter engine and resumes from the store.
+
+## Leaving the app, and coming back
+
+The checklist lives in `AlarmActivity` (NFC reader mode and the kept-on
+screen are asserted there), and the launcher starts `MainActivity`. Until
+2026-09-17 a home gesture or a recents swipe therefore lost the screen for
+good: the re-ring still fired, but the app opened on the home screen with no
+way back to the leg. Now **every launch while the morning is live lands in
+`AlarmActivity`**, and the home screen is unreachable until the session is
+over:
+
+- `MainActivity.resumeMorning()` runs in `onCreate` *and* `onResume` (the
+  activity is `singleTop`; a warm instance never re-runs `onCreate`), before
+  any Dart and before the permission prompt — a permission dialog must never
+  come up over a ring. It starts `AlarmActivity` with the `route` extra and
+  finishes itself.
+- It decides natively, from `SessionNotice.kt`: a cache Dart rewrites on
+  every leg change (`updateSessionNotice`, always paired with `armReRing` in
+  `session_notice.dart`) holding the session's **date** and the leg label.
+  A cache dated any other day is ignored, never resumed — the phone dying
+  mid-morning must not open a dead checklist the next evening. Flutter's
+  own preferences file is deliberately not parsed from Kotlin.
+- **A sounding ring wins.** `AlarmService.running` routes the launch — and
+  `AlarmActivity.getInitialRoute()` — to `/ring` whatever the extra says,
+  so a swiped-away ring reopened from the launcher gets the dismiss
+  sequence, not the home screen or a checklist over the noise.
+- **An ongoing notification** ("Morning session — Tap the bathroom tag",
+  counting down to the re-ring) is one tap back to the leg. Silent channel,
+  `setOnlyAlertOnce`, native chronometer, so Dart posts it per leg, not per
+  tick. `finishSession` is the only thing that cancels it. The launcher
+  redirect is the guarantee; the notification is the convenience.
+- `main_session_probe.dart` asks `morningLive` before its test ring, so a
+  relaunch of the probe during a session resumes rather than rings.
 
 ## History and sync
 
@@ -104,8 +141,8 @@ reinstall gets its history back.
 ## Testing it without a bathroom
 
 `lib/main_session_probe.dart` runs the real app on `FileDrivenScheduler`
-(`lib/probe/`), which replaces NFC, the step count and the motion watch with
-files under `/sdcard/Android/data/com.kuhy.wake_alarm_sync/files/`.
+(`lib/probe/`), which replaces NFC and the step count with files under
+`/sdcard/Android/data/com.kuhy.wake_alarm_sync/files/`.
 `phone_app/scripts/emu_morning.py` drives it:
 
 ```sh
@@ -113,13 +150,15 @@ flutter run -d emulator-5554 --debug -t lib/main_session_probe.dart > run.log
 scripts/emu_morning.py --log run.log dismiss    # ring1, 30 steps, ring2, answers
 scripts/emu_morning.py weight 72.4
 scripts/emu_morning.py tag bath                 # then wait 8 min, tag bath again
-scripts/emu_morning.py idle 250000              # still phone -> re-ring
+scripts/emu_morning.py home; scripts/emu_morning.py launch   # back on the leg
+scripts/emu_morning.py rering                   # the deadline broadcast, now
 scripts/emu_morning.py --log run.log dismiss    # resumes at the same leg, 1/3
 scripts/emu_morning.py tag ward; scripts/emu_morning.py tag desk
 ```
 
 Verified this way on 2026-09-16 (API 36 AVD): the whole morning including a
-still-phone re-ring and the resume. `flutter build apk --debug --target`
+re-ring and the resume; on 2026-09-17 the home-and-relaunch round trip on a
+leg and during a ring. `flutter build apk --debug --target`
 produced an APK that ran `main.dart` instead; `flutter run -t` did not.
 The phone remains the only test of the AlarmManager deadline with the
 screen off and the app swiped away.

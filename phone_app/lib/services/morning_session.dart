@@ -108,9 +108,6 @@ class MorningSession {
   /// your feet — never a silent skip.
   static const Duration bypassGrace = Duration(minutes: 5);
 
-  /// A phone that has not moved for this long is on a nightstand.
-  static const Duration stillnessLimit = Duration(minutes: 4);
-
   /// Re-rings per morning before the session gives up.
   static const int maxReRings = 3;
 
@@ -147,7 +144,7 @@ class MorningSession {
   /// Re-rings dismissed so far this session.
   int reRings;
 
-  /// Why each re-ring happened, e.g. `still:dressed`, `deadline:atDesk`.
+  /// Why each re-ring happened, e.g. `deadline:atDesk`.
   final List<String> reRingReasons;
 
   /// Set by the driver before it rings, so the dismiss can name the reason.
@@ -187,9 +184,6 @@ class MorningSession {
 
   /// Whether another re-ring is allowed.
   bool get canReRing => reRings < maxReRings;
-
-  /// Whether the still-phone check is off: it lies on a shelf in the shower.
-  bool get stillnessSuspended => currentLeg == SessionLeg.showerDone;
 
   /// Whether this session still needs driving.
   bool get isActive => outcome == SessionOutcome.active;

@@ -14,7 +14,7 @@ void main() {
 
   late List<MethodCall> calls;
   late DateTime now;
-  int? idleMs;
+  var ringing = false;
   var published = 0;
 
   void mockChannel() {
@@ -24,7 +24,7 @@ void main() {
           (call) async {
             calls.add(call);
             if (call.method == 'hasNfc') return true;
-            if (call.method == 'motionIdleMillis') return idleMs ?? -1;
+            if (call.method == 'isRinging') return ringing;
             return null;
           },
         );
@@ -53,7 +53,7 @@ void main() {
   setUp(() async {
     calls = <MethodCall>[];
     now = DateTime(2026, 9, 17, 8, 4);
-    idleMs = null;
+    ringing = false;
     published = 0;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     mockChannel();
@@ -92,12 +92,31 @@ void main() {
     expect(find.text('Stay up'), findsOneWidget);
     expect(find.text('Weigh in'), findsOneWidget);
     expect(find.text('Alarm returns in 10:00'), findsOneWidget);
-    expect(methods(), contains('beginMotionWatch'));
+    final deadline = now.add(MorningSession.legWindow).millisecondsSinceEpoch;
     final arm = calls.firstWhere((c) => c.method == 'armReRing');
-    expect(arm.arguments, <String, int?>{
-      'atMillis': now.add(MorningSession.legWindow).millisecondsSinceEpoch,
+    expect(arm.arguments, <String, int?>{'atMillis': deadline});
+    // The native record behind the launcher redirect and the notification
+    // follows the deadline in the same breath.
+    final notice = calls.firstWhere((c) => c.method == 'updateSessionNotice');
+    expect(notice.arguments, <String, Object?>{
+      'date': '2026-09-17',
+      'label': 'Tap the bathroom tag',
+      'deadlineMillis': deadline,
     });
     expect((await SessionStore().loadCurrent())?.date, '2026-09-17');
+  });
+
+  testWidgets('every leg change re-points the native notice', (tester) async {
+    await pumpSession(tester);
+    await logWeight(tester, '72');
+    await tap('bath');
+    await tester.pump();
+    final labels = calls
+        .where((c) => c.method == 'updateSessionNotice')
+        .map((c) => (c.arguments as Map<Object?, Object?>)['label'])
+        .toList();
+    expect(labels.last, 'Shower, then tap the bathroom tag again');
+    expect(methods(), isNot(contains('beginMotionWatch')));
   });
 
   testWidgets('walks every leg, then finishes, archives and closes', (
@@ -137,7 +156,7 @@ void main() {
     expect(done.reRings, 0);
   });
 
-  testWidgets('a still phone rings and routes to the ring screen', (
+  testWidgets('a native ring already sounding routes to the ring screen', (
     tester,
   ) async {
     await pumpSession(tester);
@@ -146,22 +165,22 @@ void main() {
     now = now.add(const Duration(minutes: 9));
     await tap('bath');
     await tester.pump();
-    idleMs = MorningSession.stillnessLimit.inMilliseconds;
-    await tick(tester, kMotionPollEvery);
+    ringing = true;
+    await tick(tester);
     await tester.pumpAndSettle();
     expect(methods(), contains('ringNow'));
     expect(find.text('RING'), findsOneWidget);
     final saved = (await SessionStore().loadCurrent())!;
-    expect(saved.pendingReRingReason, 'still:dressed');
+    expect(saved.pendingReRingReason, 'deadline:dressed');
     expect(saved.currentLeg, SessionLeg.dressed);
   });
 
-  testWidgets('stillness is ignored while showering', (tester) async {
+  testWidgets('a silent phone keeps ticking without ringing', (tester) async {
     await pumpSession(tester);
     await logWeight(tester, '72');
     await tap('bath');
-    idleMs = MorningSession.stillnessLimit.inMilliseconds * 2;
-    await tick(tester, kMotionPollEvery);
+    await tick(tester, 5);
+    expect(methods(), contains('isRinging'));
     expect(methods(), isNot(contains('ringNow')));
   });
 

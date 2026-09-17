@@ -12,9 +12,8 @@ class SessionTick {
 
   /// Why to ring right now, or null.
   ///
-  /// Set only for a stillness ring or a deadline the native alarm should
-  /// already have fired — calling the ring twice is harmless, missing it is
-  /// not.
+  /// Set only for a deadline the native alarm should already have fired —
+  /// calling the ring twice is harmless, missing it is not.
   final String? ringReason;
 
   /// Something to show, or null.
@@ -140,14 +139,6 @@ extension SessionRules on MorningSession {
     }
     return SessionTick(ringReason: 'deadline:${leg.name}');
   }
-
-  /// Whether the phone has lain still long enough to ring.
-  bool stillnessRingDue(Duration? idle) =>
-      isActive &&
-      canReRing &&
-      !stillnessSuspended &&
-      idle != null &&
-      idle >= MorningSession.stillnessLimit;
 
   /// Names the re-ring the driver is about to trigger.
   void markReRing(String reason, DateTime now) {

@@ -11,11 +11,10 @@ import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 /// The emulator has no NFC and no step sensor, so the real dismiss sequence
 /// and the whole morning session are unreachable on it. This bridge keeps
 /// every alarm, ring and re-ring call on the real channel and replaces only
-/// the three inputs hardware would supply:
+/// the two inputs hardware would supply:
 ///
 /// - `files/tag`     — a tag id; consumed once, delivered to the NFC listener
 /// - `files/steps`   — the step count the ring's walk stage reads
-/// - `files/idle_ms` — how long the phone has "lain still"
 ///
 /// under `/sdcard/Android/data/<package>/files/`. Probe-only: `lib/main.dart`
 /// never constructs it.
@@ -67,10 +66,4 @@ class FileDrivenScheduler extends AlarmScheduler {
   @override
   Future<int> stepsSinceRingStart() async =>
       int.tryParse(await _read('steps') ?? '') ?? -1;
-
-  @override
-  Future<Duration?> motionIdle() async {
-    final ms = int.tryParse(await _read('idle_ms') ?? '');
-    return ms == null ? null : Duration(milliseconds: ms);
-  }
 }

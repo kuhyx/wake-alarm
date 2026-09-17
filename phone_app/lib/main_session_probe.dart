@@ -8,9 +8,11 @@ import 'package:wake_alarm_sync/services/session_tag_settings.dart';
 
 /// Emulator entrypoint: the whole morning, driven from adb.
 ///
-/// Like `main_ring_probe.dart` it rings on launch, but it runs the app on a
-/// [FileDrivenScheduler] and registers fixed tag ids, so the dismiss walk
-/// and the session legs can be fed by writing files:
+/// Like `main_ring_probe.dart` it rings on launch -- unless the morning is
+/// already live, in which case the launch is redirected into it exactly as
+/// the launcher's would be -- but it runs the app on a [FileDrivenScheduler]
+/// and registers fixed tag ids, so the dismiss walk and the session legs can
+/// be fed by writing files:
 ///
 /// ```sh
 /// F=/sdcard/Android/data/com.kuhy.wake_alarm_sync/files
@@ -27,6 +29,7 @@ Future<void> main() async {
   await SessionTagSettings.saveTagAt(SessionTagSlot.bathroom, 'bath');
   await SessionTagSettings.saveTagAt(SessionTagSlot.wardrobe, 'ward');
   await SessionTagSettings.saveTagAt(SessionTagSlot.desk, 'desk');
-  await AlarmScheduler().ringNow();
+  final scheduler = AlarmScheduler();
+  if (!await scheduler.morningLive()) await scheduler.ringNow();
   runApp(const WakeAlarmSyncApp(newScheduler: FileDrivenScheduler.new));
 }

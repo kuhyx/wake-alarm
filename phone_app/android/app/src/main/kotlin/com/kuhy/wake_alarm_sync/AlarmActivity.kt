@@ -20,7 +20,19 @@ class AlarmActivity : FlutterActivity() {
     /** Dart route the ring screen is registered under in main.dart. */
     private val ringRoute = "/ring"
 
-    override fun getInitialRoute(): String = ringRoute
+    /**
+     * The ring by default; the session checklist only when asked for by
+     * [SessionNotice.resumeIntent] (the launcher redirect or the ongoing
+     * notification) AND nothing is sounding. A ring always wins: an intent
+     * that opened the checklist over a live alarm would leave the sound
+     * running with no dismiss sequence in front of it. Read once, at
+     * creation -- a live `singleInstance` instance just comes forward on
+     * whatever screen Dart is showing, which is the right thing.
+     */
+    override fun getInitialRoute(): String {
+        if (AlarmService.running) return ringRoute
+        return intent?.getStringExtra(SessionNotice.EXTRA_ROUTE) ?: ringRoute
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // showWhenLocked/turnScreenOn are also set as manifest attributes; the
@@ -31,8 +43,8 @@ class AlarmActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         // The morning session lives in this activity for half an hour after
         // the ring stops. With the screen allowed to sleep the activity
-        // pauses, NFC stops polling and the motion watch stops sampling, so
-        // the only thing left working would be the AlarmManager backstop.
+        // pauses and NFC stops polling, so a tag tap would need a wake and
+        // an unlock first, every leg.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         dismissKeyguard()
     }

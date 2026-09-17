@@ -80,4 +80,35 @@ void main() {
   test('stepsSinceRingStart reports -1 when the platform gives null', () async {
     expect(await scheduler.stepsSinceRingStart(), -1);
   });
+
+  test('updateSessionNotice carries date, label and the deadline', () async {
+    final at = DateTime(2026, 9, 17, 8, 45);
+    await scheduler.updateSessionNotice(
+      date: '2026-09-17',
+      label: 'Tap the bathroom tag',
+      deadline: at,
+    );
+    expect(calls.single.method, 'updateSessionNotice');
+    expect(calls.single.arguments, <String, Object?>{
+      'date': '2026-09-17',
+      'label': 'Tap the bathroom tag',
+      'deadlineMillis': at.millisecondsSinceEpoch,
+    });
+  });
+
+  test('updateSessionNotice sends null for a leg with no deadline', () async {
+    await scheduler.updateSessionNotice(date: '2026-09-17', label: 'x');
+    expect(
+      (calls.single.arguments as Map<Object?, Object?>)['deadlineMillis'],
+      isNull,
+    );
+  });
+
+  test('morningLive and isRinging fail closed on a null result', () async {
+    expect(await scheduler.morningLive(), isFalse);
+    expect(await scheduler.isRinging(), isFalse);
+    reply = true;
+    expect(await scheduler.morningLive(), isTrue);
+    expect(await scheduler.isRinging(), isTrue);
+  });
 }

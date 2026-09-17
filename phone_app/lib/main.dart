@@ -54,8 +54,11 @@ class WakeAlarmSyncApp extends StatelessWidget {
       routes: <String, WidgetBuilder>{
         '/': (_) => const HomeScreen(),
         kRingRoute: (_) => RingScreen(scheduler: newScheduler?.call()),
-        // Reached only by pushReplacement from the ring screen, inside
-        // AlarmActivity; it is never an initial route.
+        // Reached by pushReplacement from the ring screen, or as
+        // AlarmActivity's initial route when the launcher or the ongoing
+        // notification reopens a live session (SessionNotice.kt). Always
+        // inside AlarmActivity: NFC reader mode and the kept-on screen live
+        // there.
         kSessionRoute: (_) => SessionScreen(scheduler: newScheduler?.call()),
       },
     );

@@ -8,8 +8,10 @@ and types the challenge answers it reads back from logcat. Everything else
 
     scripts/emu_morning.py dismiss          # tag 1, walk, tag 2, 3 answers
     scripts/emu_morning.py tag bath         # one session tag
-    scripts/emu_morning.py idle 300000      # the phone "lay still" 5 min
+    scripts/emu_morning.py rering           # fire the deadline alarm now
     scripts/emu_morning.py weight 72.4      # type a weight and submit
+    scripts/emu_morning.py home             # leave the app (home gesture)
+    scripts/emu_morning.py launch           # tap the launcher icon
     scripts/emu_morning.py shot out.png     # screenshot
 
 Reads answers from a ``flutter run`` log (``--log``) or from ``adb logcat``.
@@ -61,6 +63,42 @@ def adb_text(serial: str, *args: str) -> str:
 def write_file(serial: str, name: str, content: str) -> None:
     """Writes one harness input file on the device."""
     adb(serial, "shell", f"mkdir -p {FILES} && printf %s '{content}' > {FILES}/{name}")
+
+
+def rering(serial: str) -> None:
+    """Delivers the session-deadline broadcast, as AlarmManager would.
+
+    Targets the receiver by component, so there is no waiting for a real
+    ten-minute window. The receiver is not exported, so the shell user's
+    broadcast is silently dropped (``result=0`` and nothing happens); adbd
+    has to run as root, which a Google-APIs AVD allows and a Play one does
+    not. Idempotent, so it is done here rather than left to the caller.
+    """
+    adb(serial, "root")
+    adb(serial, "wait-for-device")
+    adb(
+        serial,
+        "shell",
+        "am broadcast -n",
+        f"{PACKAGE}/.AlarmReceiver",
+        "--es reason rering",
+    )
+
+
+def home(serial: str) -> None:
+    """Backgrounds whatever is in front, as the home gesture does."""
+    adb(serial, "shell", "input keyevent HOME")
+
+
+def launch(serial: str) -> None:
+    """Starts the app from its launcher entry, as a tap on the icon does."""
+    adb(
+        serial,
+        "shell",
+        "monkey -p",
+        PACKAGE,
+        "-c android.intent.category.LAUNCHER 1",
+    )
 
 
 def screenshot(serial: str, path: Path) -> None:
@@ -172,7 +210,9 @@ def main(argv: list[str]) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("dismiss")
     sub.add_parser("tag").add_argument("id")
-    sub.add_parser("idle").add_argument("ms")
+    sub.add_parser("rering")
+    sub.add_parser("home")
+    sub.add_parser("launch")
     sub.add_parser("weight").add_argument("kg")
     sub.add_parser("shot").add_argument("path", type=Path)
     args = parser.parse_args(argv)
@@ -180,8 +220,12 @@ def main(argv: list[str]) -> int:
         dismiss(args.serial, args.log)
     elif args.cmd == "tag":
         write_file(args.serial, "tag", args.id)
-    elif args.cmd == "idle":
-        write_file(args.serial, "idle_ms", args.ms)
+    elif args.cmd == "rering":
+        rering(args.serial)
+    elif args.cmd == "home":
+        home(args.serial)
+    elif args.cmd == "launch":
+        launch(args.serial)
     elif args.cmd == "weight":
         type_and_submit(args.serial, args.kg)
     elif args.cmd == "shot":

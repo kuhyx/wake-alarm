@@ -108,14 +108,31 @@ object AlarmChannel {
             // no off switch.
             "finishSession" -> {
                 AlarmScheduler.clearReRing(context)
-                MotionMonitor.stop(context)
+                SessionNotice.clear(context)
                 result.success(null)
             }
-            "beginMotionWatch" -> {
-                MotionMonitor.start(context)
-                result.success(null)
+            // The live leg, for the launcher redirect and the ongoing
+            // notification; see SessionNotice.kt. Called on every leg
+            // change, never per tick.
+            "updateSessionNotice" -> {
+                val date = call.argument<String>("date")
+                val label = call.argument<String>("label")
+                if (date == null || label == null) {
+                    result.error("bad_args", "date and label are required", null)
+                } else {
+                    val at = call.argument<Number>("deadlineMillis")?.toLong()
+                    SessionNotice.update(context, date, label, at)
+                    result.success(null)
+                }
             }
-            "motionIdleMillis" -> result.success(MotionMonitor.idleMillis())
+            // Whether a launch right now would be redirected into the
+            // morning; the probes ask before starting a test ring.
+            "morningLive" ->
+                result.success(AlarmService.running || SessionNotice.isLiveToday(context))
+            // Whether the ring is sounding; the session screen polls this so
+            // a deadline that rang while it sat in the background puts the
+            // dismiss sequence in front the moment it is looked at.
+            "isRinging" -> result.success(AlarmService.running)
             "beginStepCount" -> {
                 StepCounter.markRingStart(context)
                 result.success(null)

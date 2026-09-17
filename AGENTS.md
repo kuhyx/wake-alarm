@@ -52,10 +52,10 @@ passing sent the user back to the start.
 **The dismiss does not end the morning.** Since 2026-09-16 it hands over, in
 the same activity, to the silent **morning session**: weigh in → bathroom tag
 → shower → bathroom tag again → wardrobe tag → desk tag. A missed window
-(AlarmManager, request code 1003) or a phone still for 4 min re-rings, and
-silencing that is the full sequence above again; three re-rings fail the
-session. State is persisted after every change and driven by wall-clock
-instants, never Dart timers: **`DOCS-morning-session.md`**.
+(AlarmManager, request code 1003) re-rings; silencing it is the full sequence
+again; three re-rings fail the session. Leaving the app is fine: every launch
+while the morning is live lands back on the leg (`SessionNotice.kt`). State is
+persisted after every change, on wall-clock instants: **`DOCS-morning-session.md`**.
 
 **`HomeScreen.initState` must stay strictly sequential** (`_applyPolicy` →
 `_loadSyncState` → `_syncToPc`): run concurrently, the startup publish
