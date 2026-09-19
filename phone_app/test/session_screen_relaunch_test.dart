@@ -48,11 +48,11 @@ void main() {
             tags: await SessionTagSettings.load(),
             nfcAvailable: true,
           )
-          ..enterWeight(72, at)
+          ..enterCheckIn(72, 3, at)
           ..onTag(SessionTagSlot.bathroom, at);
     await SessionStore().save(session);
     await pumpCold(tester);
-    expect(find.text('Weigh in — 72.0 kg'), findsOneWidget);
+    expect(find.text('Weigh in — 72.0 kg · energy 3/5'), findsOneWidget);
     expect(find.textContaining('tag counts in'), findsOneWidget);
     final notice = calls.lastWhere((c) => c.method == 'updateSessionNotice');
     expect(
@@ -69,7 +69,7 @@ void main() {
       now: now.subtract(const Duration(minutes: 30)),
       tags: const SessionTagSettings(),
       nfcAvailable: false,
-    )..enterWeight(72, now.subtract(const Duration(minutes: 29)));
+    )..enterCheckIn(72, 3, now.subtract(const Duration(minutes: 29)));
     expect(done.outcome, SessionOutcome.completed);
     await SessionStore().archive(done);
     await pumpCold(tester);

@@ -42,7 +42,7 @@ void main() {
 
   test('a finished session drops the deadline and posts no notice', () async {
     final s = fresh()
-      ..enterWeight(72, t0)
+      ..enterCheckIn(72, 3, t0)
       ..onTag(SessionTagSlot.bathroom, t0)
       ..onTag(SessionTagSlot.bathroom, t0.add(const Duration(minutes: 9)))
       ..onTag(SessionTagSlot.wardrobe, t0)

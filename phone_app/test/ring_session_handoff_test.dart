@@ -108,12 +108,14 @@ void main() {
     // Pixel showed a session that never heard a single tag (2026-09-16).
     final answers = await pumpApp(tester);
     await dismiss(tester, answers);
+    await tester.tap(find.widgetWithText(ChoiceChip, '4'));
+    await tester.pump();
     await tester.enterText(find.byType(TextField), '72');
     await tester.tap(find.text('Log weight'));
     await tester.pump();
     await tapTag(tester, 'bath');
     await tester.pump();
-    expect(find.text('Weigh in — 72.0 kg'), findsOneWidget);
+    expect(find.text('Weigh in — 72.0 kg · energy 4/5'), findsOneWidget);
     expect(find.textContaining('tag counts in'), findsOneWidget);
   });
 

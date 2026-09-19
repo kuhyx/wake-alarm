@@ -56,13 +56,19 @@ extension SessionRules on MorningSession {
   /// `yyyy-mm-dd` of [now], local.
   static String dateKey(DateTime now) => now.toIso8601String().substring(0, 10);
 
-  /// Records a typed, already-validated weight.
+  /// Records the check-in: a typed, already-validated weight and the
+  /// energy tap.
   ///
-  /// Pending until the bathroom tag confirms it; without a bathroom tag it
-  /// is the whole first leg.
-  String enterWeight(double kg, DateTime now) {
+  /// The weight is pending until the bathroom tag confirms it; without a
+  /// bathroom tag it is the whole first leg. The energy rating is not proof
+  /// of anything — it is the one number worth a tap while standing there.
+  String enterCheckIn(double kg, int energyLevel, DateTime now) {
     if (currentLeg != SessionLeg.bathroomIn) return 'Already weighed in';
+    if (energyLevel < minEnergy || energyLevel > maxEnergy) {
+      return 'Pick your energy ($minEnergy-$maxEnergy)';
+    }
     updatedAt = now;
+    energy = energyLevel;
     if (!bathroomTagRequired) {
       weightKg = kg;
       _pass(SessionLeg.bathroomIn, now, LegPass.tag);

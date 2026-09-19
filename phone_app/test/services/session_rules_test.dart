@@ -14,7 +14,7 @@ MorningSession fresh({SessionTagSettings tags = allTags, bool nfc = true}) =>
 
 /// Weighs in and taps the bathroom tag, leaving the shower leg live.
 MorningSession inBathroom() => fresh()
-  ..enterWeight(72, t0)
+  ..enterCheckIn(72, 3, t0)
   ..onTag(SessionTagSlot.bathroom, t0.add(const Duration(seconds: 30)));
 
 void main() {
@@ -39,7 +39,7 @@ void main() {
       final s = fresh(nfc: false);
       expect(s.bathroomTagRequired, isFalse);
       expect(s.currentLeg, SessionLeg.bathroomIn);
-      s.enterWeight(70, t0);
+      s.enterCheckIn(70, 3, t0);
       expect(s.outcome, SessionOutcome.completed);
       expect(s.weightKg, 70);
     });
@@ -48,7 +48,7 @@ void main() {
   group('weigh-in', () {
     test('stays pending until the bathroom tag confirms it', () {
       final s = fresh();
-      expect(s.enterWeight(72, t0), contains('tap the bathroom tag'));
+      expect(s.enterCheckIn(72, 3, t0), contains('tap the bathroom tag'));
       expect(s.weightKg, isNull);
       expect(s.pendingWeightKg, 72);
       s.onTag(SessionTagSlot.bathroom, t0.add(const Duration(minutes: 1)));
@@ -64,7 +64,7 @@ void main() {
     });
 
     test('a late tag discards the weight', () {
-      final s = fresh()..enterWeight(72, t0);
+      final s = fresh()..enterCheckIn(72, 3, t0);
       final late = t0.add(const Duration(minutes: 2, seconds: 1));
       expect(s.onTag(SessionTagSlot.bathroom, late), contains('expired'));
       expect(s.pendingWeightKg, isNull);
@@ -72,7 +72,7 @@ void main() {
     });
 
     test('the tick expires a pending weight too', () {
-      final s = fresh()..enterWeight(72, t0);
+      final s = fresh()..enterCheckIn(72, 3, t0);
       final tick = s.tick(t0.add(const Duration(minutes: 3)));
       expect(tick.changed, isTrue);
       expect(tick.note, contains('expired'));
@@ -81,7 +81,7 @@ void main() {
 
     test('is refused once the leg has passed', () {
       final s = inBathroom();
-      expect(s.enterWeight(80, t0), 'Already weighed in');
+      expect(s.enterCheckIn(80, 3, t0), 'Already weighed in');
       expect(s.weightKg, 72);
     });
   });

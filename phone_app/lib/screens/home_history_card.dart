@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/morning_session.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
+import 'package:wake_alarm_sync/services/weight_entry.dart';
 
 /// How many mornings the home screen shows.
 const int kHistoryShown = 7;
@@ -69,7 +70,7 @@ class _HomeHistoryCardState extends State<HomeHistoryCard> {
   }
 }
 
-/// One line for [session]: `09-16 ✓ 0 re-rings · 72.4 kg (−0.3)`.
+/// One line for [session]: `09-16 ✓ 0 re-rings · 72.4 kg (−0.3) · energy 3/5`.
 String describeMorning(MorningSession session, {double? previousWeight}) {
   final mark = switch (session.outcome) {
     SessionOutcome.completed => '✓',
@@ -87,5 +88,8 @@ String describeMorning(MorningSession session, {double? previousWeight}) {
       weight += ' ($sign${delta.abs().toStringAsFixed(1)})';
     }
   }
-  return '${session.date.substring(5)} $mark $rings$weight';
+  final energy = session.energy == null
+      ? ''
+      : ' · energy ${session.energy}/$maxEnergy';
+  return '${session.date.substring(5)} $mark $rings$weight$energy';
 }

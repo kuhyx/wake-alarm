@@ -9,6 +9,7 @@ and types the challenge answers it reads back from logcat. Everything else
     scripts/emu_morning.py dismiss          # tag 1, walk, tag 2, 3 answers
     scripts/emu_morning.py tag bath         # one session tag
     scripts/emu_morning.py rering           # fire the deadline alarm now
+    scripts/emu_morning.py energy 3         # tap energy chip 1-5
     scripts/emu_morning.py weight 72.4      # type a weight and submit
     scripts/emu_morning.py home             # leave the app (home gesture)
     scripts/emu_morning.py launch           # tap the launcher icon
@@ -24,40 +25,15 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import re
-import shutil
-import struct
-import subprocess
 import sys
 import time
 
+from emu_adb import adb, adb_text
+from emu_screen import tap_energy, type_and_submit
+
 PACKAGE = "com.kuhy.wake_alarm_sync"
 FILES = f"/sdcard/Android/data/{PACKAGE}/files"
-KEY_ENTER = "66"
-KEY_DEL = "67"
-KEY_CTRL_A = ("113", "29")
 ANSWER_RE = re.compile(r"answer=(\S+)")
-# The FilledButton's gold, as (min red, green range, max blue).
-GOLD_RED_MIN = 170
-GOLD_GREEN = (120, 170)
-GOLD_BLUE_MAX = 90
-# Columns sampled per row, and gold samples that make a row "button".
-SAMPLE_STEP = 4
-GOLD_HITS_MIN = 20
-# The text field sits this fraction of the screen height above the button.
-FIELD_ABOVE_BUTTON = 0.079
-ADB = shutil.which("adb") or "/usr/bin/adb"
-
-
-def adb(serial: str, *args: str) -> bytes:
-    """Runs one adb command and returns its raw stdout."""
-    return subprocess.run(
-        [ADB, "-s", serial, *args], capture_output=True, check=False
-    ).stdout
-
-
-def adb_text(serial: str, *args: str) -> str:
-    """Runs one adb command and returns its stdout as text."""
-    return adb(serial, *args).decode(errors="replace")
 
 
 def write_file(serial: str, name: str, content: str) -> None:
@@ -104,66 +80,6 @@ def launch(serial: str) -> None:
 def screenshot(serial: str, path: Path) -> None:
     """Captures the screen as PNG to [path]."""
     path.write_bytes(adb(serial, "exec-out", "screencap", "-p"))
-
-
-def raw_screen(serial: str) -> tuple[int, int, bytes]:
-    """The screen as (width, height, RGBA bytes), from screencap's raw dump."""
-    data = adb(serial, "exec-out", "screencap")
-    width, height = struct.unpack("<II", data[:8])
-    # Header is 12 bytes (w, h, format) or 16 (plus colour space) by API.
-    header = len(data) - width * height * 4
-    if header not in (12, 16):
-        msg = f"unexpected screencap layout: {len(data)} bytes"
-        raise SystemExit(msg)
-    return width, height, data[header:]
-
-
-def find_button_y(serial: str) -> tuple[int, int] | None:
-    """(row, screen height) of the gold FilledButton, or None when absent."""
-    width, height, pixels = raw_screen(serial)
-    rows = []
-    for y in range(height):
-        hits = 0
-        for x in range(0, width, SAMPLE_STEP):
-            i = (y * width + x) * 4
-            red, green, blue = pixels[i], pixels[i + 1], pixels[i + 2]
-            if (
-                red > GOLD_RED_MIN
-                and GOLD_GREEN[0] < green < GOLD_GREEN[1]
-                and blue < GOLD_BLUE_MAX
-            ):
-                hits += 1
-        if hits > GOLD_HITS_MIN:
-            rows.append(y)
-    if not rows:
-        return None
-    return (rows[0] + rows[-1]) // 2, height
-
-
-def focus_field(serial: str) -> bool:
-    """Taps the text field sitting above the submit button."""
-    found = find_button_y(serial)
-    if found is None:
-        return False
-    y, height = found
-    width = raw_screen(serial)[0]
-    field_y = int(y - height * FIELD_ABOVE_BUTTON)
-    adb(serial, "shell", "input", "tap", str(width // 2), str(field_y))
-    time.sleep(1)
-    return True
-
-
-def type_and_submit(serial: str, text: str) -> None:
-    """Focuses the field, replaces its content with [text], presses Enter."""
-    if not focus_field(serial):
-        msg = "no submit button on screen"
-        raise SystemExit(msg)
-    adb(serial, "shell", "input", "keycombination", *KEY_CTRL_A)
-    adb(serial, "shell", "input", "keyevent", KEY_DEL)
-    adb(serial, "shell", "input", "text", text)
-    time.sleep(0.5)
-    adb(serial, "shell", "input", "keyevent", KEY_ENTER)
-    time.sleep(2)
 
 
 def log_text(serial: str, log: Path | None) -> str:
@@ -214,6 +130,7 @@ def main(argv: list[str]) -> int:
     sub.add_parser("home")
     sub.add_parser("launch")
     sub.add_parser("weight").add_argument("kg")
+    sub.add_parser("energy").add_argument("level", type=int, choices=range(1, 6))
     sub.add_parser("shot").add_argument("path", type=Path)
     args = parser.parse_args(argv)
     if args.cmd == "dismiss":
@@ -228,6 +145,8 @@ def main(argv: list[str]) -> int:
         launch(args.serial)
     elif args.cmd == "weight":
         type_and_submit(args.serial, args.kg)
+    elif args.cmd == "energy":
+        tap_energy(args.serial, args.level)
     elif args.cmd == "shot":
         screenshot(args.serial, args.path)
     return 0

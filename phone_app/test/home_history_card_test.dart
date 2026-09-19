@@ -57,6 +57,10 @@ void main() {
       ),
       '09-14 … 0 re-rings',
     );
+    expect(
+      describeMorning(_session(DateTime(2026, 9, 13, 8), kg: 72)..energy = 4),
+      '09-13 ✓ 0 re-rings · 72.0 kg · energy 4/5',
+    );
   });
 
   testWidgets('is absent until a morning has finished', (tester) async {

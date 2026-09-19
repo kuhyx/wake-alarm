@@ -103,8 +103,10 @@ exclude = [".venv/"]
 # linted on its own. pylint otherwise infers the path from the files it is
 # given, so a script resolved its package imports only when a package file
 # happened to be in the same batch -- passing or failing by what else was
-# staged.
-init-hook = "import sys; sys.path.insert(0, '.')"
+# staged. phone_app/scripts is there too: the emulator drivers import each
+# other as siblings (`from emu_adb import adb`), which is how a script run
+# by path resolves them, and pylint has no other way to see that directory.
+init-hook = "import sys; sys.path.insert(0, '.'); sys.path.insert(0, 'phone_app/scripts')"
 analyse-fallback-blocks = true
 persistent = true
 jobs = 0

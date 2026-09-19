@@ -42,13 +42,30 @@ case_imports() {
 # install.sh writing the unit file is not the same as systemd running it, and
 # a timer that is present but disabled fails silently every morning.
 case_units() {
-    local name state
-    name="trigger-timer-enabled"
-    state="$(systemctl --user is-enabled wake-alarm-trigger.timer 2>&1)"
-    if [[ "$state" == "enabled" ]]; then
+    local timer state
+    for timer in wake-alarm-trigger.timer wake-alarm-session.timer; do
+        state="$(systemctl --user is-enabled "$timer" 2>&1)"
+        if [[ "$state" == "enabled" ]]; then
+            pass "${timer%.timer}-enabled"
+        else
+            fail "${timer%.timer}-enabled" "expected enabled, got '$state'"
+        fi
+    done
+}
+
+# --- Case: the session refresh runs without a backend ------------------------
+# The guest has no Firebase config, so --refresh must degrade to "no verified
+# morning session" (exit 1) rather than crash: that is what an unconfigured
+# machine's timer does every two minutes.
+case_session_refresh() {
+    local name="session-refresh-degrades" output
+    # Exit 1 is the expected verdict here ("nothing verifiable"), so capture
+    # first: piped straight into grep, pipefail would fail the case on it.
+    output="$("$PY" -m wake_alarm._session --refresh 2>/dev/null || true)"
+    if grep -q "no verified" <<<"$output"; then
         pass "$name"
     else
-        fail "$name" "expected enabled, got '$state'"
+        fail "$name" "--refresh did not degrade cleanly"
     fi
 }
 
@@ -68,6 +85,7 @@ main() {
             case_imports
             case_units
             case_trigger_dry_run
+            case_session_refresh
             ;;
         *)
             echo "usage: $0 [all]" >&2

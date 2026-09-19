@@ -82,20 +82,21 @@ class TestLatestWeight:
 
     def test_unreadable_backend_is_none(self) -> None:
         """No Firebase means no weight, not an error."""
-        with patch("wake_alarm._weight.fetch_firebase_logs", return_value=None):
+        with patch("wake_alarm._field_reader.fetch_firebase_logs", return_value=None):
             assert latest_weight() is None
             assert main() == 1
 
     def test_no_weigh_in_yet_is_none(self) -> None:
         """A phone that has not run a session publishes no weight."""
         logs = [("phone", json.dumps({"alarm": {"fields": {"alarm_hour": [8, "h"]}}}))]
-        with patch("wake_alarm._weight.fetch_firebase_logs", return_value=logs):
+        with patch("wake_alarm._field_reader.fetch_firebase_logs", return_value=logs):
             assert latest_weight() is None
 
     def test_main_prints_json(self, capsys: pytest.CaptureFixture[str]) -> None:
         """The CLI emits one JSON line diet-guard can consume."""
         with patch(
-            "wake_alarm._weight.fetch_firebase_logs", return_value=[("p", _log(72.4))]
+            "wake_alarm._field_reader.fetch_firebase_logs",
+            return_value=[("p", _log(72.4))],
         ):
             assert main() == 0
         assert json.loads(capsys.readouterr().out) == {"date": "2026-09-17", "kg": 72.4}

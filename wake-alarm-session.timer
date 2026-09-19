@@ -1,0 +1,16 @@
+[Unit]
+Description=Wake Alarm morning-session refresh, every 2 min through the morning
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Timer]
+# Every two minutes from 07:00 to 10:58, then once at 11:00 (the carrot's end)
+# so the last rewrite lands on the boundary. ~121 Firebase reads/day.
+OnCalendar=*-*-* 07..10:00/2:00
+OnCalendar=*-*-* 11:00:00
+AccuracySec=1s
+# A PC booted mid-morning refreshes at once; the consumers wait up to 30 s
+# for exactly this catch-up before treating the file as stale.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

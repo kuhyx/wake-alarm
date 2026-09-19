@@ -139,10 +139,13 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
   `FALLBACK_ALARM_HOUR` *is* the phone's baseline. An **undated** record is
   trusted, not expired: the GitHub mirror has no per-field HLC, so treating
   "cannot tell" as "too old" would break that backend entirely.
-- **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute,
-  so a persistent condition logged loudly is 1440 identical journal lines a day.
-  `_trigger` emits the single WARNING that matters: it is firing *now* on a
-  non-phone alarm time.
+- **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute;
+  a persistent condition logged loudly is 1440 journal lines a day. `_trigger`
+  emits the single WARNING that matters: firing *now* on a non-phone time.
+- **The morning session is the carrot** (`_session.py`, `wake-alarm-session.timer`,
+  **`DOCS-morning-session-pc.md`**): a completed-in-time morning defers the
+  workout and LeetCode locks to 11:00 via one signed file both consumers read.
+  Phone-local dates only — never `_state._today_str()` (UTC).
 
 ## The morning_routine orchestrator lives elsewhere
 
@@ -212,10 +215,9 @@ another repo with no error message anywhere.
 
 - Run tests: `python -m pytest wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-fail-under=100`
 - Phone tests: `cd phone_app && flutter test && flutter analyze`
-- Walk the whole morning on the emulator: `phone_app/scripts/emu_morning.py`
-  against `lib/main_session_probe.dart` (see `DOCS-morning-session.md`)
+- Walk the morning on the emulator: `phone_app/scripts/emu_morning.py` (`DOCS-morning-session.md`)
 - Lint: `pre-commit run --all-files`
-- Show the resolved alarm: `python -m wake_alarm._sync --show` (`--no-cache` forces a live read)
+- Show the resolved alarm / the morning: `python -m wake_alarm._sync --show` (`--no-cache` live), `python -m wake_alarm._session --show`
 - Show what the next tick would do: `python -m wake_alarm._trigger --dry-run`
 - Watch it live: `journalctl --user -fu wake-alarm-trigger.service`
 - Install: `bash install.sh` — Uninstall: `bash uninstall.sh`
@@ -232,19 +234,17 @@ The dev venv lacks `gatelock`, so anything importing `_state` (including
 
 - Don't add a dependency without the production install-path check above.
   `_sync.py`'s GitHub path is stdlib-only for that reason — don't "improve" it
-  to `requests`, and don't make the `crdt_sync` import unconditional.
-- Don't forget the orchestrator when changing this package's module paths.
-- Don't point the trigger at anything but `morning-routine.service`, or the
-  workout lock never runs.
-- Don't remove the trigger's once-per-day latch.
-- Don't raise the log level of `_sync`'s degraded-read paths.
+  to `requests`, and don't make the `crdt_sync` import unconditional. Don't
+  forget the orchestrator when changing this package's module paths.
+- Don't point the trigger at anything but `morning-routine.service` (or the
+  workout lock never runs), don't remove its once-per-day latch, and don't
+  raise the log level of `_sync`'s degraded-read paths.
 - Don't let the bypass skip the walk, and don't add a challenge kind that
   hides its own prompt.
 - Don't close the ring screen on dismiss when a session should follow, don't
   add a re-ring cancel beyond the session's own `finishSession`, and don't
   restore a re-ring instant that has passed (BOOT_COMPLETED replays on launch).
-- Don't make `HomeScreen.initState` concurrent again, and don't collapse
-  `publish()`'s two failure messages back into one.
-- Don't date a record by when the PC fetched it.
-- Don't delete `/etc/sudoers.d/wake-alarm`.
-- Don't commit `wake_state.json`.
+- Don't make `HomeScreen.initState` concurrent again; keep `publish()`'s two failure messages.
+- Don't date a record by when the PC fetched it, and don't let a consumer of
+  `morning_session.json` re-derive the 09:30/11:00 cutoffs or fetch its own copy.
+- Don't delete `/etc/sudoers.d/wake-alarm`. Don't commit `wake_state.json`.

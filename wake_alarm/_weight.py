@@ -16,14 +16,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-import logging
 import sys
-from typing import Any
 
-from wake_alarm._alarm_payload import extract_hlc
-from wake_alarm._sync_transport import fetch_firebase_logs
-
-_logger = logging.getLogger(__name__)
+from wake_alarm._field_reader import latest_field, newest_field
 
 WEIGHT_FIELD = "latest_weight_kg"
 
@@ -37,12 +32,8 @@ class Weight:
     device_id: str
 
 
-def _parse_weight(log: dict[str, Any], device_id: str) -> Weight | None:
-    """The weigh-in on one device's log, or None if absent or malformed."""
-    record = log.get("alarm")
-    fields = record.get("fields") if isinstance(record, dict) else None
-    pair = fields.get(WEIGHT_FIELD) if isinstance(fields, dict) else None
-    value = pair[0] if isinstance(pair, list) and pair else None
+def _parse_weight(value: object, device_id: str) -> Weight | None:
+    """The weigh-in out of one device's ``latest_weight_kg`` value, or None."""
     if not isinstance(value, dict):
         return None
     date, kg = value.get("date"), value.get("kg")
@@ -54,42 +45,13 @@ def _parse_weight(log: dict[str, Any], device_id: str) -> Weight | None:
 
 
 def newest_weight(published: list[tuple[str, str]]) -> Weight | None:
-    """Pick the most recently stamped weigh-in out of every device's log.
-
-    Ranked by the field's HLC like the alarm is, with ``device_id`` breaking
-    exact ties, so two installs never alternate between reads.
-
-    Args:
-        published: ``(device_id, raw_json)`` per device, in any order.
-
-    Returns:
-        The newest weigh-in, or None if no device published a usable one.
-    """
-    ranked: list[tuple[str, str, Weight]] = []
-    for device_id, raw in published:
-        try:
-            log = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(log, dict):
-            continue
-        weight = _parse_weight(log, device_id)
-        if weight is not None:
-            ranked.append((extract_hlc(log, WEIGHT_FIELD), device_id, weight))
-    if not ranked:
-        return None
-    return max(ranked, key=lambda entry: (entry[0], entry[1]))[2]
+    """The most recently stamped weigh-in across every device's log."""
+    return newest_field(published, WEIGHT_FIELD, _parse_weight)
 
 
 def latest_weight() -> Weight | None:
     """The phone's newest weigh-in from Firebase, or None when unreadable."""
-    published = fetch_firebase_logs()
-    if published is None:
-        return None
-    weight = newest_weight(published)
-    if weight is None:
-        _logger.info("No weigh-in published yet")
-    return weight
+    return latest_field(WEIGHT_FIELD, _parse_weight, what="weigh-in")
 
 
 def main() -> int:

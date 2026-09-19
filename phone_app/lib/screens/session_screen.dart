@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/main.dart';
 import 'package:wake_alarm_sync/screens/session_body.dart';
+import 'package:wake_alarm_sync/screens/session_checkin.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/morning_session.dart';
 import 'package:wake_alarm_sync/services/session_notice.dart';
@@ -10,7 +11,6 @@ import 'package:wake_alarm_sync/services/session_publisher.dart';
 import 'package:wake_alarm_sync/services/session_rules.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
-import 'package:wake_alarm_sync/services/weight_entry.dart';
 
 /// How often the clocks advance and the countdown redraws.
 const Duration kSessionTick = Duration(seconds: 1);
@@ -46,7 +46,8 @@ class SessionScreen extends StatefulWidget {
   /// Wall clock; injectable because the legs are minutes apart.
   final DateTime Function()? clock;
 
-  /// Pushes the finished session; defaults to [SessionPublisher.publish].
+  /// Pushes the session at start and at finish; defaults to
+  /// [SessionPublisher.publish].
   final Future<String> Function()? publish;
 
   @override
@@ -60,12 +61,11 @@ class _SessionScreenState extends State<SessionScreen> {
   late final Future<String> Function() _publish =
       widget.publish ?? SessionPublisher().publish;
 
-  final TextEditingController _input = TextEditingController();
+  final SessionCheckIn _checkIn = SessionCheckIn();
   MorningSession? _session;
   SessionTagSettings _tags = const SessionTagSettings();
-  double? _lastWeight;
-  double? _confirming;
   Timer? _timer;
+  Future<String>? _startPublish;
   bool _finishing = false;
   String _status = '';
 
@@ -104,10 +104,10 @@ class _SessionScreenState extends State<SessionScreen> {
     final last = await _store.lastWeightKg();
     await pointNativeAtLeg(_scheduler, session);
     if (!mounted) return;
+    _checkIn.lastWeight = last;
     setState(() {
       _tags = tags;
       _session = session;
-      _lastWeight = last;
     });
     _scheduler.onNfcTag(_onTag);
     sessionLog(
@@ -115,7 +115,18 @@ class _SessionScreenState extends State<SessionScreen> {
       'deadline=${session.nextDeadline()}',
     );
     _timer = Timer.periodic(kSessionTick, (_) => unawaited(_onTick()));
-    if (!session.isActive) await _finish();
+    if (!session.isActive) {
+      await _finish();
+      return;
+    }
+    // Tell the PC the morning has started -- strictly after the session is
+    // saved and on screen, never racing the load (a publish that ran early
+    // would stage an empty session and the PC would lock an honest morning).
+    // Unawaited: a backend that is down must not hold the screen.
+    _startPublish = _publish().then((message) {
+      sessionLog('start published: $message');
+      return message;
+    });
   }
 
   Future<void> _onTag(String tagId) async {
@@ -127,24 +138,15 @@ class _SessionScreenState extends State<SessionScreen> {
     await _commit(detail);
   }
 
-  Future<void> _submitWeight() async {
+  Future<void> _submitCheckIn() async {
     final session = _session;
     if (session == null) return;
-    final check = checkWeight(
-      _input.text,
-      last: _lastWeight,
-      confirming: _confirming,
-    );
-    if (!check.accepted) {
-      _confirming = check.verdict == WeightVerdict.needsConfirm
-          ? check.kg
-          : null;
-      setState(() => _status = check.detail);
+    final result = _checkIn.submit(session, _now());
+    if (!result.recorded) {
+      setState(() => _status = result.detail);
       return;
     }
-    _confirming = null;
-    _input.clear();
-    await _commit(session.enterWeight(check.kg!, _now()));
+    await _commit(result.detail);
   }
 
   /// Persists, re-points the deadline, and ends the session if it is over.
@@ -210,6 +212,9 @@ class _SessionScreenState extends State<SessionScreen> {
     final session = _session!;
     await _scheduler.finishSession();
     await _store.archive(session);
+    // The start publish may still be in flight; two pushes on one local log
+    // must not overlap.
+    await (_startPublish ?? Future<String>.value(''));
     final message = await _publish();
     sessionLog(
       'finished ${session.outcome.name} re-rings=${session.reRings}: $message',
@@ -222,7 +227,7 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     _timer?.cancel();
     _scheduler.clearNfcListener();
-    _input.dispose();
+    _checkIn.dispose();
     super.dispose();
   }
 
@@ -235,9 +240,11 @@ class _SessionScreenState extends State<SessionScreen> {
     return SessionBody(
       session: session,
       now: _now(),
-      controller: _input,
+      controller: _checkIn.input,
       status: _status,
-      onSubmitWeight: () => unawaited(_submitWeight()),
+      energy: _checkIn.energy,
+      onSelectEnergy: (level) => setState(() => _checkIn.energy = level),
+      onSubmitWeight: () => unawaited(_submitCheckIn()),
     );
   }
 }

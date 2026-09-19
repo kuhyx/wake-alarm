@@ -113,10 +113,15 @@ run_install() {
     # so this must confirm success from the OUTPUT. Trusting the exit code let
     # a guest ImportError through as a pass, and the three cases downstream
     # then failed with no hint that the install was the cause.
+    # `vm repo` lands the tree at ~/<basename> in the guest, whatever the
+    # host layout is: the 2026-09-11 home-tidy re-pointed this to ~/src and
+    # the gate went red for a week without anyone noticing, because the
+    # sentinel grep below matched vm's echo of the command line itself.
+    # Hence -x: only a line that IS the sentinel counts.
     vm run "$VM_NAME" \
-        'cd ~/src/wake-alarm && bash install.sh && echo INSTALL-OK' \
+        'cd ~/wake-alarm && bash install.sh && echo INSTALL-OK' \
         >/tmp/wa-install.log 2>&1 || true
-    if ! grep -q 'INSTALL-OK' /tmp/wa-install.log; then
+    if ! grep -qx 'INSTALL-OK' /tmp/wa-install.log; then
         tail -20 /tmp/wa-install.log >&2
         die "install.sh failed in the guest (full log: /tmp/wa-install.log)"
     fi
@@ -130,7 +135,7 @@ run_cases() {
     step "Running the guest cases"
     local output
     output="$(vm run "$VM_NAME" \
-        'bash ~/src/wake-alarm/scripts/vmbox/guest_cases.sh all' 2>&1)"
+        'bash ~/wake-alarm/scripts/vmbox/guest_cases.sh all' 2>&1)"
     echo "$output"
     grep -q "$GUEST_OK_SENTINEL" <<<"$output"
 }

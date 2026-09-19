@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/morning_session.dart';
+import 'package:wake_alarm_sync/services/weight_entry.dart';
 
 /// The session's progress list: the weigh-in, then every leg with a tag.
 ///
@@ -75,6 +76,10 @@ class SessionChecklist extends StatelessWidget {
 
   static String _kg(MorningSession session) {
     final kg = session.weightKg ?? session.pendingWeightKg;
-    return kg == null ? '' : ' — $kg kg';
+    if (kg == null) return '';
+    final energy = session.energy;
+    return energy == null
+        ? ' — $kg kg'
+        : ' — $kg kg · energy $energy/$maxEnergy';
   }
 }

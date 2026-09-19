@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/screens/energy_picker.dart';
 import 'package:wake_alarm_sync/screens/session_checklist.dart';
 import 'package:wake_alarm_sync/services/morning_session.dart';
 
-/// The session screen's body: the checklist, the weigh-in field, the clocks.
+/// The session screen's body: the checklist, the check-in, the clocks.
 ///
 /// Stateless, taking plain values — the screen keeps the state and the
 /// ordering, which is where the ring's bugs lived.
@@ -13,6 +14,8 @@ class SessionBody extends StatelessWidget {
     required this.now,
     required this.controller,
     required this.status,
+    required this.energy,
+    required this.onSelectEnergy,
     required this.onSubmitWeight,
     super.key,
   });
@@ -28,6 +31,12 @@ class SessionBody extends StatelessWidget {
 
   /// The status line.
   final String status;
+
+  /// The tapped energy level, or null.
+  final int? energy;
+
+  /// Called when an energy chip is tapped.
+  final ValueChanged<int> onSelectEnergy;
 
   /// Called when the user submits a weight.
   final VoidCallback onSubmitWeight;
@@ -60,6 +69,8 @@ class SessionBody extends StatelessWidget {
               SessionChecklist(session: session, now: now),
               const SizedBox(height: 24),
               if (_awaitingWeight) ...<Widget>[
+                EnergyPicker(selected: energy, onSelect: onSelectEnergy),
+                const SizedBox(height: 12),
                 TextField(
                   controller: controller,
                   keyboardType: const TextInputType.numberWithOptions(

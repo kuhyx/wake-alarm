@@ -7,6 +7,7 @@ say, and has the morning routine already started today.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 # Days the wake alarm is active (Python weekday(): Mon=0 ... Sun=6)
@@ -129,3 +130,23 @@ TRIGGER_CATCHUP_MINUTES: int = 60
 # wake-alarm.service directly: the orchestrator runs the alarm first and the
 # workout lock after, so the two never fight for the fullscreen.
 TRIGGER_TARGET_UNIT: str = "morning-routine.service"
+
+
+# --- Morning session (phone -> PC carrot) ----------------------------------
+# The phone publishes its morning session on the same alarm.json record; the
+# PC distils it into one HMAC-signed file that screen-locker and leetcode-guard
+# read with stdlib only. Both consumers hardcode this path -- keep in step.
+MORNING_SESSION_FILE: Path = LOG_STATE_DIR / "morning_session.json"
+
+# crdt_sync field names on alarm.json (session_sync.dart owns the writer side).
+SESSIONS_FIELD: str = "morning_sessions"
+SESSION_CURRENT_FIELD: str = "current_session"
+ENERGY_FIELD: str = "latest_energy"
+
+# A session that has started but not finished is exempt only for as long as an
+# honest morning takes, and never past the cap: relative to the start, because
+# an alarm earlier than 08:00 is legal and a fixed 09:30 would hand an aborted
+# 06:15 session three hours of no lock. A completed session earns the flat end.
+SESSION_PROVISIONAL_GRACE: timedelta = timedelta(minutes=90)
+SESSION_PROVISIONAL_CAP: tuple[int, int] = (9, 30)
+SESSION_COMPLETED_UNTIL: tuple[int, int] = (11, 0)

@@ -80,6 +80,7 @@ class MorningSession {
     Map<SessionLeg, LegPass>? passedHow,
     Set<SessionLeg>? deadlineRung,
     this.weightKg,
+    this.energy,
     this.pendingWeightKg,
     this.pendingWeightAt,
     this.reRings = 0,
@@ -134,6 +135,9 @@ class MorningSession {
 
   /// The confirmed weigh-in, kg.
   double? weightKg;
+
+  /// The 1-5 energy rating tapped with the weigh-in; null until then.
+  int? energy;
 
   /// A typed weight the bathroom tag has not confirmed yet.
   double? pendingWeightKg;

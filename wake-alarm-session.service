@@ -1,0 +1,11 @@
+[Unit]
+Description=Wake Alarm morning-session refresh (the PC's copy of the phone's morning)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+Type=oneshot
+# Fetches the phone's morning session and rewrites the HMAC-signed
+# ~/.local/state/wake_alarm/morning_session.json that screen-locker and
+# leetcode-guard read to defer their locks while the morning is being earned.
+# wake-alarm is the only Firebase reader; the consumers never touch the network.
+ExecStart=/usr/bin/python -m wake_alarm._session --refresh

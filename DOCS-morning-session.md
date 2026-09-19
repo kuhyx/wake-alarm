@@ -30,9 +30,12 @@ Legs latch like the ring's stages. A leg whose tag is not registered is
 is configured: with no session tags at all it is a weigh-in and nothing
 else. Away from home (`RingSkip.away`) there is no session.
 
-**Weight.** Typed, 30–250 kg; more than 3 kg from the last confirmed value
-must be typed twice (`weight_entry.dart`). Without a bathroom tag the typed
-value passes the first leg by itself — there is nothing to walk to.
+**Weight and energy.** The weight is typed, 30–250 kg; more than 3 kg from
+the last confirmed value must be typed twice (`weight_entry.dart`). The
+energy is one of five chips, 1–5, and is required before the weight submits
+(`session_checkin.dart`): not proof of anything, just the one number worth a
+tap while standing at the scale. Without a bathroom tag the check-in passes
+the first leg by itself — there is nothing to walk to.
 
 ## What rings, and how
 
@@ -106,13 +109,23 @@ over:
 Finished sessions go to `session.history` (30 kept). The home screen shows
 the last seven (`home_history_card.dart`) with weight deltas. The record
 rides on the synced `alarm.json` like the ring tags do
-(`session_sync.dart`): `session_tag_ids`, `morning_sessions` (14) and
-`latest_weight_kg` (`{date, kg}`). The PC reads it with
-`python -m wake_alarm._weight` (`wake_alarm/_weight.py`, Firebase only, same
-device discovery as the alarm); diet-guard's `sync` imports that lazily to
-refresh the weight behind its protein target. The PC alarm parser ignores
-every field it does not name. Sessions merge per date, newest `updatedAt` wins, so a
-reinstall gets its history back.
+(`session_sync.dart`): `session_tag_ids`, `morning_sessions` (14),
+`latest_weight_kg` (`{date, kg}`), `latest_energy` (`{date, level}`) and
+`current_session` — the live session while one runs, `{}` once it is over.
+The PC reads the two numbers with `python -m wake_alarm._weight` /
+`_energy` (Firebase only, same device discovery as the alarm); diet-guard's
+`sync` imports the weight lazily for its protein target. The PC alarm parser
+ignores every field it does not name. Sessions merge per date, newest
+`updatedAt` wins, so a reinstall gets its history back; `current_session` is
+never applied from a peer — a live session in history would stop
+`SessionHandoff.afterDismiss` starting the morning it belongs to.
+
+**The session is published twice**: once when it starts (`SessionScreen._init`,
+strictly after the session is saved and on screen — a publish racing the load
+stages nothing, and the PC would then lock an honest morning) and once when
+it finishes. That is what lets the PC tell "started, not finished" from
+"never started" and defer the workout and LeetCode locks only while the
+morning is actually being earned: **`DOCS-morning-session-pc.md`**.
 
 ## Gotchas — each one cost a real run
 
@@ -148,6 +161,7 @@ reinstall gets its history back.
 ```sh
 flutter run -d emulator-5554 --debug -t lib/main_session_probe.dart > run.log
 scripts/emu_morning.py --log run.log dismiss    # ring1, 30 steps, ring2, answers
+scripts/emu_morning.py energy 3                 # one of the five chips
 scripts/emu_morning.py weight 72.4
 scripts/emu_morning.py tag bath                 # then wait 8 min, tag bath again
 scripts/emu_morning.py home; scripts/emu_morning.py launch   # back on the leg

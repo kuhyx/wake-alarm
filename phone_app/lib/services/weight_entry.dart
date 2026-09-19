@@ -1,4 +1,4 @@
-/// Validation for the morning weigh-in.
+/// Validation for the morning check-in: the weigh-in and the energy tap.
 ///
 /// A typed number, not a Bluetooth scale — the ring path takes no plugins.
 /// Two gates stand in for the hardware: the value has to be plausible, and
@@ -17,6 +17,13 @@ const double maxWeightJumpKg = 3;
 
 /// How long a typed weight stays valid before the bathroom tag confirms it.
 const Duration confirmWindow = Duration(minutes: 2);
+
+/// Lowest energy rating; five taps, no typing, so nothing to validate beyond
+/// the range.
+const int minEnergy = 1;
+
+/// Highest energy rating.
+const int maxEnergy = 5;
 
 /// What a weigh-in attempt came to.
 enum WeightVerdict {

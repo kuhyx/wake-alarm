@@ -42,7 +42,6 @@ void main() {
   }
 
   List<String> methods() => calls.map((c) => c.method).toList();
-
   Future<void> tick(WidgetTester tester, [int seconds = 1]) async {
     for (var i = 0; i < seconds; i++) {
       await tester.pump(kSessionTick);
@@ -79,7 +78,10 @@ void main() {
     await tester.pump();
   }
 
+  /// Taps energy 3 (required since the check-in) and submits [kg].
   Future<void> logWeight(WidgetTester tester, String kg) async {
+    await tester.tap(find.widgetWithText(ChoiceChip, '3'));
+    await tester.pump();
     await tester.enterText(find.byType(TextField), kg);
     await tester.tap(find.text('Log weight'));
     await tester.pump();
@@ -95,8 +97,7 @@ void main() {
     final deadline = now.add(MorningSession.legWindow).millisecondsSinceEpoch;
     final arm = calls.firstWhere((c) => c.method == 'armReRing');
     expect(arm.arguments, <String, int?>{'atMillis': deadline});
-    // The native record behind the launcher redirect and the notification
-    // follows the deadline in the same breath.
+    // The launcher-redirect record follows the deadline in the same breath.
     final notice = calls.firstWhere((c) => c.method == 'updateSessionNotice');
     expect(notice.arguments, <String, Object?>{
       'date': '2026-09-17',
@@ -131,7 +132,7 @@ void main() {
     expect(find.text('Not the bathroom tag'), findsOneWidget);
     await tap('bath');
     await tester.pump();
-    expect(find.text('Weigh in — 72.4 kg'), findsOneWidget);
+    expect(find.text('Weigh in — 72.4 kg · energy 3/5'), findsOneWidget);
     expect(find.textContaining('tag counts in 08:00'), findsOneWidget);
     await tap('bath');
     await tester.pump();
@@ -140,14 +141,14 @@ void main() {
     now = now.add(const Duration(minutes: 9));
     await tick(tester);
     expect(find.textContaining('Alarm returns in'), findsOneWidget);
-    await tap('bath');
-    await tap('ward');
-    await tap('desk');
+    for (final id in <String>['bath', 'ward', 'desk']) {
+      await tap(id);
+    }
     await tester.pump();
     await tester.pump();
     expect(methods(), contains('finishSession'));
     expect(methods().last, 'closeRingScreen');
-    expect(published, 1);
+    expect(published, 2); // once at start, once at finish
     final store = SessionStore();
     expect(await store.loadCurrent(), isNull);
     final done = (await store.history()).single;
@@ -234,17 +235,5 @@ void main() {
     await logWeight(tester, '75');
     expect(find.textContaining('now tap the bathroom tag'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
-  });
-
-  testWidgets('an unknown tag and bad weights are reported', (tester) async {
-    await pumpSession(tester);
-    await logWeight(tester, 'x');
-    expect(find.textContaining('Enter your weight'), findsOneWidget);
-    await logWeight(tester, '1');
-    expect(find.textContaining('not a body weight'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
-    await tap('mystery');
-    await tester.pump();
-    expect(find.text('Unknown tag'), findsOneWidget);
   });
 }

@@ -75,8 +75,11 @@ remove_retired() {
 remove_trigger() {
     echo "  Disabling the trigger timer"
     systemctl --user disable --now wake-alarm-trigger.timer >/dev/null 2>&1 || true
+    systemctl --user disable --now wake-alarm-session.timer >/dev/null 2>&1 || true
     rm -f "$SYSTEMD_USER_DIR/wake-alarm-trigger.service" \
-          "$SYSTEMD_USER_DIR/wake-alarm-trigger.timer"
+          "$SYSTEMD_USER_DIR/wake-alarm-trigger.timer" \
+          "$SYSTEMD_USER_DIR/wake-alarm-session.service" \
+          "$SYSTEMD_USER_DIR/wake-alarm-session.timer"
 }
 
 main() {

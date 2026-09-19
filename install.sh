@@ -39,6 +39,8 @@ readonly SCRIPT_DIR
 readonly REPO_DIR="$SCRIPT_DIR"
 readonly TRIGGER_SERVICE_SRC="$SCRIPT_DIR/wake-alarm-trigger.service"
 readonly TRIGGER_TIMER_SRC="$SCRIPT_DIR/wake-alarm-trigger.timer"
+readonly SESSION_SERVICE_SRC="$SCRIPT_DIR/wake-alarm-session.service"
+readonly SESSION_TIMER_SRC="$SCRIPT_DIR/wake-alarm-session.timer"
 readonly SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 
 echo "=== Wake Alarm Trigger Installer ==="
@@ -54,10 +56,13 @@ echo "  wake_alarm and gatelock import under /usr/bin/python."
 
 echo "[2/3] Installing systemd user units..."
 mkdir -p "$SYSTEMD_USER_DIR"
-cp "$TRIGGER_SERVICE_SRC" "$TRIGGER_TIMER_SRC" "$SYSTEMD_USER_DIR/"
+cp "$TRIGGER_SERVICE_SRC" "$TRIGGER_TIMER_SRC" \
+   "$SESSION_SERVICE_SRC" "$SESSION_TIMER_SRC" "$SYSTEMD_USER_DIR/"
 systemctl --user daemon-reload
 systemctl --user enable --now wake-alarm-trigger.timer
 echo "  Trigger timer enabled and started (ticks once a minute)."
+systemctl --user enable --now wake-alarm-session.timer
+echo "  Session timer enabled (07:00-11:00, every 2 min)."
 
 echo "[3/3] Removing retired waking machinery from earlier installs..."
 # Opportunistic, and deliberately NOT fatal. This script runs under `set -e`

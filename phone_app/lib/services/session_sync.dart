@@ -27,6 +27,19 @@ const sessionsField = 'morning_sessions';
 /// number (diet-guard's budget) should not have to know the session shape.
 const latestWeightField = 'latest_weight_kg';
 
+/// Field holding `{date, level}` of the newest energy tap, for the same
+/// reason as [latestWeightField].
+const latestEnergyField = 'latest_energy';
+
+/// Field holding the live session while one runs, `{}` once it is over.
+///
+/// This is how the PC tells "started, not finished" from "never started"
+/// and defers the workout lock only while the morning is actually being
+/// earned. Kept apart from [sessionsField] because the receiving side
+/// merges that one into history, and a live session in history would make
+/// `SessionHandoff.afterDismiss` refuse to start the morning it belongs to.
+const currentSessionField = 'current_session';
+
 /// How many finished sessions ride on the record.
 const sessionsCarried = 14;
 
@@ -43,12 +56,34 @@ Future<void> stageSessionData(
     tags.tagIds,
     configured: tags.isConfigured,
   );
-  final history = await (store ?? SessionStore()).history();
+  final sessions = store ?? SessionStore();
+  final current = await sessions.loadCurrent();
+  final history = await sessions.history();
+  if (current != null) {
+    await stageField(
+      service,
+      currentSessionField,
+      current.updatedAt.toUtc().toIso8601String(),
+      current.toJson(),
+      configured: true,
+    );
+  }
   if (history.isEmpty) return;
   final newest = history
       .map((s) => s.updatedAt)
       .reduce((a, b) => a.isAfter(b) ? a : b);
   final stamp = newest.toUtc().toIso8601String();
+  if (current == null) {
+    // Cleared with the finish stamp, which is strictly newer than any
+    // stamp the live session was staged under (stageField skips on >=).
+    await stageField(
+      service,
+      currentSessionField,
+      stamp,
+      const <String, Object?>{},
+      configured: true,
+    );
+  }
   await stageField(
     service,
     sessionsField,
@@ -57,10 +92,17 @@ Future<void> stageSessionData(
     configured: true,
   );
   final weighed = history.where((s) => s.weightKg != null).firstOrNull;
-  if (weighed == null) return;
-  await stageField(service, latestWeightField, stamp, <String, Object?>{
-    'date': weighed.date,
-    'kg': weighed.weightKg,
+  if (weighed != null) {
+    await stageField(service, latestWeightField, stamp, <String, Object?>{
+      'date': weighed.date,
+      'kg': weighed.weightKg,
+    }, configured: true);
+  }
+  final rated = history.where((s) => s.energy != null).firstOrNull;
+  if (rated == null) return;
+  await stageField(service, latestEnergyField, stamp, <String, Object?>{
+    'date': rated.date,
+    'level': rated.energy,
   }, configured: true);
 }
 
@@ -68,6 +110,8 @@ Future<void> stageSessionData(
 ///
 /// Sessions merge per date rather than replace: two installs' mornings end
 /// up in one list, and a peer's shorter list cannot truncate ours.
+/// [currentSessionField] is deliberately not applied: a live session is
+/// never restored from a peer (see the field's doc).
 Future<void> applySyncedSessionData(
   AlarmSyncService service, {
   SessionStore? store,
