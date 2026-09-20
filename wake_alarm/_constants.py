@@ -150,3 +150,9 @@ ENERGY_FIELD: str = "latest_energy"
 SESSION_PROVISIONAL_GRACE: timedelta = timedelta(minutes=90)
 SESSION_PROVISIONAL_CAP: tuple[int, int] = (9, 30)
 SESSION_COMPLETED_UNTIL: tuple[int, int] = (11, 0)
+
+# Before the alarm, being up is the goal, not an offence: a day with no
+# session yet is exempt until the alarm has rung and had time to be
+# dismissed (ring -> tags -> steps -> answers -> the start publish reaches the
+# PC). A phone switched off at the alarm locks this long after it.
+SESSION_NONE_GRACE: timedelta = timedelta(minutes=15)

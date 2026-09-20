@@ -17,14 +17,21 @@ provisioning, and a 10 s hardware off still wins); it can be *noticed*.
 
 ## The rule
 
-A morning earns the carrot **only by being completed in time**:
+The goal is *waking up*, not reaching a clock. So the PC is open from the
+moment it is usable (the night lockdown lifts at 05:00) until the alarm has
+rung and been dismissed; the dismiss plus the morning session is the "are
+you still up" check, and passing it keeps the PC open until 11:00
+(2026-09-20 — the first version only opened at 08:30 and locked someone who
+got up at 07:00, the opposite of the point):
 
 | the phone says | `exempt_until` | meaning |
 |---|---|---|
+| nothing started today (`none`) | **alarm + 15 min** (`SESSION_NONE_GRACE`; alarm = the phone's, clamped to ≤ 08:00 like the trigger) | up early is fine; the phone rings at the alarm, and a dismiss that has not produced a session by then means "not up" |
 | started, not finished (`in_progress`) | `min(started_at + 90 min, 09:30)` | provisional — the legs take ~40 min; relative to the start because an alarm earlier than 08:00 is legal and a fixed 09:30 would hand an aborted 06:15 session three hours |
 | `completed`, finished inside that same cutoff | **11:00** | the carrot |
 | `completed` *after* the cutoff | none | a phone switched back on at noon completes the legs then; that un-locks nothing |
-| `failed`, or nothing started today | none | today's ordinary ladder (screen-locker's 05:00–08:30 window, leetcode-guard at login/09:00) |
+| `failed` | none | today's ordinary ladder |
+| alarm unknown (unconfigured PC) | none | fail closed |
 
 Fail closed: a sync outage, a refresher that is not running, a bad signature
 — all read as "no carrot". Nothing here can make a lock *earlier* than today.
@@ -32,8 +39,9 @@ Fail closed: a sync outage, a refresher that is not running, a bad signature
 ## The plumbing
 
 **wake-alarm is the only Firebase reader.** `wake-alarm-session.timer`
-(`*-*-* 07..10:00/2:00` and `11:00:00`, `Persistent=true`, ~121 reads/day)
-runs `python -m wake_alarm._session --refresh`:
+(`*-*-* 05..06:00/10:00`, `07..10:00/2:00` and `11:00:00`, `Persistent=true`,
+~133 reads/day — from 05:00 because that is when the login-armed locks
+decide) runs `python -m wake_alarm._session --refresh`:
 
 1. `_sync_transport.fetch_firebase_logs()` — every device's `alarm.json`.
 2. `_session_payload.newest_session()` — the finished entries of
@@ -45,9 +53,9 @@ runs `python -m wake_alarm._session --refresh`:
 3. `_session.to_entry()` + `write_entry()` — an HMAC-signed
    `~/.local/state/wake_alarm/morning_session.json` that **always describes
    today** (PC-local date): today's session with `exempt_until` signed in, or
-   a `none` heartbeat when the phone has nothing for today. The heartbeat is
-   what lets a consumer tell "fresh, no session" from "the refresher has not
-   run yet" by the date alone.
+   a `none` entry (exempt until alarm + 15 min) when the phone has nothing
+   for today. The entry is also what lets a consumer tell "fresh, no session"
+   from "the refresher has not run yet" by the date alone.
 
 Dates are the phone's local day throughout. `wake_alarm._state._today_str`
 is UTC and must not be used here (screen-locker compares against its local
@@ -57,10 +65,13 @@ is UTC and must not be used here (screen-locker compares against its local
 ∧ `exempt_until` present ∧ `now < exempt_until`. Neither re-derives the
 cutoffs, neither imports `crdt_sync`, neither talks to Firebase:
 
-- screen-locker `screen_locker/_morning_session.py` → the `wake_alarm_skip`
-  rung of `_auto_upgrade._check_today_state_exits`, in its old position
-  (after `workout_logged_today`, before `early_bird_banked`). The decision
-  record carries `exempt_until` and `outcome`.
+- screen-locker `screen_locker/_morning_session.py` → **the early-bird
+  window *is* this carrot** (`EarlyBirdMixin._is_early_bird_time`, since
+  2026-09-20; the 05:00–08:30 clock and the extended-to-09:00 reward are
+  gone). The `wake_alarm_skip` rung defers and banks the early-bird marker;
+  when the carrot ends, the next run tries a phone/RunnerUp workout before
+  locking (`early-bird-workout-check.timer` at 09:30:30 and 11:00:30). The
+  decision record carries `exempt_until` and `outcome`.
 - leetcode-guard `leetcode_guard/_morning_session.py` → `_cli._run_lock`
   returns `EXIT_OK` with `deferred: …` before `build_client()`. A run
   deferral, never ledger state (`decide()` stays pure; a deleted file cannot
@@ -70,7 +81,7 @@ cutoffs, neither imports `crdt_sync`, neither talks to Firebase:
 
 **A PC booted mid-morning** has a missing or yesterday's file until the
 timer's `Persistent=true` catch-up lands, and that needs the network. Only
-the enforce path, only inside 07:00–11:00, and only when the file is not
+the enforce path, only inside 05:00–11:00, and only when the file is not
 today's, both consumers retry for ≤ 30 s (5 s steps) and then proceed as
 normal with a WARNING. Status paths never wait; tests pin the retry to 0.
 
@@ -78,7 +89,8 @@ normal with a WARNING. Status paths never wait; tests pin the retry to 0.
 
 - A lock already on screen is not lifted by a later publish: a session
   that completes at 09:45 after the 09:30 lock stays locked. The publish
-  would have to arrive before the boundary.
+  would have to arrive before the boundary. (The 05:00 login-arm no longer
+  hits this: the day starts exempt.)
 - A session finishing inside ~2 min before 09:30 may be seen as
   `in_progress` at the 09:30 tick and lock; bounded by the timer cadence.
 - No extra stick for a `failed` session beyond losing the carrot.

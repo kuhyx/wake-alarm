@@ -3,8 +3,11 @@ Description=Wake Alarm morning-session refresh, every 2 min through the morning
 Documentation=https://github.com/kuhyx/wake-alarm
 
 [Timer]
-# Every two minutes from 07:00 to 10:58, then once at 11:00 (the carrot's end)
-# so the last rewrite lands on the boundary. ~121 Firebase reads/day.
+# From 05:00 (the night lockdown lifts and the login-armed locks decide):
+# every 10 min until the alarm hour is near, every 2 min from 07:00 to 10:58,
+# then once at 11:00 (the carrot's end) so the last rewrite lands on the
+# boundary. ~133 Firebase reads/day.
+OnCalendar=*-*-* 05..06:00/10:00
 OnCalendar=*-*-* 07..10:00/2:00
 OnCalendar=*-*-* 11:00:00
 AccuracySec=1s

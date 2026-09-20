@@ -8,14 +8,17 @@ morning; each run fetches the phone's logs, picks the newest morning
 entry that always describes **today**:
 
 * today's session, with ``exempt_until`` signed in when it is live
-  (``min(started_at + 90 min, 09:30)``) or completed (``11:00``);
-* a ``none`` heartbeat when the phone has nothing for today, so a consumer can
-  tell "fresh, no session" from "the refresher has not run yet" (a PC booted
-  mid-morning) by the date alone.
+  (``min(started_at + 90 min, 09:30)``) or completed in time (``11:00``);
+* a ``none`` entry when the phone has nothing for today, exempt until the
+  alarm plus ``SESSION_NONE_GRACE``: waking up early is the goal, so the PC
+  stays open until the alarm has rung and been dismissed. The entry is also
+  what lets a consumer tell "fresh, no session" from "the refresher has not
+  run yet" (a PC booted mid-morning) by the date alone.
 
 Consumers apply one rule -- HMAC ok, date is today, ``now < exempt_until`` --
-and never re-derive the cutoffs. Dates are the phone's local day throughout;
-``_state._today_str`` is UTC and must not be used here.
+and never re-derive the cutoffs; those live in ``_session_policy``. Dates are
+the phone's local day throughout; ``_state._today_str`` is UTC and must not
+be used here.
 
     python -m wake_alarm._session --refresh   # fetch and rewrite the file
     python -m wake_alarm._session --show      # print the verified entry
@@ -24,115 +27,21 @@ and never re-derive the cutoffs. Dates are the phone's local day throughout;
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, time
+from datetime import datetime
 import json
 import logging
 import sys
 
 from gatelock.log_integrity import compute_entry_hmac, verify_entry_hmac
 
-from wake_alarm._constants import (
-    MORNING_SESSION_FILE,
-    SESSION_COMPLETED_UNTIL,
-    SESSION_PROVISIONAL_CAP,
-    SESSION_PROVISIONAL_GRACE,
-)
+from wake_alarm._constants import FALLBACK_ALARM_HOUR, MORNING_SESSION_FILE
 from wake_alarm._logging_setup import configure_logging
-from wake_alarm._session_payload import SessionRecord, newest_session
+from wake_alarm._session_payload import newest_session
+from wake_alarm._session_policy import to_entry
+from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
 
 _logger = logging.getLogger(__name__)
-
-NONE_OUTCOME = "none"
-
-
-def _local(iso: str) -> datetime:
-    """A phone-stamped naive local ISO instant as an aware local datetime."""
-    return datetime.fromisoformat(iso).astimezone()
-
-
-def _at(date: str, clock: tuple[int, int]) -> datetime:
-    """Local wall-clock instant ``clock`` on the phone's session date."""
-    return datetime.combine(
-        datetime.fromisoformat(date).date(), time(*clock)
-    ).astimezone()
-
-
-def _cutoff(record: SessionRecord) -> datetime | None:
-    """The instant a live morning stops being exempt: start + grace, capped."""
-    try:
-        started = _local(record.started_at)
-    except ValueError:
-        _logger.info(
-            "Session started_at %r unreadable; no exemption", record.started_at
-        )
-        return None
-    return min(
-        started + SESSION_PROVISIONAL_GRACE, _at(record.date, SESSION_PROVISIONAL_CAP)
-    )
-
-
-def exempt_until(record: SessionRecord) -> datetime | None:
-    """When the carrot this morning earned runs out; None when it earned none.
-
-    Live: the start plus one honest morning, capped -- relative so an early
-    alarm cannot bank hours by aborting. Completed: the flat end, but only if
-    it finished inside that same cutoff -- a phone switched back on at noon
-    completes the legs then, and that must not un-lock anything. Failed: none.
-    """
-    cutoff = _cutoff(record)
-    if cutoff is None or record.outcome == "failed":
-        return None
-    if record.outcome == "in_progress":
-        return cutoff
-    try:
-        finished = _local(record.finished_at or "")
-    except ValueError:
-        _logger.info(
-            "Session finished_at %r unreadable; no exemption", record.finished_at
-        )
-        return None
-    if finished > cutoff:
-        _logger.info(
-            "Session finished %s, after the %s cutoff; no exemption", finished, cutoff
-        )
-        return None
-    return _at(record.date, SESSION_COMPLETED_UNTIL)
-
-
-def to_entry(
-    record: SessionRecord | None, *, today: str, refreshed_at: float
-) -> dict[str, object]:
-    """The unsigned file body for ``record`` (today's) or the ``none`` heartbeat."""
-    if record is None:
-        return {
-            "date": today,
-            "outcome": NONE_OUTCOME,
-            "started_at": None,
-            "finished_at": None,
-            "energy": None,
-            "weight_kg": None,
-            "re_rings": 0,
-            "device_id": "",
-            "published_at": None,
-            "refreshed_at": refreshed_at,
-        }
-    entry: dict[str, object] = {
-        "date": record.date,
-        "outcome": record.outcome,
-        "started_at": record.started_at,
-        "finished_at": record.finished_at,
-        "energy": record.energy,
-        "weight_kg": record.weight_kg,
-        "re_rings": record.re_rings,
-        "device_id": record.device_id,
-        "published_at": record.published_at,
-        "refreshed_at": refreshed_at,
-    }
-    until = exempt_until(record)
-    if until is not None:
-        entry["exempt_until"] = until.isoformat()
-    return entry
 
 
 def write_entry(entry: dict[str, object]) -> bool:
@@ -183,7 +92,15 @@ def refresh(now: datetime) -> dict[str, object] | None:
     if record is not None and record.date != today:
         _logger.info("Newest morning is %s, not today; writing none", record.date)
         record = None
-    entry = to_entry(record, today=today, refreshed_at=now.timestamp())
+    alarm = get_alarm()
+    entry = to_entry(
+        record,
+        today=today,
+        refreshed_at=now.timestamp(),
+        # Same clamp as the trigger: the phone may only move the alarm earlier
+        # than the baseline, so a later synced value never widens the grace.
+        alarm=min((alarm.hour, alarm.minute), (FALLBACK_ALARM_HOUR, 0)),
+    )
     return entry if write_entry(entry) else None
 
 

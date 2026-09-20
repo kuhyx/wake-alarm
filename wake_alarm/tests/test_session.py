@@ -11,7 +11,6 @@ from unittest.mock import patch
 from wake_alarm import _session
 from wake_alarm._session import (
     describe,
-    exempt_until,
     main,
     read_entry,
     refresh,
@@ -19,9 +18,12 @@ from wake_alarm._session import (
     write_entry,
 )
 from wake_alarm._session_payload import SessionRecord
+from wake_alarm._sync import Alarm
 
 if TYPE_CHECKING:
-    import pytest
+    from collections.abc import Generator
+
+import pytest
 
 NOW = datetime(2026, 9, 19, 8, 30).astimezone()
 
@@ -49,35 +51,6 @@ def _local(iso: str) -> datetime:
     return datetime.fromisoformat(iso).astimezone()
 
 
-class TestExemptUntil:
-    """The policy, signed in once so no consumer re-derives it."""
-
-    def test_completed_in_time_earns_eleven(self) -> None:
-        assert exempt_until(_record()) == _local("2026-09-19T11:00:00")
-
-    def test_live_is_start_plus_grace_capped(self) -> None:
-        assert exempt_until(_record("in_progress", finished=None)) == _local(
-            "2026-09-19T09:30:00"
-        )
-        early = _record("in_progress", started="2026-09-19T06:00:00.000", finished=None)
-        assert exempt_until(early) == _local("2026-09-19T07:30:00")
-
-    def test_completed_after_the_cutoff_earns_nothing(self) -> None:
-        """A phone switched on at noon completes the legs then; no carrot."""
-        assert exempt_until(_record(finished="2026-09-19T12:33:00.000")) is None
-        # An aborted 06:00 alarm "completed" at 10:00 locks no later than today.
-        late_early = _record(
-            started="2026-09-19T06:05:00.000", finished="2026-09-19T10:00:00.000"
-        )
-        assert exempt_until(late_early) is None
-
-    def test_failed_and_unreadable_instants_earn_nothing(self) -> None:
-        assert exempt_until(_record("failed")) is None
-        assert exempt_until(_record(started="when?")) is None
-        assert exempt_until(_record(finished=None)) is None
-        assert exempt_until(_record(finished="later")) is None
-
-
 class TestEntryFile:
     """Writing, signing, reading back."""
 
@@ -88,9 +61,16 @@ class TestEntryFile:
         assert read_entry() == entry
         assert "hmac" in entry
 
-    def test_none_heartbeat_and_failed_have_no_exemption(self) -> None:
-        entry = to_entry(None, today="2026-09-19", refreshed_at=5.0)
+    def test_no_session_yet_is_exempt_until_the_alarm_plus_grace(self) -> None:
+        """Being up before the alarm is the goal; the PC stays open until it rang."""
+        entry = to_entry(None, today="2026-09-19", refreshed_at=5.0, alarm=(8, 0))
         assert entry["outcome"] == "none"
+        assert entry["exempt_until"] == _local("2026-09-19T08:15:00").isoformat()
+        early = to_entry(None, today="2026-09-19", refreshed_at=5.0, alarm=(6, 30))
+        assert early["exempt_until"] == _local("2026-09-19T06:45:00").isoformat()
+
+    def test_unknown_alarm_and_failed_have_no_exemption(self) -> None:
+        entry = to_entry(None, today="2026-09-19", refreshed_at=5.0)
         assert "exempt_until" not in entry
         failed = to_entry(_record("failed"), today="2026-09-19", refreshed_at=5.0)
         assert failed["outcome"] == "failed"
@@ -124,6 +104,11 @@ class TestEntryFile:
 
 class TestRefresh:
     """Fetch, select, write."""
+
+    @pytest.fixture(autouse=True)
+    def _alarm(self) -> Generator[None]:
+        with patch("wake_alarm._session.get_alarm", return_value=Alarm(8, 0, "cache")):
+            yield
 
     def _logs(self, record_json: dict[str, object]) -> list[tuple[str, str]]:
         raw = json.dumps(
@@ -167,6 +152,25 @@ class TestRefresh:
             entry = refresh(NOW)
         assert entry is not None
         assert (entry["date"], entry["outcome"]) == ("2026-09-19", "none")
+        assert entry["exempt_until"] == _local("2026-09-19T08:15:00").isoformat()
+
+    def test_a_synced_alarm_later_than_the_baseline_is_clamped(self) -> None:
+        with (
+            patch("wake_alarm._session.fetch_firebase_logs", return_value=[]),
+            patch("wake_alarm._session.get_alarm", return_value=Alarm(13, 0, "cache")),
+        ):
+            entry = refresh(NOW)
+        assert entry is not None
+        assert entry["exempt_until"] == _local("2026-09-19T08:15:00").isoformat()
+
+    def test_an_earlier_synced_alarm_shortens_the_grace(self) -> None:
+        with (
+            patch("wake_alarm._session.fetch_firebase_logs", return_value=[]),
+            patch("wake_alarm._session.get_alarm", return_value=Alarm(6, 30, "remote")),
+        ):
+            entry = refresh(NOW)
+        assert entry is not None
+        assert entry["exempt_until"] == _local("2026-09-19T06:45:00").isoformat()
 
     def test_unreadable_backend_leaves_the_file_alone(self) -> None:
         write_entry(to_entry(_record(), today="2026-09-19", refreshed_at=5.0))
@@ -209,7 +213,10 @@ class TestCli:
         assert "no verified" in capsys.readouterr().out
 
     def test_refresh_uses_the_backend(self) -> None:
-        with patch("wake_alarm._session.fetch_firebase_logs", return_value=[]) as fetch:
+        with (
+            patch("wake_alarm._session.fetch_firebase_logs", return_value=[]) as fetch,
+            patch("wake_alarm._session.get_alarm", return_value=Alarm(8, 0, "cache")),
+        ):
             assert main(["--refresh"]) == 0
         fetch.assert_called_once()
         entry = read_entry()
