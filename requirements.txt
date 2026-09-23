@@ -10,7 +10,7 @@ freedays @ git+https://github.com/kuhyx/utils@freedays-v0.2.0#subdirectory=freed
 gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.8.2#subdirectory=gatelock
 mypy==2.3.1
 pre-commit==4.6.2
-pylint==4.0.8
+pylint==4.0.9
 pytest==9.1.1
 pytest-cov==7.1.0
 pytest-randomly==5.0.0
