@@ -34,6 +34,10 @@ class SessionHandoff {
   /// as it stands (failed, since it never finished) rather than resumed —
   /// yesterday's clocks would re-ring the moment the screen came up.
   Future<bool> afterDismiss({required bool away}) async {
+    // Reaching this call at all means the dismiss gate was satisfied --
+    // recorded before anything else so an interrupted await below still
+    // leaves the native side knowing the ring was answered.
+    await scheduler.markRingDismissed();
     final now = _now();
     final today = SessionRules.dateKey(now);
     final current = await store.loadCurrent();

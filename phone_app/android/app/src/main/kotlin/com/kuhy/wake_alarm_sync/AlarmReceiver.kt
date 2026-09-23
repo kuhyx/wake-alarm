@@ -32,6 +32,10 @@ class AlarmReceiver : BroadcastReceiver() {
             AlarmScheduler.rearmFromStorage(context)
             return
         }
+        // The one fresh (non-re-ring) daily alarm. Recorded here, not in
+        // Dart, so a poweroff mid-ring can never race it: setAlarmClock has
+        // already woken the CPU by the time this line runs.
+        RingWatch.markFired(context)
         AlarmService.start(context)
     }
 

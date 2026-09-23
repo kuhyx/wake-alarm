@@ -54,6 +54,10 @@ object AlarmWatchdog {
     fun verify(context: Context) {
         val rearmed = AlarmScheduler.rearmFromStorage(context)
         Log.i(TAG, "daily check: rearmed=$rearmed")
+        // Fallback net for an abandoned ring on a phone that never rebooted
+        // (BootReceiver already covers the poweroff case): within a day,
+        // whatever the reason, WorkdayStick catches it here too.
+        WorkdayStick.checkAndSignal(context)
     }
 
     private fun pendingIntent(context: Context): PendingIntent =

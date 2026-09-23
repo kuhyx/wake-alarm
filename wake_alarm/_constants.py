@@ -156,3 +156,13 @@ SESSION_COMPLETED_UNTIL: tuple[int, int] = (11, 0)
 # dismissed (ring -> tags -> steps -> answers -> the start publish reaches the
 # PC). A phone switched off at the alarm locks this long after it.
 SESSION_NONE_GRACE: timedelta = timedelta(minutes=15)
+
+
+# --- Workday stick (Tue/Wed/Thu miss -> tomorrow loses its leniency) ------
+# The same weekdays screen-locker calls "relaxed" (_weekly_check.is_relaxed_day)
+# and leetcode-guard prices as cheap (Pricing.doubled_days) -- both already go
+# easy on exactly these three days, which is why a miss costs nothing today
+# without this file. Python weekday(): Mon=0 ... Sun=6.
+STICK_DAYS: frozenset[int] = frozenset({1, 2, 3})  # Tue, Wed, Thu
+
+WORKDAY_PENALTY_FILE: Path = LOG_STATE_DIR / "workday_penalty.json"

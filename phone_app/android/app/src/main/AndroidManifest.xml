@@ -32,6 +32,9 @@
          "not at home". -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Lets WorkdayStick reach focus-owner's signature-protected receiver;
+         both apps are signed with the same release key. -->
+    <uses-permission android:name="com.kuhy.focus_owner.permission.SIGNAL_LOCKDOWN"/>
     <application
         android:label="wake_alarm_sync"
         android:name="${applicationName}"

@@ -40,6 +40,7 @@ from wake_alarm._session_payload import newest_session
 from wake_alarm._session_policy import to_entry
 from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
+from wake_alarm._workday_penalty import maybe_apply as _maybe_apply_workday_penalty
 
 _logger = logging.getLogger(__name__)
 
@@ -101,7 +102,10 @@ def refresh(now: datetime) -> dict[str, object] | None:
         # than the baseline, so a later synced value never widens the grace.
         alarm=min((alarm.hour, alarm.minute), (FALLBACK_ALARM_HOUR, 0)),
     )
-    return entry if write_entry(entry) else None
+    if not write_entry(entry):
+        return None
+    _maybe_apply_workday_penalty(entry, now)
+    return entry
 
 
 def describe(entry: dict[str, object], now: datetime) -> str:

@@ -13,14 +13,19 @@ void main() {
 
   final now = DateTime(2026, 9, 17, 8, 4);
   var hasNfc = true;
+  late List<String> calls;
 
   setUp(() {
     hasNfc = true;
+    calls = <String>[];
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel(AlarmScheduler.channelName),
-          (call) async => call.method == 'hasNfc' ? hasNfc : null,
+          (call) async {
+            calls.add(call.method);
+            return call.method == 'hasNfc' ? hasNfc : null;
+          },
         );
   });
 
@@ -49,6 +54,14 @@ void main() {
     expect(await handoff().afterDismiss(away: true), isFalse);
     expect(await SessionStore().loadCurrent(), isNull);
   });
+
+  test(
+    'every dismiss tells native the ring was answered, even when away',
+    () async {
+      await handoff().afterDismiss(away: true);
+      expect(calls, contains('markRingDismissed'));
+    },
+  );
 
   test('a dismiss during a live session is a re-ring', () async {
     final store = SessionStore();

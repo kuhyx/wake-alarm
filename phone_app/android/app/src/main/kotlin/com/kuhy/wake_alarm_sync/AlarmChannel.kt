@@ -137,6 +137,14 @@ object AlarmChannel {
                 StepCounter.markRingStart(context)
                 result.success(null)
             }
+            // The dismiss gate actually completed -- see RingWatch. Called
+            // once, from the same spot `afterDismiss` starts or resumes a
+            // session, regardless of outcome: reaching afterDismiss at all
+            // means the ring was dismissed.
+            "markRingDismissed" -> {
+                RingWatch.markDismissed(context)
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }

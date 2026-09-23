@@ -93,7 +93,35 @@ normal with a WARNING. Status paths never wait; tests pin the retry to 0.
   hits this: the day starts exempt.)
 - A session finishing inside ~2 min before 09:30 may be seen as
   `in_progress` at the 09:30 tick and lock; bounded by the timer cadence.
-- No extra stick for a `failed` session beyond losing the carrot.
+
+## The workday stick (2026-09-23)
+
+The carrot above only pulls on a day the PC is actually being used to enjoy
+it — a weekend. On a workday the user leaves for the office regardless, so
+losing/keeping the PC's lock was worth nothing, and powering the phone off
+at ring time (which stops the alarm dead — nothing left to sync, no session
+ever recorded) cost nothing either.
+
+On **Tuesday/Wednesday/Thursday** — `wake_alarm._constants.STICK_DAYS`, the
+same weekdays screen-locker already calls "relaxed"
+(`_weekly_check.is_relaxed_day`) and leetcode-guard already prices as cheap
+(`Pricing.doubled_days`) — a genuine miss (`failed`, or `none` past its own
+`SESSION_NONE_GRACE`; a *late* `completed` is not a miss, the walk still
+happened) costs tomorrow's leniency in both apps instead of just resetting
+to normal. `wake_alarm._workday_penalty.maybe_apply()` runs at the end of
+every `_session.refresh()` and, when a stick-day miss is detected and today
+is not a free day, signs and writes
+`~/.local/state/wake_alarm/workday_penalty.json` (`{"penalty_date":
+"<tomorrow>", "issued_date": "<today>"}`) — deliberately a separate file
+from `morning_session.json`, since that one always describes *today* and is
+overwritten at the date rollover, so it cannot carry a marker forward.
+screen-locker and leetcode-guard each read it with the same HMAC + date
+predicate they already use for `morning_session.json`.
+
+A phone-side stick (locking down distracting apps on the phone itself,
+signalled to `phone-focus-mode`'s `focus-owner`) is the other half of this
+and lives in `phone_app/`, not here — see its own commit/doc for the exact
+signal shape.
 
 ## Commands
 

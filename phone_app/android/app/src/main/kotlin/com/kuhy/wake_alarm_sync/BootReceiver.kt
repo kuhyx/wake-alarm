@@ -24,6 +24,9 @@ class BootReceiver : BroadcastReceiver() {
         // has to be re-established here or it silently stops after the first
         // restart — exactly when a watchdog is most needed.
         AlarmWatchdog.schedule(context)
+        // The moment a phone powered off mid-ring comes back is exactly when
+        // an abandoned ring should be caught -- see WorkdayStick.
+        WorkdayStick.checkAndSignal(context)
     }
 
     private companion object {

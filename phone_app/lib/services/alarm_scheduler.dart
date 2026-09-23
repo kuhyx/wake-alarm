@@ -60,6 +60,17 @@ class AlarmScheduler {
   /// Stops the ring and immediately re-arms for tomorrow.
   Future<void> dismiss() => _channel.invokeMethod<void>('dismiss');
 
+  /// Tells the native side today's ring was actually dismissed.
+  ///
+  /// Called once, from `SessionHandoff.afterDismiss` regardless of outcome —
+  /// reaching that call at all means the dismiss gate was satisfied. Native
+  /// pairs this with the fired timestamp it records independently
+  /// (`RingWatch`), so an abandoned ring (phone powered off before this
+  /// ever runs) can be told apart from a completed one with no Dart engine
+  /// required on the next boot.
+  Future<void> markRingDismissed() =>
+      _channel.invokeMethod<void>('markRingDismissed');
+
   /// Whether the system will honour the full-screen intent.
   ///
   /// False from API 34 unless granted. The caller must treat this as a hard

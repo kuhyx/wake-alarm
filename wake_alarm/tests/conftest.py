@@ -41,6 +41,10 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             "wake_alarm._session.MORNING_SESSION_FILE",
             tmp_path / "morning_session.json",
         ),
+        patch(
+            "wake_alarm._workday_penalty.WORKDAY_PENALTY_FILE",
+            tmp_path / "workday_penalty.json",
+        ),
         # The shared free-day pool lives under ~/.local/share, outside every
         # path above. Without this, a real free day on the developer's
         # machine would silence the alarm in every trigger test here.

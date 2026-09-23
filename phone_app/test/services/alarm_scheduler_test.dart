@@ -49,6 +49,11 @@ void main() {
     expect(calls.single.method, 'dismiss');
   });
 
+  test('markRingDismissed invokes markRingDismissed', () async {
+    await scheduler.markRingDismissed();
+    expect(calls.single.method, 'markRingDismissed');
+  });
+
   test('rearm returns the platform result', () async {
     reply = true;
     expect(await scheduler.rearm(), isTrue);
