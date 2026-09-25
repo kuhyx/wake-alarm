@@ -28,7 +28,7 @@ class AlarmScheduler {
   ///
   /// The phone rings **daily**, matching the PC's `ALARM_DAYS` (all seven
   /// days) and its baked-in fallback hour. Callers pass a time resolved by
-  /// `AlarmPolicy`, never a user-chosen one: the schedule is fixed at 08:00
+  /// `AlarmPolicy`, never a user-chosen one: the schedule is the daily ramp
   /// and only ever ratchets earlier.
   Future<void> schedule(int hour, int minute) => _channel.invokeMethod<void>(
     'schedule',

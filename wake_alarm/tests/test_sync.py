@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -9,9 +10,6 @@ import urllib.error
 
 import pytest
 
-from wake_alarm._constants import (
-    FALLBACK_ALARM_HOUR,
-)
 from wake_alarm._sync import (
     Alarm,
     _fetch_github_alarm,
@@ -226,12 +224,11 @@ class TestGetAlarm:
             "stale-cache",
         )
 
-    def test_falls_back_to_constant(self) -> None:
-        """With no cache and no network, the fixed fallback hour is used."""
-        with patch("wake_alarm._sync.fetch_remote_alarm", return_value=None):
+    def test_falls_back_to_the_ramp(self) -> None:
+        """With no cache and no network, today's ramp baseline is used."""
+        with (
+            patch("wake_alarm._sync.fetch_remote_alarm", return_value=None),
+            patch("wake_alarm._sync.local_today", return_value=date(2026, 10, 5)),
+        ):
             alarm = get_alarm()
-        assert (alarm.minute, alarm.source) == (0, "fallback")
-        # Bound to the constant, not a literal: the fallback deliberately
-        # matches the phone's baked-in baseline, so hardcoding the number here
-        # would fail every time that shared value moves.
-        assert alarm.hour == FALLBACK_ALARM_HOUR
+        assert (alarm.hour, alarm.minute, alarm.source) == (7, 50, "fallback")

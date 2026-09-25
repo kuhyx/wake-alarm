@@ -22,7 +22,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // The alarm is not opt-in: launching the app is enough to arm it. There is
   // no "set alarm" button to forget, and no cancel to reach for at 02:00 —
-  // AlarmPolicy fixes the time at 08:00 and only ever lets it move earlier.
+  // AlarmPolicy fixes the time (the daily ramp, 08:00 down to 07:00) and
+  // only ever lets it move earlier.
   final policy = await AlarmPolicy.load();
   await AlarmScheduler().armSchedule(policy.hour, policy.minute);
   runApp(const WakeAlarmSyncApp());

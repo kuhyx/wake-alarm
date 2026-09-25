@@ -214,9 +214,13 @@ class _RingScreenState extends State<RingScreen> {
     await _scheduler.dismiss();
     // A one-shot earlier start applies to this alarm only. Without the reset
     // the first early morning would become permanent, with no way back to the
-    // 08:00 baseline short of reinstalling — a ratchet with no reset is a
+    // ramp baseline short of reinstalling — a ratchet with no reset is a
     // trap, not a defence.
     await AlarmPolicy.resetAfterFire();
+    // dismiss() re-armed the *stored* time, i.e. the override just spent;
+    // without re-arming the policy it rang again every day until home opened.
+    final next = await AlarmPolicy.load();
+    await _scheduler.armSchedule(next.hour, next.minute);
     final handoff = widget.handoff ?? SessionHandoff(scheduler: _scheduler);
     final session = await handoff.afterDismiss(away: _gate.awayActive);
     if (session && mounted) {

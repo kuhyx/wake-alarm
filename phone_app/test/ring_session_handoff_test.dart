@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wake_alarm_sync/screens/ring_screen.dart';
 import 'package:wake_alarm_sync/screens/session_screen.dart';
+import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
@@ -22,10 +23,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late List<String> calls;
+  late List<Object?> armed;
   Map<String, Object?>? presence;
 
   setUp(() async {
     calls = <String>[];
+    armed = <Object?>[];
     presence = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -33,6 +36,7 @@ void main() {
           const MethodChannel(AlarmScheduler.channelName),
           (call) async {
             calls.add(call.method);
+            if (call.method == 'armSchedule') armed.add(call.arguments);
             if (call.method == 'stepCount') return 500;
             if (call.method == 'hasNfc') return true;
             if (call.method == 'readPresence') return presence;
@@ -98,6 +102,24 @@ void main() {
     expect(calls, contains('dismiss'));
     expect(calls, isNot(contains('closeRingScreen')));
     expect((await SessionStore().loadCurrent())?.reRings, 0);
+  });
+
+  testWidgets('the dismiss re-arms the ramp, not the spent override', (
+    tester,
+  ) async {
+    // dismiss() natively re-arms the *stored* time, which is the one-shot
+    // override just spent; without an explicit re-arm it rang at 05:00 every
+    // day until the home screen was next opened.
+    await AlarmPolicy.setEarlier(5, 0);
+    final answers = await pumpApp(tester);
+    await dismiss(tester, answers);
+    final next = AlarmPolicy.resolve(DateTime.now(), null);
+    expect(
+      calls.lastIndexOf('armSchedule'),
+      greaterThan(calls.indexOf('dismiss')),
+    );
+    expect(armed.last, <String, int>{'hour': next.hour, 'minute': next.minute});
+    expect(next.isOverridden, isFalse);
   });
 
   testWidgets('the session hears tags after the ring screen is gone', (

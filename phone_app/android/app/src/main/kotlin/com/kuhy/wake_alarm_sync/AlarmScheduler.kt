@@ -6,7 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import java.util.Calendar
+import java.time.ZonedDateTime
 
 /**
  * Arms and cancels the one exact alarm this app owns.
@@ -162,18 +162,15 @@ object AlarmScheduler {
             .putInt(KEY_HOUR, hour).putInt(KEY_MINUTE, minute).apply()
     }
 
-    /** Next local-time instant matching [hour]:[minute]; tomorrow if today has passed. */
-    private fun nextOccurrence(hour: Int, minute: Int): Long {
-        val now = Calendar.getInstance()
-        val at = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, minute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        if (!at.after(now)) at.add(Calendar.DAY_OF_YEAR, 1)
-        return at.timeInMillis
-    }
+    /**
+     * Next local-time instant for [hour]:[minute], never later than that day's ramp.
+     *
+     * Every arm path funnels through here, so the stored time is only an upper
+     * bound: the dismiss/boot/free-day re-arms still move a minute earlier a day.
+     */
+    private fun nextOccurrence(hour: Int, minute: Int): Long =
+        AlarmRamp.nextFire(hour * 60 + minute, ZonedDateTime.now())
+            .toInstant().toEpochMilli()
 
     /** FLAG_IMMUTABLE is mandatory from API 31; without it this throws at arm time. */
     private fun firePendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(

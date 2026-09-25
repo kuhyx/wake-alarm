@@ -26,11 +26,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _hour = AlarmPolicy.baselineHour;
-  int _minute = AlarmPolicy.baselineMinute;
-
-  /// True while a one-shot earlier start is in force for the next alarm.
-  bool _isOverridden = false;
+  /// The next alarm: the day's ramp baseline, or a one-shot earlier start.
+  AlarmPolicy _policy = AlarmPolicy.resolve(DateTime.now(), null);
+  int get _hour => _policy.hour;
+  int get _minute => _policy.minute;
   bool _busy = false;
   String _status = '';
   bool _configured = false;
@@ -148,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     await _applyPolicy();
     if (!mounted) return;
-    setState(() => _status = 'Armed for ${_fmt(_hour, _minute)} tomorrow.');
+    setState(() => _status = 'Armed for ${_fmt(_hour, _minute)}.');
     // The PC has to learn about the new time too. Without this the only
     // publish attempt was the one at startup, so an alarm moved earlier here
     // never reached the PC at all.
@@ -160,11 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final policy = await AlarmPolicy.load();
     await _scheduler.armSchedule(policy.hour, policy.minute);
     if (!mounted) return;
-    setState(() {
-      _hour = policy.hour;
-      _minute = policy.minute;
-      _isOverridden = policy.isOverridden;
-    });
+    setState(() => _policy = policy);
   }
 
   Future<void> _syncToPc() async {
@@ -186,8 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// The baseline time, shown when a one-shot override is active.
-  String get _baseline =>
-      _fmt(AlarmPolicy.baselineHour, AlarmPolicy.baselineMinute);
+  String get _baseline => _fmt(_policy.baselineHour, _policy.baselineMinute);
   String _fmt(int h, int m) =>
       '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
 
@@ -236,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: HomeBody(
         time: _fmt(_hour, _minute),
         baseline: _baseline,
-        isOverridden: _isOverridden,
+        isOverridden: _policy.isOverridden,
         busy: _busy,
         status: _status,
         configured: _configured,

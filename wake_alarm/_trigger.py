@@ -21,7 +21,7 @@ must be built in the same timezone the user reads off their phone.
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 import logging
 import subprocess
 import sys
@@ -30,11 +30,11 @@ import freedays
 
 from wake_alarm._constants import (
     ALARM_DAYS,
-    FALLBACK_ALARM_HOUR,
     TRIGGER_CATCHUP_MINUTES,
     TRIGGER_TARGET_UNIT,
 )
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._ramp import RAMP_START_MINUTES, baseline_time
 from wake_alarm._state import (
     save_trigger_fired,
     was_trigger_fired_today,
@@ -170,37 +170,42 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _clamp_to_baseline(alarm: Alarm) -> Alarm:
-    """Refuse to let any resolved alarm land later than the baseline.
+def _clamp_to_baseline(alarm: Alarm, day: date) -> Alarm:
+    """Refuse to let any resolved alarm land later than *day*'s ramp baseline.
 
-    The phone bakes in ``FALLBACK_ALARM_HOUR`` and only ever ratchets *earlier*,
-    so a synced value later than the baseline means something is wrong — a
-    stale record from before the policy landed, a half-written payload, or a
-    tampered store. Whatever the cause, the safe direction is unambiguous:
-    honour it if it is earlier, clamp it if it is later.
+    The phone arms at ``_ramp.baseline_time`` and only ever ratchets earlier,
+    so honour an earlier value and clamp a later one. This is the PC half of
+    the watchdog: without it the one thing the design forbids — the alarm
+    silently moving later — would be reachable through sync.
 
-    This is the PC half of the watchdog. Without it the PC would faithfully
-    reproduce a bad remote value, and the one thing the design forbids —
-    the alarm silently moving later — would be reachable through sync.
+    Up to 08:00 a later value is expected lag, not tampering: the phone
+    publishes when the app runs, so yesterday's record is a minute behind
+    today's ramp. That logs at INFO (this runs every tick); only a value later
+    than the old 08:00 baseline — stale or tampered — is worth a WARNING.
 
     Args:
         alarm: The alarm as resolved by ``get_alarm``.
+        day: The local date the alarm fires on.
 
     Returns:
-        The same alarm, or the baseline when the resolved time is later.
+        The same alarm, or the ramp baseline when the resolved time is later.
     """
-    if (alarm.hour, alarm.minute) <= (FALLBACK_ALARM_HOUR, 0):
+    base = baseline_time(day)
+    if (alarm.hour, alarm.minute) <= base:
         return alarm
-    _logger.warning(
-        "Resolved alarm %02d:%02d is later than the %02d:00 baseline "
-        "(source=%s) — clamping. The phone can only move it earlier, so a "
-        "later value means a stale or tampered record.",
+    level = logging.INFO
+    if alarm.hour * 60 + alarm.minute > RAMP_START_MINUTES:
+        level = logging.WARNING
+    _logger.log(
+        level,
+        "Resolved alarm %02d:%02d is later than today's %02d:%02d baseline "
+        "(source=%s) — clamping.",
         alarm.hour,
         alarm.minute,
-        FALLBACK_ALARM_HOUR,
+        *base,
         alarm.source,
     )
-    return Alarm(FALLBACK_ALARM_HOUR, 0, f"clamped-{alarm.source}")
+    return Alarm(*base, f"clamped-{alarm.source}")
 
 
 def main() -> None:
@@ -209,7 +214,7 @@ def main() -> None:
     args = _parse_args(sys.argv[1:])
 
     now = _now()
-    alarm = _clamp_to_baseline(get_alarm())
+    alarm = _clamp_to_baseline(get_alarm(), now.date())
     should_fire, reason = _decide(now, alarm)
 
     if args.dry_run:

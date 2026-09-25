@@ -34,8 +34,9 @@ import sys
 
 from gatelock.log_integrity import compute_entry_hmac, verify_entry_hmac
 
-from wake_alarm._constants import FALLBACK_ALARM_HOUR, MORNING_SESSION_FILE
+from wake_alarm._constants import MORNING_SESSION_FILE
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._ramp import baseline_time
 from wake_alarm._session_payload import newest_session
 from wake_alarm._session_policy import to_entry
 from wake_alarm._sync import get_alarm
@@ -99,8 +100,8 @@ def refresh(now: datetime) -> dict[str, object] | None:
         today=today,
         refreshed_at=now.timestamp(),
         # Same clamp as the trigger: the phone may only move the alarm earlier
-        # than the baseline, so a later synced value never widens the grace.
-        alarm=min((alarm.hour, alarm.minute), (FALLBACK_ALARM_HOUR, 0)),
+        # than today's ramp baseline, so a later value never widens the grace.
+        alarm=min((alarm.hour, alarm.minute), baseline_time(now.date())),
     )
     if not write_entry(entry):
         return None

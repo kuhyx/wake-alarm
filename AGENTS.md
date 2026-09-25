@@ -4,13 +4,13 @@
 
 **The phone is the alarm.** `phone_app/` arms and rings it and gates the
 dismissal; this repo's Python half only reads the alarm time the phone
-published and starts the morning routine at that time.
+published and starts the morning routine at that time. The time is a ramp:
+08:00 down a minute a day to 07:00, in three copies — **`DOCS-ramp.md`**.
 
 The PC's waking role was deleted on 2026-08-30: no alarm window, no audio
 escalation, no smart plug, no curtains, no `rtcwake`, no `shutdown` wrapper,
-no sleep hook. Making the PC wake someone reliably cost more than it returned.
-Everything about it is in git history; do not reintroduce a piece of it
-without saying why the phone cannot do that job.
+no sleep hook: waking someone reliably cost more than it returned. It is in
+git history; do not reintroduce any of it without saying why the phone can't.
 
 ## The dismiss sequence (phone)
 
@@ -101,7 +101,7 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
 - **The Firebase reader discovers device directories; it is not pinned to
   `devices/phone/`.** The phone's device id is migrating from the fixed
   constant `phone` to a per-install uuid, and a pinned reader would silently
-  stop seeing the alarm and fall back to `FALLBACK_ALARM_HOUR` — i.e. the wrong
+  stop seeing the alarm and fall back to the ramp baseline — i.e. the wrong
   time. `_fetch_firebase_alarm()` lists `SYNC_DEVICES_PREFIX`, reads every
   device's `alarm.json`, and picks the newest by the hour field's **HLC**, with
   `device_id` breaking exact ties. A payload that does not parse is skipped
@@ -127,7 +127,7 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
   for that reason. Verify with `/usr/bin/python3 -c "import crdt_sync"`, not the
   dev venv.
 - Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch → stale
-  cache → `FALLBACK_ALARM_HOUR`. The cache bounds remote reads to ~288/day
+  cache → today's ramp baseline. The cache bounds remote reads to ~288/day
   despite the per-minute tick.
 - **A record older than `PUBLISHED_ALARM_MAX_AGE_SECONDS` (14 days) is skipped
   at every step, including the cache.** The check is on when the *phone
@@ -136,7 +136,7 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
   minutes, so `fetched_at` is always fresh however old the record behind it is.
   That is why the winning HLC's instant is carried through `_alarm_payload` →
   `_sync_transport` → the cache's `published_at`. Expiring is safe because
-  `FALLBACK_ALARM_HOUR` *is* the phone's baseline. An **undated** record is
+  the ramp baseline *is* the phone's baseline. An **undated** record is
   trusted, not expired: the GitHub mirror has no per-field HLC, so treating
   "cannot tell" as "too old" would break that backend entirely.
 - **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute;
