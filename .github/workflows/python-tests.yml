@@ -17,11 +17,22 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      # uv with a cached wheel store (and cached builds of the three
+      # git+ kuhyx/utils packages) installs requirements.txt in seconds;
+      # plain pip took 22 s of a 32 s job.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
 
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      # No -n auto: the whole suite runs in ~0.5 s, and under pytest-xdist it
+      # measured ~1.2 s locally (worker start-up outweighs the parallelism).
+      # Coverage and its 100% bar come from pyproject.toml's addopts.
       - name: Run tests with coverage
-        run: python -m pytest -v
+        run: python -m pytest -q -p no:sugar
 
   # The Dart free-day rules are a port of ~/src/utils/freedays. This is the
   # cross-language gate (scripts/free_days_interop/check.sh): it needs both
@@ -42,11 +53,21 @@ jobs:
         with:
           python-version: "3.x"
 
+      # This job is the workflow's critical path (the Flutter SDK restore and
+      # the Dart test are its floor); uv builds the venv in a couple of
+      # seconds where venv + pip took 12 s.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            .utils/crdt-sync/pyproject.toml
+            .utils/freedays/pyproject.toml
+
       - name: Install freedays into its own venv
         run: |
-          python -m venv .freedays-venv
-          .freedays-venv/bin/pip install --quiet .utils/crdt-sync
-          .freedays-venv/bin/pip install --quiet --no-deps .utils/freedays
+          uv venv --python "$pythonLocation/bin/python" .freedays-venv
+          uv pip install --quiet --python .freedays-venv/bin/python .utils/crdt-sync
+          uv pip install --quiet --python .freedays-venv/bin/python --no-deps .utils/freedays
 
       - uses: subosito/flutter-action@v2
         with:
