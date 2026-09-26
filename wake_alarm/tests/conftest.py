@@ -14,6 +14,11 @@ an inhibitor:
   per-file redirect is exactly the kind that gets forgotten when a new writer
   appears, and the failure is silent -- a green suite that quietly stamped
   the live state file.
+* ``_logging_setup`` attaches a JSONL sink to the root logger the first time
+  any entry point's ``main()`` runs, pointed at the real
+  ``~/.local/state/wake_alarm/events.jsonl``. Unredirected, every suite run
+  appended fixture warnings ("Synced alarm out of range: 24:0") to the log a
+  failed wake-up is reconstructed from.
 """
 
 from __future__ import annotations
@@ -37,6 +42,10 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
     with (
         patch("gatelock.log_integrity.DEFAULT_HMAC_KEY_FILE", key_file),
         patch("wake_alarm._state.WAKE_STATE_FILE", tmp_path / "wake_state.json"),
+        # _logging_setup imported these by value, so patch its names, not
+        # _constants'.
+        patch("wake_alarm._logging_setup.LOG_JSONL_FILE", tmp_path / "events.jsonl"),
+        patch("wake_alarm._logging_setup.LOG_DEDUPE_FILE", tmp_path / "last.json"),
         patch(
             "wake_alarm._session.MORNING_SESSION_FILE",
             tmp_path / "morning_session.json",
