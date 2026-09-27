@@ -11,10 +11,21 @@ event — the phone stays silent — rather than an absent dialog.
 
 | | |
 |---|---|
-| Picker | `phone_app/lib/screens/free_days_screen.dart` (+ `free_days_body.dart`), the calendar icon on the home screen |
+| Picker | `phone_app/lib/screens/free_days_screen.dart` (+ `free_days_body.dart`, `free_day_calendar.dart`), the calendar icon on the home screen |
 | Rules, Dart port | `phone_app/lib/services/free_day_pool.dart` — same record shape as the Python package, byte for byte |
 | Sync | `phone_app/lib/services/free_day_sync.dart` — Firebase only, `freedays-sync/devices/<uuid>/free_days.json` |
 | Ring path | `android/.../FreeDays.kt` + the check at the top of `AlarmReceiver.onReceive` |
+
+## The calendar
+
+A Monday-first month grid (adapted from punchme's, whose own free days are a
+separate concept and are not read here). One tap per future date: an empty day
+is booked with no reason prompt, a booked day is released and refunded. Today
+and the past are read-only — releasing a day that has started still spends
+it. Tue/Wed/Thu (`workdays`, mirroring `freedays.WORKDAYS`) are shaded; past
+free days stay visible, faded. Months run from January of this year to
+December of next. The "Booked ahead" list below keeps reasons from PC marks
+and its own Release buttons.
 
 ## Why there is a native cache
 

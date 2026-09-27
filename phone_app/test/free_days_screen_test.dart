@@ -41,6 +41,14 @@ void main() {
     syncs = 0;
   });
 
+  /// A Pixel 6a-sized surface, so the header, grid and list all fit.
+  void phoneSize(WidgetTester tester) {
+    tester.view
+      ..physicalSize = const Size(1080, 2400)
+      ..devicePixelRatio = 2.625;
+    addTearDown(tester.view.reset);
+  }
+
   Widget app() => MaterialApp(
     theme: buildAppTheme(),
     home: FreeDaysScreen(
@@ -62,6 +70,7 @@ void main() {
     await pool.mark(DateTime(2026, 9, 20), reason: 'travelling', now: _today);
     // A past free day is not "booked ahead".
     await pool.mark(DateTime(2026, 9, 10), now: DateTime(2026, 9, 10));
+    phoneSize(tester);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
@@ -77,103 +86,138 @@ void main() {
     );
   });
 
-  testWidgets('release gives a future day back and re-syncs', (tester) async {
+  Finder cell(DateTime day) =>
+      find.byKey(ValueKey<String>('free-day-${FreeDayPool.toIso(day)}'));
+
+  /// Scrolls the day into view, then taps it.
+  Future<void> tapDay(WidgetTester tester, DateTime day) async {
+    await tester.ensureVisible(cell(day));
+    await tester.tap(cell(day));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the list Release gives a future day back and re-syncs', (
+    tester,
+  ) async {
     await pool.mark(DateTime(2026, 9, 20), now: _today);
+    phoneSize(tester);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Release'));
     await tester.tap(find.text('Release'));
     await tester.pumpAndSettle();
 
     expect(pool.isFree(DateTime(2026, 9, 20)), isFalse);
     expect(find.text('35 of 35'), findsOneWidget);
-    expect(find.textContaining('Tap "Take a day"'), findsOneWidget);
+    expect(find.textContaining('Tap a date above'), findsOneWidget);
     expect(syncs, 2);
   });
 
-  testWidgets('take a day walks the date picker and the reason dialog', (
-    tester,
-  ) async {
+  testWidgets('the calendar opens on the current month', (tester) async {
+    phoneSize(tester);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Take a day'));
-    await tester.pumpAndSettle();
-    expect(find.text('Take a free day'), findsOneWidget);
-    // Tomorrow, in the calendar grid of the current month.
-    await tester.tap(find.text('12'));
-    await tester.tap(find.text('OK'));
+    expect(find.text('September 2026'), findsOneWidget);
+    expect(find.text('Take a day'), findsNothing);
+  });
+
+  testWidgets('tapping a future day books it, no reason asked', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    expect(find.text('Reason (optional)'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'dentist');
-    await tester.tap(find.text('Mark free'));
-    await tester.pumpAndSettle();
+    await tapDay(tester, DateTime(2026, 9, 12));
 
     expect(pool.isFree(DateTime(2026, 9, 12)), isTrue);
-    expect(pool.reasonFor(DateTime(2026, 9, 12)), 'dentist');
+    expect(pool.reasonFor(DateTime(2026, 9, 12)), '');
     expect(find.text('34 of 35'), findsOneWidget);
     expect(find.text('Sat 2026-09-12'), findsOneWidget);
     expect(syncs, 2);
   });
 
-  testWidgets('a refused edit shows the reason and does not sync', (
+  testWidgets('tapping a booked future day releases it and refunds', (
+    tester,
+  ) async {
+    await pool.mark(DateTime(2026, 9, 20), now: _today);
+    phoneSize(tester);
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    expect(find.text('34 of 35'), findsOneWidget);
+
+    await tapDay(tester, DateTime(2026, 9, 20));
+
+    expect(pool.isFree(DateTime(2026, 9, 20)), isFalse);
+    expect(find.text('35 of 35'), findsOneWidget);
+    expect(syncs, 2);
+  });
+
+  testWidgets('today and past days are read-only', (tester) async {
+    await pool.mark(DateTime(2026, 9, 10), now: DateTime(2026, 9, 10));
+    phoneSize(tester);
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tapDay(tester, _today);
+    await tapDay(tester, DateTime(2026, 9, 10));
+    await tapDay(tester, DateTime(2026, 9, 2));
+
+    expect(pool.isFree(_today), isFalse);
+    expect(pool.isFree(DateTime(2026, 9, 10)), isTrue);
+    expect(pool.isFree(DateTime(2026, 9, 2)), isFalse);
+    expect(syncs, 1);
+  });
+
+  testWidgets('month arrows move and stop at the horizon', (tester) async {
+    phoneSize(tester);
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    Future<void> press(String tooltip, int times) async {
+      for (var i = 0; i < times; i++) {
+        await tester.tap(find.byTooltip(tooltip));
+        await tester.pumpAndSettle();
+      }
+    }
+
+    await press('Next month', 1);
+    expect(find.text('October 2026'), findsOneWidget);
+    await tapDay(tester, DateTime(2026, 10, 2));
+    expect(pool.isFree(DateTime(2026, 10, 2)), isTrue);
+
+    // Back to January of this year, and no further.
+    await press('Previous month', 9);
+    expect(find.text('January 2026'), findsOneWidget);
+    await press('Previous month', 1);
+    expect(find.text('January 2026'), findsOneWidget);
+
+    // Forward to December of next year, and no further.
+    await press('Next month', 23);
+    expect(find.text('December 2027'), findsOneWidget);
+    await press('Next month', 1);
+    expect(find.text('December 2027'), findsOneWidget);
+  });
+
+  testWidgets('a refused booking shows the reason and does not sync', (
     tester,
   ) async {
     // Exhaust the year first.
     for (var i = 0; i < FreeDayPool.annualBudget; i++) {
       await pool.mark(DateTime(2026, 10, 1 + i), now: _today);
     }
+    phoneSize(tester);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
     expect(find.text('0 of 35'), findsOneWidget);
 
-    await tester.tap(find.text('Take a day'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('12'));
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Mark free'));
-    await tester.pumpAndSettle();
+    await tapDay(tester, DateTime(2026, 9, 12));
 
+    expect(pool.isFree(DateTime(2026, 9, 12)), isFalse);
+    // The 35 booked days make the page long; back to the status line.
+    await tester.drag(find.byType(ListView), const Offset(0, 3000));
+    await tester.pumpAndSettle();
     expect(find.textContaining('No free days left in 2026'), findsOneWidget);
-    expect(syncs, 1);
-  });
-
-  testWidgets('the picker opens even when today is already free', (
-    tester,
-  ) async {
-    await pool.mark(_today, now: _today);
-    await tester.pumpWidget(app());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Take a day'));
-    await tester.pumpAndSettle();
-    // The cursor moved to the 12th; today is disabled, not asserted on.
-    expect(find.text('Take a free day'), findsOneWidget);
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Mark free'));
-    await tester.pumpAndSettle();
-
-    expect(pool.isFree(DateTime(2026, 9, 12)), isTrue);
-    expect(find.text('33 of 35'), findsOneWidget);
-  });
-
-  testWidgets('cancelling the reason dialog marks nothing', (tester) async {
-    await tester.pumpWidget(app());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Take a day'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('12'));
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
-    expect(pool.freeDays(), isEmpty);
-    expect(find.text('35 of 35'), findsOneWidget);
     expect(syncs, 1);
   });
 

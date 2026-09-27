@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/screens/free_day_calendar.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// One upcoming free day, as the list shows it.
 typedef UpcomingFreeDay = ({DateTime day, String reason});
 
-/// The picker's body: the year's budget, the upcoming days, the status line.
+/// The picker's body: the year's budget, the month calendar, the upcoming
+/// days and the status line.
 ///
 /// Stateless and fed plain values, like `HomeBody`: the screen owns the pool
 /// and the sync ordering, this only draws.
@@ -18,8 +20,12 @@ class FreeDaysBody extends StatelessWidget {
     required this.status,
     required this.busy,
     required this.onRelease,
+    required this.calendar,
     super.key,
   });
+
+  /// The month grid, built by the screen, which owns the displayed month.
+  final FreeDayCalendar calendar;
 
   /// The calendar year the budget line describes.
   final int year;
@@ -50,8 +56,7 @@ class FreeDaysBody extends StatelessWidget {
     final statusColors = theme.extension<AppStatusColors>()!;
     return SafeArea(
       child: ListView(
-        // Bottom room for the extended FAB, so the last row stays tappable.
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        padding: const EdgeInsets.all(16),
         children: [
           Text(
             '$remaining of ${FreeDayPool.annualBudget}',
@@ -86,12 +91,14 @@ class FreeDaysBody extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 16),
+          calendar,
           const SizedBox(height: 24),
           Text('Booked ahead', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           if (upcoming.isEmpty)
             Text(
-              'None. Tap "Take a day" to book one.',
+              'None. Tap a date above to book one.',
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),
           for (final entry in upcoming)

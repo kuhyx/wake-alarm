@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/screens/free_day_calendar.dart';
 import 'package:wake_alarm_sync/screens/free_days_body.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
@@ -38,6 +39,9 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
   FreeDayPool? _pool;
   bool _busy = true;
   String _status = '';
+
+  /// The month the calendar shows; starts on the current one.
+  late DateTime _month = DateTime(_today.year, _today.month);
 
   late final FreeDaySync _syncer = widget.syncer ?? FreeDaySync();
 
@@ -79,56 +83,19 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
     });
   }
 
-  Future<void> _pickDay() async {
+  /// One tap per day: a free day is given back, any other is taken.
+  ///
+  /// No reason prompt and no confirmation -- a future release refunds the
+  /// budget, so a mis-tap costs one more tap. The calendar only reports
+  /// future dates, so today and the past never reach here.
+  Future<void> _toggle(DateTime day) async {
     final pool = _pool;
     if (pool == null) return;
     final today = _today;
-    // showDatePicker asserts that initialDate satisfies the predicate, so
-    // when today is already free the cursor starts on the next day that is
-    // not. Day arithmetic, not Duration: adding 24h across a DST change
-    // lands on the same date twice.
-    var initial = today;
-    while (pool.isFree(initial)) {
-      initial = DateTime(initial.year, initial.month, initial.day + 1);
-    }
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: today,
-      lastDate: DateTime(today.year + 1, 12, 31),
-      helpText: 'Take a free day',
-      selectableDayPredicate: (day) => !pool.isFree(day),
-    );
-    if (picked == null || !mounted) return;
-    final reason = await _askReason();
-    // Null is Cancel or a barrier tap; an empty string is "no reason".
-    if (reason == null || !mounted) return;
-    await _apply(() => pool.mark(picked, reason: reason, now: today));
-  }
-
-  /// Optional, by design. Enter with an empty field and nothing is stored.
-  Future<String?> _askReason() {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reason (optional)'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'e.g. travelling'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Mark free'),
-          ),
-        ],
-      ),
+    await _apply(
+      () => pool.isFree(day)
+          ? pool.release(day, now: today)
+          : pool.mark(day, now: today),
     );
   }
 
@@ -176,13 +143,18 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
               status: _status,
               busy: _busy,
               onRelease: (day) => unawaited(_release(day)),
-            ),
-      floatingActionButton: pool == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _busy ? null : () => unawaited(_pickDay()),
-              icon: const Icon(Icons.event_available),
-              label: const Text('Take a day'),
+              calendar: FreeDayCalendar(
+                month: _month,
+                today: _today,
+                isFree: pool.isFree,
+                busy: _busy,
+                onTapDay: (day) => unawaited(_toggle(day)),
+                onMonth: (month) => setState(() => _month = month),
+                // Back to January shows this year's spent days; forward to
+                // the end of next year, the pool's booking horizon.
+                firstMonth: DateTime(_today.year),
+                lastMonth: DateTime(_today.year + 1, 12),
+              ),
             ),
     );
   }
