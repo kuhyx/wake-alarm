@@ -1,12 +1,14 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wake_alarm_sync/services/alarm_ramp.dart';
+import 'package:wake_alarm_sync/services/ramp_progress.dart';
 
 /// The alarm schedule, which the user cannot weaken.
 ///
 /// The alarm is deliberately **not** opt-in: there is no "set alarm" button to
 /// forget and no cancel to reach for at 02:00. The time is baked in — the
-/// daily ramp in `alarm_ramp.dart`, 08:00 down to 07:00 a minute a day — and
-/// the only edit the UI offers is moving the *next* alarm **earlier**.
+/// earned ramp in `alarm_ramp.dart`, 08:00 down to 07:00 a minute per
+/// dismissed non-workday morning — and the only edit the UI offers is
+/// moving the *next* alarm **earlier**.
 ///
 /// Earlier-only is what makes this tamper-resistant: every change the user can
 /// make costs them sleep, so a half-asleep user has no lever that helps them
@@ -21,16 +23,21 @@ class AlarmPolicy {
     this.overrideMinute,
   });
 
-  /// Resolves the next alarm after [now], given a [stored] one-shot override.
+  /// Resolves the next alarm after [now], given a [stored] one-shot override
+  /// and the [earned] ramp dates (`RampProgress`).
   ///
   /// The ramp is evaluated for the day the alarm will actually **fire** on,
   /// not the day it is armed: `main()` and the home screen usually arm the
   /// evening before, and evaluating "today" there would arm tomorrow at
   /// today's (one minute later) time, every single day. Today is tried
   /// first; tomorrow always qualifies because the ramp never moves later.
-  factory AlarmPolicy.resolve(DateTime now, int? stored) {
+  factory AlarmPolicy.resolve(
+    DateTime now,
+    int? stored, [
+    Set<String> earned = const <String>{},
+  ]) {
     final today = DateTime(now.year, now.month, now.day);
-    var policy = AlarmPolicy._forDay(today, stored);
+    var policy = AlarmPolicy._forDay(today, stored, earned);
     // Built from fields, not today + Duration: on a DST day local midnight
     // plus N minutes is not N minutes past midnight on the wall clock.
     final at = DateTime(
@@ -44,13 +51,14 @@ class AlarmPolicy {
       policy = AlarmPolicy._forDay(
         DateTime(now.year, now.month, now.day + 1),
         stored,
+        earned,
       );
     }
     return policy;
   }
 
-  factory AlarmPolicy._forDay(DateTime day, int? stored) {
-    final base = rampMinutesOn(day);
+  factory AlarmPolicy._forDay(DateTime day, int? stored, Set<String> earned) {
+    final base = rampMinutesOn(day, earned);
     // A stored value at or after the baseline would be a weakening, so it is
     // ignored rather than trusted — the store is not a trust boundary.
     final override = stored != null && stored < base ? stored : null;
@@ -92,6 +100,7 @@ class AlarmPolicy {
     return AlarmPolicy.resolve(
       now ?? DateTime.now(),
       prefs.getInt(kOverrideKey),
+      await RampProgress.load(),
     );
   }
 

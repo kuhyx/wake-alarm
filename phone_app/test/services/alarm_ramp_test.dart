@@ -5,45 +5,64 @@ String _fmt(int minutes) =>
     '${(minutes ~/ 60).toString().padLeft(2, '0')}:'
     '${(minutes % 60).toString().padLeft(2, '0')}';
 
+String _on(int y, int m, int d, [Set<String> earned = const {}]) =>
+    _fmt(rampMinutesOn(DateTime(y, m, d), earned));
+
 void main() {
-  test('the ramp: 08:00, a minute a day, then 07:00 for good', () {
-    final cases = <DateTime, String>{
-      DateTime(2026): '08:00',
-      DateTime(2026, 9, 25): '08:00',
-      DateTime(2026, 9, 26): '07:59',
-      DateTime(2026, 10, 5): '07:50',
-      DateTime(2026, 11, 23): '07:01',
-      DateTime(2026, 11, 24): '07:00',
-      DateTime(2026, 11, 25): '07:00',
-      DateTime(2030, 6): '07:00',
+  test('the seeds reproduce what already rang: 07:59, 07:58, then 07:57', () {
+    expect(_on(2026, 9, 25), '08:00'); // Fri: nothing earned before it
+    expect(_on(2026, 9, 26), '07:59'); // Sat
+    expect(_on(2026, 9, 27), '07:58'); // Sun
+    expect(_on(2026, 9, 28), '07:57'); // Mon
+  });
+
+  test('workdays hold the latest non-workday time', () {
+    final earned = {'2026-09-28'}; // Monday dismissed
+    expect(_on(2026, 9, 29, earned), '07:57'); // Tue
+    expect(_on(2026, 9, 30, earned), '07:57'); // Wed
+    expect(_on(2026, 10, 1, earned), '07:57'); // Thu
+    expect(_on(2026, 10, 2, earned), '07:56'); // Fri: Monday's minute
+  });
+
+  test('no earned minute (a miss or a free day) means no step', () {
+    // Friday missed: Saturday rings at Friday's time.
+    final earned = {'2026-09-28'};
+    expect(_on(2026, 10, 3, earned), '07:56');
+    // Saturday dismissed, Sunday free (never rings, earns nothing):
+    earned.add('2026-10-03');
+    expect(_on(2026, 10, 4, earned), '07:55');
+    expect(_on(2026, 10, 5, earned), '07:55');
+  });
+
+  test('a workday date in the set earns nothing', () {
+    expect(_on(2026, 10, 2, {'2026-09-29', '2026-09-30'}), '07:57');
+  });
+
+  test('unparseable keys are ignored', () {
+    expect(_on(2026, 10, 2, {'nonsense', ''}), '07:57');
+  });
+
+  test('07:00 is the floor', () {
+    final earned = {
+      for (var i = 0; i < 200; i++) rampDateKey(DateTime(2026, 10, 2 + i)),
     };
-    for (final MapEntry(key: day, value: expected) in cases.entries) {
-      expect(_fmt(rampMinutesOn(day)), expected, reason: '$day');
-    }
+    expect(_on(2027, 12, 31, earned), '07:00');
   });
 
   test('only the date matters, not the time of day', () {
     expect(
-      rampMinutesOn(DateTime(2026, 9, 26, 23, 59)),
-      rampMinutesOn(DateTime(2026, 9, 26)),
+      rampMinutesOn(DateTime(2026, 9, 26, 23, 59), const {}),
+      rampMinutesOn(DateTime(2026, 9, 26), const {}),
     );
   });
 
-  test('the DST change on 2026-10-25 costs exactly one minute a day', () {
-    // Local midnights either side of the fall-back are 25 hours apart; a
-    // Duration-based count would see 0 or 2 days somewhere around here.
-    expect(_fmt(rampMinutesOn(DateTime(2026, 10, 24, 23, 30))), '07:31');
-    expect(_fmt(rampMinutesOn(DateTime(2026, 10, 25, 0, 30))), '07:30');
-    expect(_fmt(rampMinutesOn(DateTime(2026, 10, 26, 0, 30))), '07:29');
+  test('the workday set is Tue/Wed/Thu', () {
+    expect(workdays, {DateTime.tuesday, DateTime.wednesday, DateTime.thursday});
+    expect(isWorkday(DateTime(2026, 9, 29)), isTrue);
+    expect(isWorkday(DateTime(2026, 9, 28)), isFalse);
   });
 
-  test('never moves later from one day to the next', () {
-    var previous = rampStartMinutes;
-    for (var n = -5; n < 90; n++) {
-      final minutes = rampMinutesOn(DateTime(2026, 9, 25 + n));
-      expect(minutes, lessThanOrEqualTo(previous));
-      expect(minutes, greaterThanOrEqualTo(rampFloorMinutes));
-      previous = minutes;
-    }
+  test('date keys are zero-padded ISO dates', () {
+    expect(rampDateKey(DateTime(2026, 3, 4, 23)), '2026-03-04');
   });
 }

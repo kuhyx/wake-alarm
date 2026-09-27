@@ -26,7 +26,7 @@ got up at 07:00, the opposite of the point):
 
 | the phone says | `exempt_until` | meaning |
 |---|---|---|
-| nothing started today (`none`) | **alarm + 15 min** (`SESSION_NONE_GRACE`; alarm = the phone's, clamped to ≤ today's ramp baseline like the trigger) | up early is fine; the phone rings at the alarm, and a dismiss that has not produced a session by then means "not up" |
+| nothing started today (`none`) | **alarm + 15 min** (`SESSION_NONE_GRACE`; alarm = the phone's, clamped to ≤ 08:00 like the trigger) | up early is fine; the phone rings at the alarm, and a dismiss that has not produced a session by then means "not up" |
 | started, not finished (`in_progress`) | `min(started_at + 90 min, 09:30)` | provisional — the legs take ~40 min; relative to the start because an alarm earlier than 08:00 is legal and a fixed 09:30 would hand an aborted 06:15 session three hours |
 | `completed`, finished inside that same cutoff | **11:00** | the carrot |
 | `completed` *after* the cutoff | none | a phone switched back on at noon completes the legs then; that un-locks nothing |

@@ -109,7 +109,7 @@ def fetch_firebase_logs() -> list[tuple[str, str]] | None:
     Discovers device directories rather than reading one fixed path: the
     phone's device id is migrating from the constant "phone" to a per-install
     uuid, and a reader pinned to the old path would stop seeing the alarm the
-    moment the phone migrated — falling back to the ramp baseline, i.e.
+    moment the phone migrated — falling back to FALLBACK_ALARM_HOUR, i.e.
     waking the user at the wrong time. Listing covers both ids, and
     SYNC_ALARM_PATH remains as a last resort for a backend that cannot list.
 

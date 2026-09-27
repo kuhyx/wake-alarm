@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
+import 'package:wake_alarm_sync/services/alarm_ramp.dart';
+import 'package:wake_alarm_sync/services/ramp_progress.dart';
 
 /// Every test pins "now": the baseline is the ramp, so an unpinned test that
 /// passes at 08:00 today fails at 07:59 tomorrow.
@@ -27,16 +29,32 @@ void main() {
 
   test('before the alarm on its own day, it is still today', () {
     final policy = AlarmPolicy.resolve(DateTime(2026, 10, 5, 3), null);
-    expect(hm(policy), '07:50');
+    expect(hm(policy), '07:57');
   });
 
-  test('once today has fired, it is tomorrow', () {
-    final policy = AlarmPolicy.resolve(DateTime(2026, 10, 5, 7, 50), null);
-    expect(hm(policy), '07:49');
+  test('once today has fired, it is tomorrow, with today earned', () {
+    // Saturday 07:57 has rung and been dismissed; Sunday counts it.
+    final policy = AlarmPolicy.resolve(DateTime(2026, 10, 3, 7, 57), null, {
+      '2026-10-03',
+    });
+    expect(hm(policy), '07:56');
   });
 
   test('past the floor it stays at 07:00', () {
-    expect(hm(AlarmPolicy.resolve(DateTime(2027, 3, 1, 12), null)), '07:00');
+    final earned = {
+      for (var i = 0; i < 200; i++) rampDateKey(DateTime(2026, 10, 2 + i)),
+    };
+    expect(
+      hm(AlarmPolicy.resolve(DateTime(2027, 12, 1, 12), null, earned)),
+      '07:00',
+    );
+  });
+
+  test('load reads the earned dates from storage', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      RampProgress.kEarnedKey: '["2026-10-03"]',
+    });
+    expect(hm(await AlarmPolicy.load(now: DateTime(2026, 10, 3, 22))), '07:56');
   });
 
   test('an earlier time is accepted and applied', () async {
@@ -89,10 +107,10 @@ void main() {
   });
 
   test('an override the ramp has caught up with lapses', () {
-    // 07:45 was an early start in September; by 2026-10-20 the ramp itself
-    // is 07:35, so the stale override would be a *later* alarm.
-    final policy = AlarmPolicy.resolve(DateTime(2026, 10, 19, 22), 7 * 60 + 45);
-    expect(hm(policy), '07:35');
+    // 07:58 was an early start on Saturday; Monday's ramp is already 07:57,
+    // so the stale override would be a *later* alarm.
+    final policy = AlarmPolicy.resolve(DateTime(2026, 9, 27, 22), 7 * 60 + 58);
+    expect(hm(policy), '07:57');
     expect(policy.isOverridden, isFalse);
   });
 

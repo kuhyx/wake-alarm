@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
+import 'package:wake_alarm_sync/services/ramp_progress.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 import 'package:wake_alarm_sync/services/settings_sync.dart';
 
@@ -176,6 +177,59 @@ void main() {
 
       expect(service.field(nfcTagsField)?.$2, hlc);
       expect(service.field(homeLocationField)?.$2, hlc);
+    });
+  });
+
+  group('ramp earned dates', () {
+    test('local dates are pushed as the union with the logged ones', () async {
+      SharedPreferences.setMockInitialValues({});
+      await RampProgress.merge({'2026-09-28'});
+      final service = await _open();
+      await service.setFields({
+        rampEarnedField: ['2026-10-02'],
+      }, _at('2026-10-02T08:00:00Z'));
+
+      await stageLocalSettings(service);
+
+      expect(service.field(rampEarnedField)?.$1, ['2026-09-28', '2026-10-02']);
+    });
+
+    test('nothing new locally means nothing pushed', () async {
+      SharedPreferences.setMockInitialValues({});
+      await RampProgress.merge({'2026-09-28'});
+      final service = await _open();
+      final hlc = _at('2026-10-02T08:00:00Z');
+      await service.setFields({
+        rampEarnedField: ['2026-09-28', '2026-10-02'],
+      }, hlc);
+
+      await stageLocalSettings(service);
+
+      expect(service.field(rampEarnedField)?.$2, hlc);
+    });
+
+    test('a reinstall gets every earned date back', () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = await _open();
+      await service.setFields({
+        rampEarnedField: ['2026-09-28', 'junk', 7],
+      }, _at('2026-10-02T08:00:00Z'));
+
+      await applySyncedSettings(service);
+
+      expect(await RampProgress.load(), {'2026-09-28'});
+    });
+
+    test('a malformed field earns nothing', () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = await _open();
+      await service.setFields({
+        rampEarnedField: 'not a list',
+      }, _at('2026-10-02T08:00:00Z'));
+
+      await applySyncedSettings(service);
+
+      expect(await RampProgress.load(), isEmpty);
     });
   });
 }

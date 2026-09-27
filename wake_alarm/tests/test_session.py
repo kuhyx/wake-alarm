@@ -163,16 +163,6 @@ class TestRefresh:
         assert entry is not None
         assert entry["exempt_until"] == _local("2026-09-19T08:15:00").isoformat()
 
-    def test_the_clamp_follows_the_ramp(self) -> None:
-        # 2026-10-05 is 07:50 on the ramp, so a synced 08:00 grants 08:05.
-        with (
-            patch("wake_alarm._session.fetch_firebase_logs", return_value=[]),
-            patch("wake_alarm._session.get_alarm", return_value=Alarm(8, 0, "cache")),
-        ):
-            entry = refresh(datetime(2026, 10, 5, 7, 0).astimezone())
-        assert entry is not None
-        assert entry["exempt_until"] == _local("2026-10-05T08:05:00").isoformat()
-
     def test_an_earlier_synced_alarm_shortens_the_grace(self) -> None:
         with (
             patch("wake_alarm._session.fetch_firebase_logs", return_value=[]),

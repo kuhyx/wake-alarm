@@ -8,6 +8,7 @@ import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 import 'package:wake_alarm_sync/services/home_presence.dart';
+import 'package:wake_alarm_sync/services/ramp_progress.dart';
 import 'package:wake_alarm_sync/services/ring_startup.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
 import 'package:wake_alarm_sync/services/session_handoff.dart';
@@ -217,6 +218,9 @@ class _RingScreenState extends State<RingScreen> {
     // ramp baseline short of reinstalling — a ratchet with no reset is a
     // trap, not a defence.
     await AlarmPolicy.resetAfterFire();
+    // A dismissed non-workday morning earns the ramp a minute; recorded
+    // before the re-arm below so it is what the next non-workday uses.
+    await RampProgress.recordDismiss(DateTime.now());
     // dismiss() re-armed the *stored* time, i.e. the override just spent;
     // without re-arming the policy it rang again every day until home opened.
     final next = await AlarmPolicy.load();

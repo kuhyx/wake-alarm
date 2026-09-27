@@ -13,7 +13,7 @@ dependencies = [
     # falls back to its stdlib GitHub path if the import fails, so a broken
     # install degrades the read instead of killing the per-minute trigger.
     "crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.1#subdirectory=crdt-sync",
-    "freedays @ git+https://github.com/kuhyx/utils@freedays-v0.2.0#subdirectory=freedays",
+    "freedays @ git+https://github.com/kuhyx/utils@freedays-v0.3.0#subdirectory=freedays",
 ]
 
 # Package discovery must be explicit: phone_app/ is a Flutter app, not a Python

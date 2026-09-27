@@ -7,9 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wake_alarm_sync/screens/ring_screen.dart';
 import 'package:wake_alarm_sync/screens/session_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
+import 'package:wake_alarm_sync/services/alarm_ramp.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
+import 'package:wake_alarm_sync/services/ramp_progress.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
@@ -120,6 +122,12 @@ void main() {
     );
     expect(armed.last, <String, int>{'hour': next.hour, 'minute': next.minute});
     expect(next.isOverridden, isFalse);
+    // The dismiss earned today's minute -- unless today is a workday.
+    final now = DateTime.now();
+    expect(
+      (await RampProgress.load()).contains(rampDateKey(now)),
+      !isWorkday(now),
+    );
   });
 
   testWidgets('the session hears tags after the ring screen is gone', (

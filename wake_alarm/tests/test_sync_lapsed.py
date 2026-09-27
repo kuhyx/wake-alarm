@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 import json
 import time
 from typing import TYPE_CHECKING
@@ -11,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from wake_alarm._constants import (
+    FALLBACK_ALARM_HOUR,
     PUBLISHED_ALARM_MAX_AGE_SECONDS,
 )
 from wake_alarm._sync import (
@@ -84,10 +84,10 @@ class TestLapsedPublishedAlarm:
                 "wake_alarm._sync.fetch_remote_alarm",
                 return_value=(7, 0, ancient),
             ),
-            patch("wake_alarm._sync.local_today", return_value=date(2026, 10, 5)),
         ):
             alarm = get_alarm()
-        assert (alarm.hour, alarm.minute, alarm.source) == (7, 50, "fallback")
+        assert alarm.source == "fallback"
+        assert alarm.hour == FALLBACK_ALARM_HOUR
 
     def test_a_recent_remote_is_used(self, tmp_path: Path) -> None:
         """A freshly stamped record is honoured as normal."""

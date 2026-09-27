@@ -24,15 +24,15 @@ import logging
 import freedays
 from gatelock.log_integrity import compute_entry_hmac
 
-from wake_alarm._constants import STICK_DAYS, WORKDAY_PENALTY_FILE
+from wake_alarm._constants import WORKDAY_PENALTY_FILE
 from wake_alarm._session_policy import NONE_OUTCOME
 
 _logger = logging.getLogger(__name__)
 
 
 def is_stick_day(day: date) -> bool:
-    """Tuesday/Wednesday/Thursday -- the same set already treated as lenient."""
-    return day.weekday() in STICK_DAYS
+    """Tuesday/Wednesday/Thursday: ``freedays.WORKDAYS``, the shared set."""
+    return freedays.is_workday(day)
 
 
 def is_workday_miss(entry: dict[str, object], now: datetime) -> bool:

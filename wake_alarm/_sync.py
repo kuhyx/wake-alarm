@@ -33,10 +33,10 @@ from wake_alarm._alarm_payload import in_range
 from wake_alarm._constants import (
     ALARM_CACHE_FILE,
     ALARM_CACHE_MAX_AGE_SECONDS,
+    FALLBACK_ALARM_HOUR,
     PUBLISHED_ALARM_MAX_AGE_SECONDS,
 )
 from wake_alarm._logging_setup import configure_logging
-from wake_alarm._ramp import baseline_time, local_today
 from wake_alarm._sync_transport import (
     _FIREBASE_AVAILABLE,
     _fetch_firebase_alarm,
@@ -167,7 +167,7 @@ def get_alarm(*, max_cache_age_seconds: float = ALARM_CACHE_MAX_AGE_SECONDS) -> 
     1. A cache entry younger than *max_cache_age_seconds* (no network).
     2. A live fetch, Firebase first (cached on success).
     3. Any cache entry, however stale — better an old alarm than none.
-    4. Today's ramp baseline (``_ramp.baseline_time``).
+    4. ``FALLBACK_ALARM_HOUR:00``.
 
     A record the phone published longer ago than
     ``PUBLISHED_ALARM_MAX_AGE_SECONDS`` is skipped at *every* step, including
@@ -206,9 +206,11 @@ def get_alarm(*, max_cache_age_seconds: float = ALARM_CACHE_MAX_AGE_SECONDS) -> 
         _logger.info("Using stale cached alarm — sync read failed")
         return Alarm(cached[0], cached[1], "stale-cache")
 
-    hour, minute = baseline_time(local_today())
-    _logger.info("No synced or cached alarm — falling back to %02d:%02d", hour, minute)
-    return Alarm(hour, minute, "fallback")
+    _logger.info(
+        "No synced or cached alarm — falling back to %02d:00",
+        FALLBACK_ALARM_HOUR,
+    )
+    return Alarm(FALLBACK_ALARM_HOUR, 0, "fallback")
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

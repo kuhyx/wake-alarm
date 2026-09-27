@@ -15,12 +15,14 @@ from pathlib import Path
 ALARM_DAYS: frozenset[int] = frozenset({0, 1, 2, 3, 4, 5, 6})
 
 
-# The time the alarm fires at when the phone's alarm cannot be resolved at all
-# (no network *and* no cached read ever written) is ``_ramp.baseline_time`` —
-# deliberately the SAME baseline the phone bakes in (``alarm_ramp.dart``), so
-# the two halves agree even with the network down. It used to be a fixed
-# 13:00, which meant a Firebase outage silently moved the alarm five hours
-# later — the one direction the whole design refuses to allow.
+# Hour at which the alarm fires when the phone's alarm cannot be resolved at
+# all — no network *and* no cached read ever written. Minute is implicitly 0.
+#
+# Deliberately the SAME baseline the phone bakes in (AlarmPolicy.baselineHour),
+# so the two halves agree even with the network down. It used to be 13:00,
+# which meant a Firebase outage silently moved the alarm five hours later —
+# the one direction the whole design refuses to allow.
+FALLBACK_ALARM_HOUR: int = 8
 
 
 # State file for wake alarm (HMAC-signed)
@@ -69,7 +71,7 @@ LOG_DEDUPE_FILE: Path = LOG_STATE_DIR / "last_event.json"
 # SYNC_DEVICES_PREFIX and falls back to this path for a phone that has not
 # yet published under its uuid. Keep reading it until every install has
 # migrated; deleting it early means a stale phone's alarm silently stops
-# being seen, and the trigger falls back to the ramp baseline.
+# being seen, and the trigger falls back to FALLBACK_ALARM_HOUR.
 SYNC_ALARM_PATH: str = "wake-alarm-sync/devices/phone/alarm.json"
 
 # The directory holding one subdirectory per publishing device.
@@ -112,8 +114,8 @@ SYNC_HTTP_TIMEOUT_SECONDS: float = 10.0
 # phone left one record stamped 2026-08-09, and the PC honoured it faithfully
 # for three weeks -- a publish that never happens is indistinguishable from one
 # that has not changed, so the last successful publish is authoritative
-# forever. Expiring to the ramp baseline is safe precisely because that
-# is the phone's own baseline, so a lapsed record degrades to the
+# forever. Expiring to FALLBACK_ALARM_HOUR is safe precisely because that
+# constant is the phone's own baseline, so a lapsed record degrades to the
 # right answer rather than a guess.
 PUBLISHED_ALARM_MAX_AGE_SECONDS: float = 14 * 24 * 60 * 60
 
@@ -156,11 +158,6 @@ SESSION_COMPLETED_UNTIL: tuple[int, int] = (11, 0)
 SESSION_NONE_GRACE: timedelta = timedelta(minutes=15)
 
 
-# --- Workday stick (Tue/Wed/Thu miss -> tomorrow loses its leniency) ------
-# The same weekdays screen-locker calls "relaxed" (_weekly_check.is_relaxed_day)
-# and leetcode-guard prices as cheap (Pricing.doubled_days) -- both already go
-# easy on exactly these three days, which is why a miss costs nothing today
-# without this file. Python weekday(): Mon=0 ... Sun=6.
-STICK_DAYS: frozenset[int] = frozenset({1, 2, 3})  # Tue, Wed, Thu
-
+# Workday stick (a Tue/Wed/Thu miss -> tomorrow loses its leniency). The days
+# themselves are freedays.WORKDAYS, the one set every gate app reads.
 WORKDAY_PENALTY_FILE: Path = LOG_STATE_DIR / "workday_penalty.json"

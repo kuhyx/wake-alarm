@@ -101,7 +101,7 @@ repos:
           # than merely an old one.
           - gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.8.1#subdirectory=gatelock
           - crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.1#subdirectory=crdt-sync
-          - freedays @ git+https://github.com/kuhyx/utils@freedays-v0.2.0#subdirectory=freedays
+          - freedays @ git+https://github.com/kuhyx/utils@freedays-v0.3.0#subdirectory=freedays
         # Test suites intentionally use patterns (protected-access, magic-value
         # comparisons) that don't belong in the source-code 10/10 gate.
         exclude: ^(\.venv/)|(^|/)(tests/|conftest\.py)

@@ -1,4 +1,4 @@
-/// The NFC tags and home location, carried on the synced alarm record.
+/// The NFC tags, home location and ramp progress, on the synced alarm record.
 ///
 /// Both used to live only in SharedPreferences, so a reinstall lost them and
 /// the user re-registered two tags and re-captured home by hand (2026-09-11).
@@ -20,11 +20,15 @@ library;
 import 'package:crdt_sync/crdt_sync.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
+import 'package:wake_alarm_sync/services/ramp_progress.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 import 'package:wake_alarm_sync/services/session_sync.dart';
 
 /// Field holding the registered tag ids, one string per slot.
 const nfcTagsField = 'nfc_tag_ids';
+
+/// Field holding the ramp's earned dates ([RampProgress]), merged as a union.
+const rampEarnedField = 'ramp_earned_dates';
 
 /// Field holding [HomeLocationSettings.toJson]; a cleared home is the
 /// all-null shape, not an absent field, so clearing propagates too.
@@ -65,8 +69,26 @@ Future<void> stageLocalSettings(AlarmSyncService service) async {
     home.toJson(),
     configured: home.isConfigured,
   );
+  await _stageEarned(service);
   await stageSessionData(service);
 }
+
+/// Pushes the union of the local and logged earned dates when it is new.
+///
+/// A grow-only set rides a last-writer-wins field safely: every writer pushes
+/// a superset of what it last saw, and a device whose dates lost a race still
+/// holds them locally and re-pushes the union on its next sync.
+Future<void> _stageEarned(AlarmSyncService service) async {
+  final local = await RampProgress.load();
+  final logged = _datesOf(service.field(rampEarnedField)?.$1);
+  if (local.difference(logged).isEmpty) return;
+  await service.setFields({
+    rampEarnedField: ({...logged, ...local}.toList()..sort()),
+  }, Hlc.newTick(service.deviceId));
+}
+
+Set<String> _datesOf(Object? value) =>
+    value is List ? value.whereType<String>().toSet() : <String>{};
 
 /// The stamp of a pre-stamp value: just above the epoch, so any real edit
 /// wins, but present, so it is pushed rather than silently dropped.
@@ -118,6 +140,7 @@ Future<void> applySyncedSettings(AlarmSyncService service) async {
       );
     }
   }
+  await RampProgress.merge(_datesOf(service.field(rampEarnedField)?.$1));
   await applySyncedSessionData(service);
 }
 
