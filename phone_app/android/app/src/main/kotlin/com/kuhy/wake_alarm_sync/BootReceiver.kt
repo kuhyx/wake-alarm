@@ -20,13 +20,15 @@ class BootReceiver : BroadcastReceiver() {
         // a reboot, either -- see restoreReRing for the launch-time replay.
         val rering = AlarmScheduler.restoreReRing(context)
         Log.i(TAG, "boot: rearmed=$rearmed rering=$rering")
+        EventLog.append(context, "boot", mapOf("rearmed" to rearmed, "rering" to rering))
         // setInexactRepeating does not survive a reboot, so the daily check
         // has to be re-established here or it silently stops after the first
         // restart — exactly when a watchdog is most needed.
         AlarmWatchdog.schedule(context)
-        // The moment a phone powered off mid-ring comes back is exactly when
-        // an abandoned ring should be caught -- see WorkdayStick.
-        WorkdayStick.checkAndSignal(context)
+        // A phone switched off before the alarm and back on after A + 15 has
+        // missed: this is the path that closes that hole (rearmFromStorage
+        // above has already armed the exact check for a phone back earlier).
+        StickRunner.run(context, "boot")
     }
 
     private companion object {

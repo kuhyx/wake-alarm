@@ -35,6 +35,8 @@ import sys
 from gatelock.log_integrity import compute_entry_hmac, verify_entry_hmac
 
 from wake_alarm._constants import FALLBACK_ALARM_HOUR, MORNING_SESSION_FILE
+from wake_alarm._enforcement_payload import enforcement_view
+from wake_alarm._escapes import note_escapes
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._session_payload import newest_session
 from wake_alarm._session_policy import to_entry
@@ -104,7 +106,11 @@ def refresh(now: datetime) -> dict[str, object] | None:
     )
     if not write_entry(entry):
         return None
-    _maybe_apply_workday_penalty(entry, now)
+    # Escapes first: cancelling an escaped day's penalty must not depend on
+    # today being a stick day (the escape may arrive the morning after).
+    view = enforcement_view(published)
+    note_escapes(view)
+    _maybe_apply_workday_penalty(entry, now, escaped_dates=view.escaped_dates())
     return entry
 
 

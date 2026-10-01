@@ -3,12 +3,14 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/ring_body.dart';
+import 'package:wake_alarm_sync/screens/ring_challenge.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 import 'package:wake_alarm_sync/services/home_presence.dart';
 import 'package:wake_alarm_sync/services/ramp_progress.dart';
+import 'package:wake_alarm_sync/services/ring_start_recorder.dart';
 import 'package:wake_alarm_sync/services/ring_startup.dart';
 import 'package:wake_alarm_sync/services/room_proof.dart';
 import 'package:wake_alarm_sync/services/session_handoff.dart';
@@ -32,6 +34,7 @@ class RingScreen extends StatefulWidget {
     this.clock,
     this.presence,
     this.handoff,
+    this.ringStart,
   });
 
   /// Platform bridge; defaults to the real MethodChannel.
@@ -45,6 +48,9 @@ class RingScreen extends StatefulWidget {
 
   /// Starts or resumes the morning session; defaults to the real handoff.
   final SessionHandoff? handoff;
+
+  /// Publishes `ring_started` for the PC; defaults to the real recorder.
+  final RingStartRecorder? ringStart;
 
   /// Time since the ring started; defaults to a real `Stopwatch`.
   ///
@@ -80,6 +86,9 @@ class _RingScreenState extends State<RingScreen> {
   void initState() {
     super.initState();
     unawaited(_scheduler.beginStepCount());
+    // Fire-and-forget, never throws: the PC's fallback alarm waits for it,
+    // the ring must not.
+    unawaited((widget.ringStart ?? RingStartRecorder()).record());
     unawaited(_loadRoomProof());
     // The escape hatch. Set up before anything can fail, so a crash in the
     // settings load cannot leave an alarm with no way out.
@@ -158,19 +167,7 @@ class _RingScreenState extends State<RingScreen> {
     if (_gate.stage == DismissStage.challenges) _logChallenge();
   }
 
-  /// Logs the current challenge so a hardware test can be scripted.
-  ///
-  /// Debug aid only: the answer is already on screen for whoever is holding
-  /// the phone, so this leaks nothing the user cannot see. `debugPrint`
-  /// rather than `developer.log` so it reaches logcat, which is what the
-  /// emulator harness reads the answer from.
-  void _logChallenge() {
-    debugPrint(
-      'WakeAlarmRing: challenge kind=${_challenge.kind.name} '
-      'display="${_challenge.display}" answer=${_challenge.answer} '
-      '${_gate.challengesPassed}/${_gate.challengesRequired}',
-    );
-  }
+  void _logChallenge() => logChallenge(_challenge, _gate);
 
   @override
   void dispose() {

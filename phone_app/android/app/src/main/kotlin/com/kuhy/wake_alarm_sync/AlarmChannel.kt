@@ -143,9 +143,13 @@ object AlarmChannel {
             // means the ring was dismissed.
             "markRingDismissed" -> {
                 RingWatch.markDismissed(context)
+                StickRunner.onDismissed(context)
+                EventLog.append(context, "dismissed")
                 result.success(null)
             }
-            else -> result.notImplemented()
+            else -> if (!EnforcementChannel.handleCall(context, call, result)) {
+                result.notImplemented()
+            }
         }
     }
 

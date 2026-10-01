@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/ring_challenge.dart';
 import 'package:wake_alarm_sync/screens/ring_checklist.dart';
+import 'package:wake_alarm_sync/screens/ring_stakes_line.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 
@@ -50,7 +51,9 @@ class RingBody extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 Text('Wake up', style: theme.textTheme.headlineMedium),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                const RingStakesLine(),
+                const SizedBox(height: 8),
                 if (inChallenges)
                   RingChallenge(
                     challenge: challenge,

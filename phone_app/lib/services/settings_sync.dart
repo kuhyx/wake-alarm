@@ -19,6 +19,7 @@ library;
 
 import 'package:crdt_sync/crdt_sync.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
+import 'package:wake_alarm_sync/services/enforcement_sync.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
 import 'package:wake_alarm_sync/services/ramp_progress.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
@@ -71,6 +72,7 @@ Future<void> stageLocalSettings(AlarmSyncService service) async {
   );
   await _stageEarned(service);
   await stageSessionData(service);
+  await stageEnforcementData(service);
 }
 
 /// Pushes the union of the local and logged earned dates when it is new.

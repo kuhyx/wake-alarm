@@ -1,0 +1,18 @@
+[Unit]
+Description=Wake Alarm RTC arming, every 15 min all day and on boot
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Timer]
+# Every 15 min, all day: a PC hibernated at 16:00 the day before a stick day
+# must still have been armed. There is no sleep.target in the *user*
+# manager, so resume is covered by the calendar itself: a calendar timer
+# that elapsed while the system slept "will catch up" once it is resumed
+# (systemd.timer(5)), and with a 15-min cadence every sleep longer than a
+# quarter hour re-arms (or disarms) right after resume.
+OnCalendar=*-*-* *:00/15:00
+# Fresh boot (a CMOS alarm survives a poweroff, but re-check it anyway).
+OnBootSec=2min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

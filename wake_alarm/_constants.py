@@ -7,7 +7,7 @@ say, and has the morning routine already started today.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 # Days the wake alarm is active (Python weekday(): Mon=0 ... Sun=6)
@@ -161,3 +161,52 @@ SESSION_NONE_GRACE: timedelta = timedelta(minutes=15)
 # Workday stick (a Tue/Wed/Thu miss -> tomorrow loses its leniency). The days
 # themselves are freedays.WORKDAYS, the one set every gate app reads.
 WORKDAY_PENALTY_FILE: Path = LOG_STATE_DIR / "workday_penalty.json"
+
+
+# --- Wake enforcement v2 (DOCS-wake-enforcement.md is the contract) -----------
+# These names are read by test_stakes_mirrors.py against the phone's Dart
+# constants: rename one here and there in the same commit.
+
+# PC fallback alarm, all relative to today's alarm A (clamped <= 08:00):
+# ring when the phone has not opened its ring screen by A + 2 min, stop after
+# 30 min of ringing, and never start a ring past A + 45 min.
+FALLBACK_PHONE_SILENT_AFTER: timedelta = timedelta(minutes=2)
+FALLBACK_RING_CAP: timedelta = timedelta(minutes=30)
+FALLBACK_WINDOW_END: timedelta = timedelta(minutes=45)
+
+# The PC arms its RTC this long before a stick-day alarm, so it is up (resumed
+# from hibernate, or booted) and has synced by the time the phone rings.
+RTC_WAKE_LEAD: timedelta = timedelta(minutes=10)
+
+# Phone stick: a streak of n consecutive stick-day misses locks today plus
+# min(n, 4) days -- five calendar days at most.
+STICK_LOCKDOWN_MAX_DAYS: int = 5
+
+# The "That was a bug" escape hatch is honoured for mornings up to and
+# including this date, and only with a reason at least this long.
+ESCAPE_HATCH_LAST_DAY: date = date(2026, 10, 15)
+ESCAPE_REASON_MIN_CHARS: int = 40
+
+# Today's fallback-ring latch: {"date", "started_at", "stopped_at", "reason",
+# "stop_reason"}.
+FALLBACK_RING_FILE: Path = LOG_STATE_DIR / "fallback_ring.json"
+
+# {"mode": "hibernate" | "poweroff"}; how the PC goes down for the night.
+PC_WAKE_CONFIG: Path = Path.home() / ".config" / "wake_alarm" / "pc_wake.json"
+
+# The daily audit's reports. Outside the repo on purpose: personal data.
+INCIDENTS_DIR: Path = Path.home() / "data" / "wake-alarm" / "incidents"
+
+# The RTC alarm _rtc last armed ({"epoch", "target_date"}), so a disarm
+# only ever clears an alarm this package set.
+RTC_ARMED_FILE: Path = LOG_STATE_DIR / "rtc_armed.json"
+
+# Last value logged per change-only event (fallback_tick, rtc_armed, ...), so
+# a per-minute or per-15-minute job logs a decision once, not every run.
+EVENT_STATE_FILE: Path = LOG_STATE_DIR / "event_state.json"
+
+# crdt_sync field names on alarm.json for the v2 fields (phone writes them).
+RING_STARTED_FIELD: str = "ring_started"
+ESCAPES_FIELD: str = "escapes"
+STICK_STATE_FIELD: str = "stick_state"
+PHONE_EVENTS_FIELD: str = "phone_events"

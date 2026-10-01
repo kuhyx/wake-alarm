@@ -16,6 +16,8 @@ set -uo pipefail
 
 readonly PY=/usr/bin/python3
 FAILURES=0
+# shellcheck source=guest_cases_v2.sh source-path=SCRIPTDIR
+source "$(dirname "$(readlink -f "$0")")/guest_cases_v2.sh"
 
 pass() {
     echo "PASS $1"
@@ -86,6 +88,7 @@ main() {
             case_units
             case_trigger_dry_run
             case_session_refresh
+            run_v2_cases
             ;;
         *)
             echo "usage: $0 [all]" >&2

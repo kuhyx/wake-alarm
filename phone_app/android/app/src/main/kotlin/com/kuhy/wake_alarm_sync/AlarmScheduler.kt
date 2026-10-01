@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import java.time.LocalTime
 import java.util.Calendar
 
 /**
@@ -61,12 +62,16 @@ object AlarmScheduler {
             AlarmManager.AlarmClockInfo(at, showIntent(context)),
             firePendingIntent(context),
         )
+        // Every arm path (picker, boot, dismiss, free-day skip, watchdog)
+        // ends here, so the stick's own check can never be left unarmed.
+        StickAlarm.schedule(context, LocalTime.of(hour, minute))
     }
 
     /** Cancels the armed alarm and forgets the stored time. */
     fun cancel(context: Context) {
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         manager.cancel(firePendingIntent(context))
+        StickAlarm.cancel(context)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_HOUR).remove(KEY_MINUTE).apply()
     }
@@ -84,6 +89,15 @@ object AlarmScheduler {
         if (hour == NONE || minute == NONE) return false
         schedule(context, hour, minute)
         return true
+    }
+
+    /** The stored daily time `A`, or null when none was ever armed. */
+    fun storedAlarm(context: Context): LocalTime? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val hour = prefs.getInt(KEY_HOUR, NONE)
+        val minute = prefs.getInt(KEY_MINUTE, NONE)
+        if (hour == NONE || minute == NONE) return null
+        return LocalTime.of(hour, minute)
     }
 
     /**

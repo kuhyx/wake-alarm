@@ -31,10 +31,17 @@ object FreeDays {
     }
 
     /** Whether today (local calendar day) is in the cached set. */
-    fun isToday(context: Context): Boolean = try {
+    fun isToday(context: Context): Boolean = isFree(context, LocalDate.now())
+
+    /**
+     * Whether [day] is in the cached set. Past free days stay in it (Dart
+     * hands over every free record), which is what lets the stick's streak
+     * skip them.
+     */
+    fun isFree(context: Context, day: LocalDate): Boolean = try {
         val dates = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getStringSet(KEY_DATES, emptySet()) ?: emptySet()
-        dates.contains(LocalDate.now().toString())
+        dates.contains(day.toString())
     } catch (e: RuntimeException) {
         Log.w(TAG, "free-day cache unreadable; ringing as normal", e)
         false

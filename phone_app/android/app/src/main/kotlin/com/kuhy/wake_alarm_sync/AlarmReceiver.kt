@@ -21,6 +21,7 @@ class AlarmReceiver : BroadcastReceiver() {
         // re-arm -- that is the wake alarm's business, not this one's.
         if (intent.getStringExtra(AlarmScheduler.EXTRA_REASON) == AlarmScheduler.REASON_RERING) {
             Log.i(TAG, "session deadline missed: re-ringing")
+            EventLog.append(context, "alarm_fired", mapOf("reason" to "rering"))
             AlarmService.start(context)
             return
         }
@@ -29,6 +30,7 @@ class AlarmReceiver : BroadcastReceiver() {
         // because the armed instant has passed) so the day after is normal.
         if (FreeDays.isToday(context)) {
             Log.i(TAG, "free day: not ringing; re-armed for tomorrow")
+            EventLog.append(context, "alarm_fired", mapOf("reason" to "free_day"))
             AlarmScheduler.rearmFromStorage(context)
             return
         }
@@ -37,6 +39,10 @@ class AlarmReceiver : BroadcastReceiver() {
         // already woken the CPU by the time this line runs.
         RingWatch.markFired(context)
         AlarmService.start(context)
+        EventLog.append(context, "alarm_fired", mapOf("reason" to "daily"))
+        // After the sound is started, never before: tells the PC the phone
+        // is ringing even when the ring screen never opens.
+        HeadlessRingStart.start(context)
     }
 
     private companion object {

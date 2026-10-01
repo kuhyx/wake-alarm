@@ -1,0 +1,9 @@
+[Unit]
+Description=Wake Alarm daily audit (incident report for the morning)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+Type=oneshot
+# Writes ~/data/wake-alarm/incidents/<today>.md: merged phone + PC timeline,
+# expected-vs-observed checks, escapes and mismatches first.
+ExecStart=/usr/bin/python -m wake_alarm._audit

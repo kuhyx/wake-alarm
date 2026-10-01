@@ -1,0 +1,16 @@
+[Unit]
+Description=Wake Alarm PC fallback alarm tick (rings when the phone stays silent)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+Type=oneshot
+# One tick of DOCS-wake-enforcement.md's table. When it decides to ring it
+# rings in THIS process, polling the phone every 20 s, until a session
+# starts, an escape arrives or the 30-min cap; while it runs, the timer's
+# next minute is a no-op (the unit is still active), so no PID file.
+ExecStart=/usr/bin/python -m wake_alarm._fallback --tick
+# A ring lasts at most FALLBACK_RING_CAP (30 min); 40 leaves room for slow
+# Firebase polls without ever cutting a ring short. SIGTERM becomes
+# SystemExit, and the backend (pw-play, or the root ALSA unit) is stopped
+# in a finally block on the way out.
+TimeoutStartSec=40min

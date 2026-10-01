@@ -14,7 +14,7 @@ dependencies:
       url: https://github.com/kuhyx/utils
       ref: crdt_sync_dart-v0.11.1
       path: crdt_sync_dart
-  cupertino_icons: 1.0.9
+  cupertino_icons: 2.0.0
   flutter:
     sdk: flutter
   flutter_secure_storage: 11.2.0

@@ -19,10 +19,16 @@ an inhibitor:
   ``~/.local/state/wake_alarm/events.jsonl``. Unredirected, every suite run
   appended fixture warnings ("Synced alarm out of range: 24:0") to the log a
   failed wake-up is reconstructed from.
+* Wake enforcement v2 writes more state (the fallback latch, the event
+  state, incident reports) and reaches real hardware (``pw-play``,
+  ``sudo systemctl``, ``rtcwake``, ``journalctl``). Every path is redirected
+  and every process seam raises unless a test replaces it, so no test can
+  ring this machine's speakers or arm its RTC.
 """
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -34,12 +40,20 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def _no_process(cmd: list[str]) -> object:
+    """Stand-in for every process seam: an unmocked test fails loudly."""
+    msg = f"test tried to run {cmd!r}"
+    raise AssertionError(msg)
+
+
 @pytest.fixture(autouse=True)
 def _hermetic(tmp_path: Path) -> Generator[None]:
-    """Keep signing keys and state writes inside ``tmp_path``."""
+    """Keep signing keys, state writes and processes inside ``tmp_path``."""
     key_file = tmp_path / "hmac.key"
     key_file.write_bytes(b"0" * 32)
-    with (
+    # An ExitStack, not one `with (...)`: Python caps a statement at 20
+    # nested blocks, and every patch is one.
+    patches = [
         patch("gatelock.log_integrity.DEFAULT_HMAC_KEY_FILE", key_file),
         patch("wake_alarm._state.WAKE_STATE_FILE", tmp_path / "wake_state.json"),
         # _logging_setup imported these by value, so patch its names, not
@@ -54,6 +68,31 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             "wake_alarm._workday_penalty.WORKDAY_PENALTY_FILE",
             tmp_path / "workday_penalty.json",
         ),
+        # Read by every get_alarm() the v2 modules make; the live file is
+        # the trigger's cache. A missing Firebase config keeps fetches
+        # off the network unless a test patches the fetch itself.
+        patch("wake_alarm._sync.ALARM_CACHE_FILE", tmp_path / "alarm_cache.json"),
+        patch(
+            "wake_alarm._sync_transport.FIREBASE_CONFIG_FILE",
+            tmp_path / "no-firebase.json",
+            create=True,
+        ),
+        patch("wake_alarm._events.EVENT_STATE_FILE", tmp_path / "event_state.json"),
+        patch(
+            "wake_alarm._fallback_latch.FALLBACK_RING_FILE",
+            tmp_path / "fallback_ring.json",
+        ),
+        patch("wake_alarm._pc_wake_mode.PC_WAKE_CONFIG", tmp_path / "pc_wake.json"),
+        patch("wake_alarm._audit.INCIDENTS_DIR", tmp_path / "incidents"),
+        patch("wake_alarm._audit_sources.LOG_JSONL_FILE", tmp_path / "audit.jsonl"),
+        patch("wake_alarm._fallback.SYSTEM_WAV_DIR", tmp_path / "wav-system"),
+        patch("wake_alarm._fallback.USER_WAV_DIR", tmp_path / "wav-user"),
+        patch("wake_alarm._rtc_hw.WAKEALARM_FILE", tmp_path / "wakealarm"),
+        patch("wake_alarm._rtc_hw.RTC_ARMED_FILE", tmp_path / "rtc_armed.json"),
+        patch("wake_alarm._ring_player._run", _no_process),
+        patch("wake_alarm._ring_player._popen", _no_process),
+        patch("wake_alarm._rtc_hw._run", _no_process),
+        patch("wake_alarm._audit_sources._run", _no_process),
         # The shared free-day pool lives under ~/.local/share, outside every
         # path above. Without this, a real free day on the developer's
         # machine would silence the alarm in every trigger test here.
@@ -61,5 +100,8 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             "freedays._api.resolve_paths",
             lambda paths: paths or freedays.Paths.under(tmp_path / "freedays"),
         ),
-    ):
+    ]
+    with ExitStack() as stack:
+        for redirect in patches:
+            stack.enter_context(redirect)
         yield

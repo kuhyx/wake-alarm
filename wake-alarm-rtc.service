@@ -1,0 +1,11 @@
+[Unit]
+Description=Wake Alarm RTC arming (wake the PC before a stick-day alarm)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+Type=oneshot
+# Arms the CMOS alarm for A - 10 min of the next Tue/Wed/Thu morning through
+# the existing NOPASSWD `sudo -n /usr/sbin/rtcwake` entry; when the next
+# morning is not one to wake for, clears an alarm it armed itself (and only
+# that one). rtc_armed / rtc_skip / rtc_disarmed land in events.jsonl.
+ExecStart=/usr/bin/python -m wake_alarm._rtc --arm

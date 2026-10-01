@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
+import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 
 /// The question half of the ring screen, shown once the walk is proven.
 class RingChallenge extends StatelessWidget {
@@ -60,4 +61,18 @@ class RingChallenge extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Logs [challenge] so a hardware test can be scripted.
+///
+/// Debug aid only: the answer is already on screen for whoever is holding
+/// the phone, so this leaks nothing the user cannot see. `debugPrint`
+/// rather than `developer.log` so it reaches logcat, which is what the
+/// emulator harness reads the answer from.
+void logChallenge(Challenge challenge, DismissGate gate) {
+  debugPrint(
+    'WakeAlarmRing: challenge kind=${challenge.kind.name} '
+    'display="${challenge.display}" answer=${challenge.answer} '
+    '${gate.challengesPassed}/${gate.challengesRequired}',
+  );
 }

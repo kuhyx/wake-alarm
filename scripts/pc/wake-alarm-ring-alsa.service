@@ -1,0 +1,14 @@
+[Unit]
+Description=Wake Alarm fallback ring straight to the speakers (ALSA, root)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+# Started and stopped only by the user's wake-alarm-fallback.service through
+# `sudo -n systemctl start|stop` (see /etc/sudoers.d/wake-alarm), when no
+# graphical session owns the sound: the night lockdown masks lightdm, and
+# the user is not in `audio`, so only root can reach the card.
+Type=simple
+ExecStart=/usr/local/lib/wake-alarm/ring_alsa.sh /usr/local/share/wake-alarm/ring.wav /usr/local/share/wake-alarm/ring_loop.wav
+# Backstop for a fallback tick that died without stopping this unit: never
+# ring longer than the 30-min cap plus a minute.
+RuntimeMaxSec=31min

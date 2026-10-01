@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/home_history_card.dart';
 import 'package:wake_alarm_sync/screens/home_presence_line.dart';
+import 'package:wake_alarm_sync/screens/stakes_card.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// The home screen's body: the armed time, the earlier-only control and the
@@ -20,6 +21,7 @@ class HomeBody extends StatelessWidget {
     required this.configured,
     required this.onPickEarlier,
     this.syncEpoch = 0,
+    this.onEscaped,
     super.key,
   });
 
@@ -48,6 +50,9 @@ class HomeBody extends StatelessWidget {
   /// a pull may just have restored, instead of showing the pre-sync verdict
   /// until the next cold start.
   final int syncEpoch;
+
+  /// Called after the escape hatch was used, so the screen publishes it.
+  final VoidCallback? onEscaped;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +113,14 @@ class HomeBody extends StatelessWidget {
                           ).extension<AppStatusColors>()!.success,
                   ),
                 ),
+              const SizedBox(height: 24),
+              // A third distinct key in this Column, for the same reason as
+              // the history card's below.
+              StakesCard(
+                key: ValueKey<String>('stakes-$syncEpoch'),
+                busy: busy,
+                onEscaped: onEscaped,
+              ),
               const SizedBox(height: 24),
               // Not `ValueKey<int>(syncEpoch)`: the presence line above
               // already carries that key in this Column, and two children

@@ -2,6 +2,7 @@ package com.kuhy.wake_alarm_sync
 
 import android.content.Context
 import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.util.Calendar
 import java.util.Locale
 
@@ -21,14 +22,16 @@ import java.util.Locale
  *   the initial dismiss gate actually completes (`session_handoff.dart`'s
  *   `afterDismiss`).
  *
- * [abandonedRingDate] is non-null exactly when a ring fired and nothing
- * since has dismissed it -- checked from [BootReceiver] and the daily
- * [WatchdogReceiver] tick, both of which run without a Flutter engine.
+ * The stick ([StickCheck]) reads only [dismissedOn]. It used to ask "did a
+ * ring fire and go undismissed", which needs the *fired* date -- and a phone
+ * switched off before the alarm never fires, so that escaped everything.
+ * The fired date stays as evidence for whoever debugs a morning.
  */
 object RingWatch {
     private const val PREFS = "wake_alarm_ring_watch"
     private const val KEY_FIRED_DATE = "fired_date"
     private const val KEY_DISMISSED_DATE = "dismissed_date"
+    private const val KEY_DISMISSED_DATES = "dismissed_dates"
 
     fun markFired(context: Context) {
         prefs(context).edit().putString(KEY_FIRED_DATE, today()).apply()
@@ -36,14 +39,17 @@ object RingWatch {
 
     fun markDismissed(context: Context) {
         prefs(context).edit().putString(KEY_DISMISSED_DATE, today()).apply()
+        DateHistory.add(prefs(context), KEY_DISMISSED_DATES, LocalDate.now())
     }
 
-    /** The date a ring fired but was never dismissed, or null. */
-    fun abandonedRingDate(context: Context): String? {
-        val fired = prefs(context).getString(KEY_FIRED_DATE, null) ?: return null
-        val dismissed = prefs(context).getString(KEY_DISMISSED_DATE, null)
-        return if (fired == dismissed) null else fired
-    }
+    /**
+     * Whether the dismiss gate completed on [day]; read by [StickRunner],
+     * which judges past days too. The single [KEY_DISMISSED_DATE] predates
+     * the history and still answers for its one day.
+     */
+    fun dismissedOn(context: Context, day: LocalDate): Boolean =
+        DateHistory.contains(prefs(context), KEY_DISMISSED_DATES, day) ||
+            prefs(context).getString(KEY_DISMISSED_DATE, null) == day.toString()
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

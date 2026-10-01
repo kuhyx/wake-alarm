@@ -5,6 +5,7 @@ import 'package:wake_alarm_sync/screens/ring_screen.dart';
 import 'package:wake_alarm_sync/screens/session_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
+import 'package:wake_alarm_sync/services/headless_ring_start.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// Route the Kotlin `AlarmActivity` hands to the engine as its initial
@@ -28,6 +29,14 @@ Future<void> main() async {
   await AlarmScheduler().armSchedule(policy.hour, policy.minute);
   runApp(const WakeAlarmSyncApp());
 }
+
+/// Headless entry point: the daily alarm starts it natively
+/// (`HeadlessRingStart.kt`) to publish `ring_started` with no screen.
+///
+/// Lives here because only the root library's entry points are reachable
+/// by name from Kotlin; `vm:entry-point` keeps release tree-shaking off it.
+@pragma('vm:entry-point')
+Future<void> ringStartedMain() => runHeadlessRingStart();
 
 /// Root application widget.
 class WakeAlarmSyncApp extends StatelessWidget {

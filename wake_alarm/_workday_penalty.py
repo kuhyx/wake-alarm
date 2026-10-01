@@ -13,6 +13,9 @@ and is overwritten at the date rollover, so it cannot carry a marker forward
 to tomorrow. This file's only field a consumer checks is ``penalty_date``:
 today == penalty_date means "no leniency today," the same shape as
 ``morning_session.json``'s own ``exempt_until`` predicate.
+
+An escape (``DOCS-wake-enforcement.md``) for a morning means no penalty is
+written for it, and one already issued that day is deleted.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ import freedays
 from gatelock.log_integrity import compute_entry_hmac
 
 from wake_alarm._constants import WORKDAY_PENALTY_FILE
+from wake_alarm._events import emit
 from wake_alarm._session_policy import NONE_OUTCOME
 
 _logger = logging.getLogger(__name__)
@@ -81,7 +85,40 @@ def write_penalty(entry: dict[str, object]) -> bool:
     return True
 
 
-def maybe_apply(entry: dict[str, object], now: datetime) -> bool:
+def issued_date() -> str | None:
+    """``issued_date`` of the penalty on disk, or None when there is none."""
+    try:
+        raw = json.loads(WORKDAY_PENALTY_FILE.read_text())
+    except OSError, ValueError:
+        return None
+    issued = raw.get("issued_date") if isinstance(raw, dict) else None
+    return issued if isinstance(issued, str) else None
+
+
+def cancel_for_escapes(escaped_dates: frozenset[str]) -> bool:
+    """Delete the penalty when an escape excuses the morning it was issued.
+
+    Returns:
+        True when a penalty was removed.
+    """
+    issued = issued_date()
+    if issued is None or issued not in escaped_dates:
+        return False
+    try:
+        WORKDAY_PENALTY_FILE.unlink()
+    except OSError as exc:
+        _logger.warning("Could not cancel %s: %s", WORKDAY_PENALTY_FILE, exc)
+        return False
+    emit("penalty_cancelled", f"escape for {issued}", issued_date=issued)
+    return True
+
+
+def maybe_apply(
+    entry: dict[str, object],
+    now: datetime,
+    *,
+    escaped_dates: frozenset[str] = frozenset(),
+) -> bool:
     """Write tomorrow's penalty when today is a missed stick-day; else no-op.
 
     Best-effort: never raises, since the per-refresh caller must not fail on
@@ -89,10 +126,28 @@ def maybe_apply(entry: dict[str, object], now: datetime) -> bool:
     would otherwise have rung the alarm -- the pool is fail-closed the other
     direction (a corrupt read is "not free"), which is exactly what is
     wanted here too: an unreadable pool means no penalty, never a spurious
-    one.
+    one. An escaped morning is never penalised either.
+
+    ``penalty_written`` is logged once per issued day, not on every
+    two-minute refresh that rewrites the same entry.
     """
-    if freedays.is_free_day(now.date()) or not is_stick_day(now.date()):
+    today = now.date()
+    if today.isoformat() in escaped_dates:
+        return False
+    if freedays.is_free_day(today) or not is_stick_day(today):
         return False
     if not is_workday_miss(entry, now):
         return False
-    return write_penalty(penalty_entry(today=now.date()))
+    previously = issued_date()
+    entry_body = penalty_entry(today=today)
+    if not write_penalty(entry_body):
+        return False
+    if previously != today.isoformat():
+        emit(
+            "penalty_written",
+            f"penalty for {entry_body['penalty_date']}",
+            penalty_date=entry_body["penalty_date"],
+            issued_date=entry_body["issued_date"],
+            outcome=entry.get("outcome"),
+        )
+    return True

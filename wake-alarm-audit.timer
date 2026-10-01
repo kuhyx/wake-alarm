@@ -1,0 +1,12 @@
+[Unit]
+Description=Wake Alarm daily audit at 11:05
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Timer]
+# After the carrot's 11:00 boundary, so the morning is over and settled.
+OnCalendar=*-*-* 11:05:00
+# A PC that was off at 11:05 audits as soon as it is back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

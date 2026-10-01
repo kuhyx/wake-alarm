@@ -236,6 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
         configured: _configured,
         syncEpoch: _syncEpoch,
         onPickEarlier: () => unawaited(_pickEarlier()),
+        onEscaped: () => unawaited(_syncToPc()),
       ),
     );
   }

@@ -7,10 +7,14 @@ dismissal; this repo's Python half only reads the alarm time the phone
 published and starts the morning routine at that time. The time is an earned
 ramp, 08:00 down to 07:00, owned by the phone alone — **`DOCS-ramp.md`**.
 
-The PC's waking role was deleted on 2026-08-30: no alarm window, no audio
-escalation, no smart plug, no curtains, no `rtcwake`, no `shutdown` wrapper,
-no sleep hook: waking someone reliably cost more than it returned. It is in
-git history; do not reintroduce any of it without saying why the phone can't.
+The PC's waking role was deleted on 2026-08-30: no alarm window, no smart
+plug, no curtains, no `shutdown` wrapper, no sleep hook. On 2026-10-01 exactly
+two pieces came back, because the phone **cannot** ring while powered off: a
+**fallback ring** when the phone is silent or no session started, and an
+**RTC self-wake** before Tue/Wed/Thu. Plus the stacking phone lockdown and a
+temporary escape hatch (until 2026-10-15). All of it, and the data contract
+the phone, PC and focus-owner share: **`DOCS-wake-enforcement.md`**. Anything
+else from the old PC alarm still needs a reason the phone can't do it.
 
 ## The dismiss sequence (phone)
 
@@ -183,22 +187,17 @@ diet_guard outage. Verify against `/usr/bin/python3 -c "import <dep>"`.
 
 ## Uninstalling
 
-`uninstall.sh`, never `rm -rf` on the repo. `/usr/local/bin/shutdown` is
-root-owned and shadows `/usr/bin/shutdown`; deleting the repo leaves it in
-place, and with the alarm cache gone it falls through to
-`sudo rtcwake … ; exec systemctl hibernate` — so `shutdown now` would silently
-stop being a poweroff, every day, forever.
-
-`install.sh` calls `uninstall.sh --retired-only` as its last step, so
+`uninstall.sh`, never `rm -rf` on the repo: it also removes the root ring
+unit, the logind power-key drop-in and an RTC alarm we armed, and retires the
+old `/usr/local/bin/shutdown` wrapper wherever one survives. `install.sh` calls `uninstall.sh --retired-only` as its last step, so
 **`uninstall.sh` is load-bearing for installing**, not just for removing —
 renaming or deleting it breaks a fresh install. That call is non-fatal and
 gated on `sudo -n`: the cleanup needs root, and a hard failure there would
 abort an install that had already placed the package and enabled the timer.
 
 **`/etc/sudoers.d/wake-alarm` is deliberately left in place** even by a full
-uninstall. Its last known consumer, screen-locker's `_schedule_rtcwake`, was
-dead code and deleted on 2026-09-27; retiring the entry is a separate,
-deliberate decision, never a side effect of an uninstall.
+uninstall. Since 2026-10-01 it is live again: the RTC self-wake's `rtcwake`
+and the root ring unit's `systemctl start|stop` lines live there.
 
 ## Operational gotchas
 

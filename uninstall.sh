@@ -21,6 +21,16 @@ set -euo pipefail
 readonly SLEEP_HOOK_DST="/usr/lib/systemd/system-sleep/wake-alarm.sh"
 readonly SHUTDOWN_WRAPPER_DST="/usr/local/bin/shutdown"
 readonly SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+# Enforcement v2 (DOCS-wake-enforcement.md): user units, then root pieces.
+readonly V2_UNITS=(wake-alarm-fallback wake-alarm-rtc wake-alarm-audit)
+readonly ALSA_UNIT="wake-alarm-ring-alsa.service"
+readonly ROOT_FILES=(
+    "/etc/systemd/system/$ALSA_UNIT"
+    "/usr/local/lib/wake-alarm/ring_alsa.sh"
+    "/usr/local/share/wake-alarm/ring.wav"
+    "/usr/local/share/wake-alarm/ring_loop.wav"
+)
+readonly POWERKEY_DST="/etc/systemd/logind.conf.d/wake-alarm-powerkey.conf"
 
 RETIRED_ONLY=0
 
@@ -82,12 +92,40 @@ remove_trigger() {
           "$SYSTEMD_USER_DIR/wake-alarm-session.timer"
 }
 
+remove_enforcement() {
+    local unit path
+    for unit in "${V2_UNITS[@]}"; do
+        systemctl --user disable --now "$unit.timer" >/dev/null 2>&1 || true
+        systemctl --user stop "$unit.service" >/dev/null 2>&1 || true
+        rm -f "$SYSTEMD_USER_DIR/$unit.service" "$SYSTEMD_USER_DIR/$unit.timer"
+    done
+    echo "  Fallback, RTC and audit timers removed"
+
+    sudo systemctl stop "$ALSA_UNIT" >/dev/null 2>&1 || true
+    for path in "${ROOT_FILES[@]}"; do
+        sudo rm -f "$path"
+    done
+    sudo rmdir /usr/local/lib/wake-alarm /usr/local/share/wake-alarm 2>/dev/null || true
+    sudo systemctl daemon-reload
+    echo "  $ALSA_UNIT, its script and the ring WAVs removed"
+
+    if sudo test -f "$POWERKEY_DST"; then
+        sudo rm -f "$POWERKEY_DST"
+        # Reload, NEVER restart: restarting logind kills the graphical session.
+        sudo systemctl kill -s HUP systemd-logind
+        echo "  Power key back to the logind default"
+    fi
+    # Disarm a pending stick-day wake, so the PC does not start by itself.
+    sudo -n /usr/sbin/rtcwake -m disable >/dev/null 2>&1 || true
+}
+
 main() {
     echo "=== Removing the PC's waking machinery ==="
     remove_retired
 
     if [[ $RETIRED_ONLY -eq 0 ]]; then
         remove_trigger
+        remove_enforcement
         echo "  Note: the workout lock no longer starts at the phone's alarm time."
     fi
 
@@ -95,7 +133,8 @@ main() {
 
     echo
     echo "Left in place on purpose:"
-    echo "  /etc/sudoers.d/wake-alarm — screen-locker's own rtcwake path needs it."
+    echo "  /etc/sudoers.d/wake-alarm — never deleted by an uninstall (AGENTS.md);"
+    echo "  its start/stop lines are inert once $ALSA_UNIT is gone."
     echo
     echo "Verify:  command -v shutdown   # expect /usr/bin/shutdown"
 }
