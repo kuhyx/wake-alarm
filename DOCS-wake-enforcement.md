@@ -137,6 +137,23 @@ PC (`events.jsonl` `event`): `fallback_tick` (only on decision change),
 `rtc_skip`, `firebase_unreachable`, `escape_seen`, `penalty_written`,
 `penalty_cancelled`, `audit_written`.
 
+## Verification status (2026-10-01)
+
+- vmbox gate (`scripts/vmbox/harness.sh`, `guest_cases_v2.sh`): install,
+  timers, root ring unit on `snd-dummy`, sudoers merge, power-key drop-in,
+  a real `rtcwake` arm, uninstall — all pass. Passed in vmbox, then installed
+  on the host.
+- Host: S4 RTC wake verified twice; both ring backends start and stop. The
+  root ALSA ring got `Device or resource busy` while PipeWire still held the
+  card seconds after a PipeWire ring — at night the card is idle and opens
+  (a silent root `aplay` passed), but a stream left open overnight would
+  keep it busy. **Open:** what the root ring does about a held card is
+  kuhy's call (killing the holder was refused by the auto-mode classifier).
+- Emulator (`wake_alarm_api36`): exact A+15 check hidden from the system
+  next-alarm, headless `ring_started` on a heads-up ring, boot-path miss
+  (phone off before the alarm) → lockdown through tomorrow, escape hatch.
+  Not yet on the Pixel: the real focus-owner reaction and Firebase publish.
+
 ## Evidence for Claude
 
 `python -m wake_alarm._audit [YYYY-MM-DD]` and the 11:05 timer write

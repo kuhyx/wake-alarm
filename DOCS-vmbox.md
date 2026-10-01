@@ -39,8 +39,13 @@ it fails, the harness stops with exit 2 and dumps the log.
 - **The phone.** The entire dismiss sequence — two NFC tags, the step counter,
   the challenges, the 5-minute bypass — lives in `phone_app/` and is verified
   on the Pixel 6a, never here. This harness knows nothing about it.
-- **The bootloader.** The guest is BIOS/GRUB, this PC is UEFI. Any
-  firmware/ESP work goes straight to the host.
+- **The bootloader and the real firmware.** The harness guest is BIOS/GRUB
+  (`vm new --uefi` exists since 2026-10-01, OVMF, but is not this board's
+  firmware). `vm wake` emulates the RTC power-on from poweroff/hibernate, so
+  the arming and the boot/resume units are testable; whether *this* board
+  wakes is host-only (S4 verified 2026-10-01, `DOCS-wake-enforcement.md`).
+- **The ring's audio.** The guest gate plays to `snd-dummy`; the speakers,
+  and a card held busy by the user's PipeWire, are host-only.
 - **A green run is not host verification.** Report it as "passed in vmbox, not
   verified on the host", always.
 
