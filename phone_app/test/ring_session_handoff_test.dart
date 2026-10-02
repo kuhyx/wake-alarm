@@ -115,7 +115,10 @@ void main() {
     await AlarmPolicy.setEarlier(5, 0);
     final answers = await pumpApp(tester);
     await dismiss(tester, answers);
-    final next = AlarmPolicy.resolve(DateTime.now(), null);
+    // With the ramp minute this dismiss just earned: on a non-workday that is
+    // a minute earlier than the bare baseline, so a resolve() without the
+    // earned set only passed on Tue-Thu.
+    final next = await AlarmPolicy.load();
     expect(
       calls.lastIndexOf('armSchedule'),
       greaterThan(calls.indexOf('dismiss')),
