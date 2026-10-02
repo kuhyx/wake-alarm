@@ -3,6 +3,14 @@ name: release-apk
 on:
   push:
     branches: [main]
+    # A publisher, not a gate: build only when something that ends up in
+    # the APK changed. versionCode is the commit count, so skipped pushes
+    # still leave it monotonic.
+    paths:
+      - 'phone_app/**'
+      - '.fvmrc'
+      - '.versioncode-offset'
+      - '.github/workflows/release-apk.yml'
   # Lets a release be rebuilt from the current main without a dummy commit.
   workflow_dispatch:
 
@@ -74,6 +82,8 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          # ~/.gradle caches + wrapper, keyed on the Gradle files.
+          cache: gradle
 
       - uses: subosito/flutter-action@v2
         with:

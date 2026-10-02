@@ -69,11 +69,10 @@ jobs:
           uv pip install --quiet --python .freedays-venv/bin/python .utils/crdt-sync
           uv pip install --quiet --python .freedays-venv/bin/python --no-deps .utils/freedays
 
-      - uses: subosito/flutter-action@v2
+      - uses: kuhyx/utils/flutter-setup@flutter-setup-v1
         with:
           flutter-version: 3.47.6
-          channel: stable
-          cache: true
+          working-directory: phone_app
 
       - name: Dart writes, Python replays, both must agree
         run: FREEDAYS_PYTHON="$PWD/.freedays-venv/bin/python" bash scripts/free_days_interop/check.sh
