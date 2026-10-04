@@ -32,6 +32,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: repo-contract
+        name: repo contract (CLAUDE.md Commands + test_changed)
+        entry: scripts/check_repo_contract.sh
+        language: system
+        pass_filenames: false
+        files: ^(CLAUDE\.md|AGENTS\.md|scripts/test_changed\.sh)$
       - id: no-noqa
         name: Block noqa comments
         entry: '(?i)#\s*(noqa|type:\s*ignore)'

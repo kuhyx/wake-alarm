@@ -212,21 +212,20 @@ and the root ring unit's `systemctl start|stop` lines live there.
 
 ## Commands
 
-- Run tests: `python -m pytest wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-fail-under=100`
-- Phone tests: `cd phone_app && flutter test && flutter analyze`
-- Walk the morning on the emulator: `phone_app/scripts/emu_morning.py` (`DOCS-morning-session.md`)
-- Lint: `pre-commit run --all-files`
-- Show the resolved alarm / the morning: `python -m wake_alarm._sync --show` (`--no-cache` live), `python -m wake_alarm._session --show`
-- Show what the next tick would do: `python -m wake_alarm._trigger --dry-run`
-- Watch it live: `journalctl --user -fu wake-alarm-trigger.service`
-- Install: `bash install.sh` — Uninstall: `bash uninstall.sh`
-- Gate the shell/system scripts: `bash scripts/vmbox/harness.sh`
-  (disposable Arch VM; see **`DOCS-vmbox.md`**)
-- Ring the phone for a manual test: `lib/main_ring_probe.dart` (see
-  `DOCS-phone-alarm.md` — it starts a **real** alarm, and the new sequence is
-  what stops it)
+- run: n/a: no single entry point; systemd timers (`install.sh`) drive it, inspect with `python -m wake_alarm._sync --show`, `python -m wake_alarm._session --show`, `python -m wake_alarm._trigger --dry-run`
+- test: `python -m pytest -q wake_alarm/tests/ && cd phone_app && flutter test --reporter=compact`
+- test-changed: `scripts/test_changed.sh`
+- lint: `pre-commit run ruff --all-files && cd phone_app && flutter analyze --fatal-infos --fatal-warnings`
+- coverage: `python -m pytest -q wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-report=xml --cov-fail-under=100`
+- coverage-gaps: `coverage-gaps coverage.xml`
 
-The dev venv lacks `gatelock`, so anything importing `_state` (including
+Other: full lint gate `pre-commit run --all-files`; watch live
+`journalctl --user -fu wake-alarm-trigger.service`; `bash install.sh` /
+`bash uninstall.sh`; shell/system scripts gate `bash scripts/vmbox/harness.sh`
+(disposable Arch VM, **`DOCS-vmbox.md`**); emulator morning
+`phone_app/scripts/emu_morning.py` (`DOCS-morning-session.md`); ring the phone
+via `lib/main_ring_probe.dart` (`DOCS-phone-alarm.md` — starts a **real**
+alarm). The dev venv lacks `gatelock`: anything importing `_state` (incl.
 `_trigger`) needs `/usr/bin/python3`, not `.venv/bin/python`.
 
 ## Do NOT
