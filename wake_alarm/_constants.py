@@ -38,13 +38,12 @@ WAKE_STATE_FILE: Path = Path(__file__).resolve().parent / "wake_state.json"
 SYNC_CONFIG_FILE: Path = Path.home() / ".config" / "wake_alarm" / "sync.json"
 
 # Fallback token locations, tried in order when SYNC_CONFIG_FILE is absent.
-# The sibling companion apps already store a repo-scoped PAT for this same
-# kuhyx/syncs repo as a raw single-line file, so reusing one means a single
-# token to rotate instead of three copies drifting out of sync.
-# shutdown-wrapper.sh reads the same list — keep the two in step.
+# diet_guard already stores a repo-scoped PAT for this same kuhyx/syncs repo as
+# a raw single-line file; reusing it means one token to rotate, not two.
+# screen-locker's sync_token is gone: its PC sync is Firebase-only since
+# 2026-10-09 and nothing maintains that file any more.
 SYNC_TOKEN_FALLBACK_FILES: tuple[Path, ...] = (
     Path.home() / ".config" / "diet_guard" / "sync_token",
-    Path.home() / ".config" / "screen_locker" / "sync_token",
 )
 
 # Where a successful read is cached, so a network blip can't cost a wake-up.

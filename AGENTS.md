@@ -121,7 +121,8 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
   is checked **before** anything is constructed, so an unconfigured machine
   never touches the network.
 - GitHub token (fallback only): `~/.config/wake_alarm/sync.json` key `token`,
-  else a sibling app's raw `~/.config/{diet_guard,screen_locker}/sync_token`.
+  else diet_guard's raw `~/.config/diet_guard/sync_token` (screen-locker is
+  Firebase-only since 2026-10-09; its `sync_token` is no longer read).
   Needs `repo` scope — the repo is private, so a token without access returns
   **404, not 403**.
 - `crdt_sync` is imported at module scope but **guarded by

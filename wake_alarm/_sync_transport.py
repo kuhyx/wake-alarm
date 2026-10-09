@@ -92,8 +92,8 @@ def _read_token_fallback() -> str | None:
 def _read_token() -> str | None:
     """Read the GitHub token, preferring this package's own config.
 
-    Falls back to the sibling companion apps' token files so one repo-scoped
-    PAT covers every app syncing through ``kuhyx/syncs``.
+    Falls back to diet_guard's token file so one repo-scoped PAT covers
+    every app syncing through ``kuhyx/syncs``.
 
     Returns:
         The token, or None if no configured source holds one.
