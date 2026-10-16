@@ -45,7 +45,7 @@ def _alarm() -> Generator[None]:
 def test_outside_the_window_never_fetches() -> None:
     fetch = MagicMock()
     with patch.object(_fallback_observe, "fetch_firebase_logs", fetch):
-        seen = observe(datetime(2026, 10, 1, 5, 0).astimezone())
+        seen = observe(datetime(2026, 10, 1, 5, 0).astimezone(), sync=True)
     fetch.assert_not_called()
     assert seen.reachable
     assert seen.view is None
@@ -57,13 +57,13 @@ def test_a_free_day_never_fetches() -> None:
         patch.object(_fallback_observe, "fetch_firebase_logs", fetch),
         patch.object(_fallback_observe.freedays, "is_free_day", return_value=True),
     ):
-        assert observe(NOW).facts.free_day
+        assert observe(NOW, sync=False).facts.free_day
     fetch.assert_not_called()
 
 
 def test_unreachable_firebase_is_no_ping_no_session() -> None:
     with patch.object(_fallback_observe, "fetch_firebase_logs", return_value=None):
-        seen = observe(NOW)
+        seen = observe(NOW, sync=False)
     assert not seen.reachable
     facts = seen.facts
     assert not (facts.escaped)
@@ -81,7 +81,7 @@ def test_facts_from_the_phone() -> None:
     with patch.object(
         _fallback_observe, "fetch_firebase_logs", return_value=[("p", raw)]
     ):
-        seen = observe(NOW)
+        seen = observe(NOW, sync=False)
     assert seen.facts.session_started
     assert seen.facts.ring_started
     assert seen.facts.escaped
@@ -95,7 +95,7 @@ def test_yesterdays_session_does_not_count() -> None:
         "fetch_firebase_logs",
         return_value=[("p", _log(morning_sessions=[session]))],
     ):
-        assert not observe(NOW).facts.session_started
+        assert not observe(NOW, sync=False).facts.session_started
 
 
 def test_settled_from_latch_or_event_state() -> None:
@@ -123,12 +123,12 @@ def test_record_logs_unreachable_once_and_resets(
         patch.object(_fallback_observe, "fetch_firebase_logs", return_value=None),
         caplog.at_level(logging.INFO),
     ):
-        seen = observe(NOW)
+        seen = observe(NOW, sync=False)
         record(seen)
         record(seen)
     assert caplog.text.count("firebase_unreachable:") == 1
     with patch.object(_fallback_observe, "fetch_firebase_logs", return_value=[]):
-        record(observe(NOW))
+        record(observe(NOW, sync=False))
     assert last_value("firebase_unreachable") is None
 
 
@@ -137,5 +137,5 @@ def test_record_notes_escapes() -> None:
     with patch.object(
         _fallback_observe, "fetch_firebase_logs", return_value=[("p", raw)]
     ):
-        record(observe(NOW))
+        record(observe(NOW, sync=False))
     assert last_value("escape_seen") == "e"

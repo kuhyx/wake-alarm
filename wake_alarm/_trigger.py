@@ -35,6 +35,7 @@ from wake_alarm._constants import (
     TRIGGER_TARGET_UNIT,
 )
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._sick import is_sick
 from wake_alarm._state import (
     save_trigger_fired,
     was_trigger_fired_today,
@@ -84,12 +85,13 @@ def _skip_reason(now: datetime) -> str | None:
     """Return why the alarm must not fire right now, or None if it may.
 
     Checks only the gates that are independent of the clock: the shared
-    free-day pool, the day gate and the once-per-day latch.
+    free-day and sick-day pools, the day gate and the once-per-day latch.
 
     A free day means the alarm does not ring at all -- the orchestrator is
     never started, so neither the alarm nor the workout lock behind it
-    appears. The pool is one local file read, never the network, so this
-    stays a millisecond-scale tick.
+    appears. A sick day is the same. Each pool is one local file read, never
+    the network, so this stays a millisecond-scale tick; the fallback tick
+    pulls the sick-day pool from ``A - 5 min``, so it is fresh by the fire.
 
     Args:
         now: Current local time.
@@ -99,6 +101,8 @@ def _skip_reason(now: datetime) -> str | None:
     """
     if freedays.is_free_day(now.date()):
         return "free day"
+    if is_sick(now.date()):
+        return "sick day"
     if now.weekday() not in ALARM_DAYS:
         return "not an alarm day"
     if was_trigger_fired_today():

@@ -29,11 +29,12 @@ if TYPE_CHECKING:
 
     from wake_alarm._audit_sources import PcEvent
 
-_FINAL_STOPS = frozenset({"escape", "session_started", "cap", "free_day"})
+_FINAL_STOPS = frozenset({"escape", "session_started", "cap", "free_day", "sick_day"})
 _RING_KINDS = frozenset({"ring_screen_opened", "ring_started_published"})
 # alarm_fired.data.reason: only the daily ring is the morning's ring -- a
-# free_day firing rings nothing, and a rering presupposes an earlier ring.
-_NOT_THE_MORNING_RING = frozenset({"free_day", "rering"})
+# free_day / sick_day firing rings nothing, and a rering presupposes an
+# earlier ring.
+_NOT_THE_MORNING_RING = frozenset({"free_day", "sick_day", "rering"})
 
 
 def alarm_from_events(pc: list[PcEvent], day: date) -> datetime | None:
@@ -58,6 +59,8 @@ def check_rtc(ev: Evidence) -> Check:
     """On a stick day the RTC was armed the night before."""
     if not ev.stick_day or ev.free_day:
         return na("RTC armed the night before", "not a stick day")
+    if ev.sick_day:
+        return na("RTC armed the night before", "sick day")
     armed = [
         e
         for e in ev.pc
@@ -75,6 +78,8 @@ def check_up_by_alarm(ev: Evidence) -> Check:
     """On a stick day the PC was up by ``A``."""
     if not ev.stick_day or ev.free_day or ev.alarm_at is None:
         return na("PC up by A", "not a stick day or no alarm")
+    if ev.sick_day:
+        return na("PC up by A", "sick day")
     alarm = ev.alarm_at
     lead = alarm - RTC_WAKE_LEAD - timedelta(minutes=5)
     ups = [u for u in ev.ups if u.at.date() == ev.day and u.at <= alarm]
@@ -90,6 +95,8 @@ def check_ring(ev: Evidence) -> Check:
     """Something rang: the phone's ring screen, or the PC fallback."""
     if ev.free_day:
         return na("something rang", "free day")
+    if ev.sick_day:
+        return na("something rang", "sick day")
     fallback = pc_on_day(ev, "fallback_ring_start")
     phone = ev.ring_started or any(
         e.kind in _RING_KINDS

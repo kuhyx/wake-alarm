@@ -74,10 +74,11 @@ def check_penalty(ev: Evidence) -> Check:
     """The PC penalty agrees with the outcome and any escape."""
     name = "penalty consistent"
     escaped = _escaped(ev)
-    if escaped and ev.penalty_issued == ev.day.isoformat():
-        return bad(name, "escaped, but the penalty is on disk")
-    if escaped:
-        return ok(name, "escaped: no penalty")
+    if escaped or ev.sick_day:
+        why = "escaped" if escaped else "sick day"
+        if ev.penalty_issued == ev.day.isoformat():
+            return bad(name, f"{why}, but the penalty is on disk")
+        return ok(name, f"{why}: no penalty")
     if not ev.stick_day or ev.free_day:
         return na(name, "not a stick day")
     written = pc_on_day(ev, "penalty_written")
@@ -119,6 +120,14 @@ def _lockdown_for_miss(ev: Evidence, judged: date) -> Check:
     return ok(name, f"until {until}")
 
 
+def _sick_lockdown(ev: Evidence, judged: date | None) -> Check:
+    """A sick day expects no lockdown; one sent for its miss is flagged."""
+    name = "lockdown consistent"
+    if judged is not None and _sent_on(ev, judged):
+        return bad(name, "sick day, but lockdown_sent")
+    return na(name, "sick day")
+
+
 def check_lockdown(ev: Evidence) -> Check:
     """``lockdown_sent`` agrees with the verdict, and escapes lift it."""
     name = "lockdown consistent"
@@ -128,6 +137,8 @@ def check_lockdown(ev: Evidence) -> Check:
         if "lift_sent" not in phone_kinds(ev):
             return bad(name, "escaped, but no lift_sent")
         return ok(name, "lifted after the escape")
+    if ev.sick_day:
+        return _sick_lockdown(ev, judged)
     if judged is not None:
         return _lockdown_for_miss(ev, judged)
     if sent_today and not _escaped(ev):

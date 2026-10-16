@@ -51,6 +51,7 @@ class Evidence:
     alarm_source: str
     pc_side: PcSide = field(default_factory=PcSide)
     phone_side: PhoneSide = field(default_factory=PhoneSide)
+    sick_day: bool = False
 
     @property
     def pc(self) -> list[PcEvent]:

@@ -36,6 +36,7 @@ from wake_alarm._enforcement_records import parse_instant
 from wake_alarm._events import emit
 from wake_alarm._fallback_policy import alarm_instant
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._sick import is_sick
 from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
 from wake_alarm._workday_penalty import issued_date
@@ -64,6 +65,7 @@ def gather(day: date) -> tuple[Evidence, bool]:
         day=day,
         stick_day=freedays.is_workday(day),
         free_day=freedays.is_free_day(day),
+        sick_day=is_sick(day),
         alarm_at=alarm_at,
         alarm_source=source,
         pc_side=PcSide(
@@ -117,7 +119,15 @@ def _timeline(ev: Evidence) -> list[str]:
 
 def render(ev: Evidence, checks: list[Check], *, reachable: bool) -> str:
     """The whole report."""
-    kind = "free day" if ev.free_day else "stick day" if ev.stick_day else "carrot day"
+    kind = (
+        "sick day"
+        if ev.sick_day
+        else "free day"
+        if ev.free_day
+        else "stick day"
+        if ev.stick_day
+        else "carrot day"
+    )
     lines = [f"# Wake audit {ev.day} ({ev.day:%a}, {kind})", "", "## Flags", ""]
     flagged = flags(ev, checks)
     if not reachable:

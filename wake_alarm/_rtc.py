@@ -6,17 +6,25 @@ resume, so a PC hibernated at 16:00 on Monday is armed for Tuesday the
 moment it next runs at all. The target is the first morning whose wake instant
 (``A - RTC_WAKE_LEAD``, ``A`` clamped to 08:00) is still ahead -- so a
 02:00 tick on a Tuesday targets Tuesday, not Wednesday. Only a stick day
-(``freedays.is_workday``: Tue/Wed/Thu) that is not a free day is armed, via
+(``freedays.is_workday``: Tue/Wed/Thu) that is neither a free day nor a sick
+day (``_sick``) is armed, via
 ``sudo -n /usr/sbin/rtcwake -m no -t <epoch>``. The alarm lives in CMOS, so
 it survives however the PC goes down.
 
 When the next morning is not one to wake for (a carrot day, or a stick day
-that became free), an alarm *we* armed is cleared (``rtc_disarmed``); one
+that became free or sick), an alarm *we* armed is cleared (``rtc_disarmed``); one
 someone else set is left alone (``_rtc_hw``). A changed alarm time needs no
 disarm: arming overwrites the single RTC alarm.
 
 ``rtc_armed`` / ``rtc_skip`` are logged only when they change; the audit
 matches ``rtc_armed`` on its ``target_date``.
+
+``--arm`` pulls the sick-day pool before judging a stick-day target (a day
+marked sick on the phone at 23:00 must disarm before the PC goes down);
+``--dry-run`` / ``--show`` read the local pool and write nothing. ``--arm``
+also retracts a workday penalty issued on a day since marked sick
+(``_workday_penalty.cancel_for_sick_day``): this is the one wake_alarm job
+that runs all day, and a day can be marked sick until midnight.
 
     python -m wake_alarm._rtc --arm       # what the timer runs
     python -m wake_alarm._rtc --dry-run   # the plan, nothing armed
@@ -28,6 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 import sys
+from typing import TYPE_CHECKING
 
 import freedays
 
@@ -38,7 +47,12 @@ from wake_alarm._fallback_policy import alarm_instant
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._pc_wake_mode import read_mode
 from wake_alarm._rtc_hw import arm, current_alarm, disarm_ours, read_record
+from wake_alarm._sick import is_sick, is_sick_synced
 from wake_alarm._sync import Alarm, get_alarm
+from wake_alarm._workday_penalty import cancel_for_sick_day
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass(frozen=True)
@@ -61,8 +75,14 @@ def _now() -> datetime:
     return datetime.now(tz=UTC).astimezone()
 
 
-def plan(now: datetime, alarm: Alarm) -> Plan:
-    """Which morning is next, and whether it is one to wake the PC for."""
+def plan(
+    now: datetime, alarm: Alarm, *, sick: Callable[[date], bool] = is_sick
+) -> Plan:
+    """Which morning is next, and whether it is one to wake the PC for.
+
+    ``sick`` is asked last, so only a stick-day target that is not free ever
+    pays for the synced variant ``--arm`` passes.
+    """
     target = now.date()
     wake_at = alarm_instant(alarm, target) - RTC_WAKE_LEAD
     if wake_at <= now:
@@ -74,6 +94,8 @@ def plan(now: datetime, alarm: Alarm) -> Plan:
         )
     if freedays.is_free_day(target):
         return Plan(target, wake_at, arm=False, reason="free day")
+    if sick(target):
+        return Plan(target, wake_at, arm=False, reason="sick day")
     return Plan(target, wake_at, arm=True, reason="stick day")
 
 
@@ -139,10 +161,12 @@ def main(argv: list[str] | None = None) -> int:
     """Entry point."""
     parser = mode_parser("Arm the RTC for a stick day", "arm", "arm (the timer)")
     args, now = parse_with_now(parser, argv, _now)
-    chosen = plan(now, get_alarm())
     if args.arm:
         configure_logging(component="rtc")
+        cancel_for_sick_day()
+        chosen = plan(now, get_alarm(), sick=is_sick_synced)
         return 0 if apply(chosen) or not chosen.arm else 1
+    chosen = plan(now, get_alarm())
     sys.stdout.write(describe(chosen))
     record = read_record()
     if not chosen.arm and record is not None and current_alarm() == record.epoch:

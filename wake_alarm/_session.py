@@ -42,6 +42,7 @@ from wake_alarm._session_payload import newest_session
 from wake_alarm._session_policy import to_entry
 from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
+from wake_alarm._workday_penalty import cancel_for_sick_day as _cancel_for_sick_day
 from wake_alarm._workday_penalty import maybe_apply as _maybe_apply_workday_penalty
 
 _logger = logging.getLogger(__name__)
@@ -84,8 +85,11 @@ def refresh(now: datetime) -> dict[str, object] | None:
     """Fetch, select, and rewrite the file; None when the backend was unreadable.
 
     An unreadable backend leaves the file alone: whatever it says is still
-    the newest thing known, and a consumer judges freshness by its date.
+    the newest thing known, and a consumer judges freshness by its date. A
+    penalty issued on a day since marked sick is retracted first, from the
+    local pool alone, so it does not wait on Firebase.
     """
+    _cancel_for_sick_day()
     published = fetch_firebase_logs()
     if published is None:
         _logger.info("Morning session not refreshed: backend unreadable")

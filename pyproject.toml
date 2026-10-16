@@ -12,8 +12,11 @@ dependencies = [
     # Firebase transport for the alarm read. _sync.py imports it lazily and
     # falls back to its stdlib GitHub path if the import fails, so a broken
     # install degrades the read instead of killing the per-minute trigger.
-    "crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.1#subdirectory=crdt-sync",
-    "freedays @ git+https://github.com/kuhyx/utils@freedays-v0.3.0#subdirectory=freedays",
+    "crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.2#subdirectory=crdt-sync",
+    "freedays @ git+https://github.com/kuhyx/utils@freedays-v0.4.0#subdirectory=freedays",
+    # Sick days stand the PC's enforcement down (_sick.py). Imported behind
+    # a guard: missing means "not sick", never a crashed tick.
+    "sickdays @ git+https://github.com/kuhyx/utils@sickdays-v0.1.0#subdirectory=sickdays",
 ]
 
 # Package discovery must be explicit: phone_app/ is a Flutter app, not a Python

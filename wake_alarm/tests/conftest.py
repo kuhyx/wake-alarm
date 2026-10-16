@@ -19,6 +19,8 @@ an inhibitor:
   ``~/.local/state/wake_alarm/events.jsonl``. Unredirected, every suite run
   appended fixture warnings ("Synced alarm out of range: 24:0") to the log a
   failed wake-up is reconstructed from.
+* The free-day and sick-day pools live under ``~/.local/share``; both are
+  redirected, and the sick-day sync is stubbed offline.
 * Wake enforcement v2 writes more state (the fallback latch, the event
   state, incident reports) and reaches real hardware (``pw-play``,
   ``sudo systemctl``, ``rtcwake``, ``journalctl``). Every path is redirected
@@ -34,6 +36,7 @@ from unittest.mock import patch
 
 import freedays
 import pytest
+import sickdays
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -100,6 +103,15 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             "freedays._api.resolve_paths",
             lambda paths: paths or freedays.Paths.under(tmp_path / "freedays"),
         ),
+        # Same for the sick-day pool. Its sync is stubbed to "offline": the
+        # real ~/.config/crdt-sync credential exists on this machine, so an
+        # unstubbed act-mode tick would talk to live Firebase and rewrite the
+        # real pool.
+        patch(
+            "sickdays._api.resolve_paths",
+            lambda paths: paths or sickdays.Paths.under(tmp_path / "sickdays"),
+        ),
+        patch("sickdays.sync_quietly", lambda **_: False),
     ]
     with ExitStack() as stack:
         for redirect in patches:

@@ -1,7 +1,7 @@
 """The PC fallback alarm's rule, as one pure function.
 
 ``DOCS-wake-enforcement.md``'s table, first match wins, inside
-``A - 5 min .. A + 45 min`` on a day that is not free:
+``A - 5 min .. A + 45 min`` on a day that is neither free nor sick:
 
 =========================================================  ==================
 escape recorded for today, or a session started today      do not ring / stop
@@ -45,6 +45,7 @@ FALLBACK_POLL_SECONDS: float = 20.0
 
 # Reasons, as they appear in events.jsonl and fallback_ring.json.
 FREE_DAY = "free_day"
+SICK_DAY = "sick_day"
 OUTSIDE_WINDOW = "outside_window"
 ESCAPE = "escape"
 SESSION_STARTED = "session_started"
@@ -69,6 +70,7 @@ class Facts:
     now: datetime
     alarm_at: datetime
     free_day: bool
+    sick_day: bool = False
     escaped: bool = False
     session_started: bool = False
     ring_started: bool = False
@@ -121,15 +123,26 @@ def is_capped(facts: Facts) -> bool:
     return started is not None and facts.now >= started + FALLBACK_RING_CAP
 
 
+def day_off(facts: Facts) -> str | None:
+    """``free_day`` / ``sick_day`` when today rings nothing at all."""
+    if facts.free_day:
+        return FREE_DAY
+    if facts.sick_day:
+        return SICK_DAY
+    return None
+
+
 def stop_reason(facts: Facts) -> str | None:
     """Why a ring in progress must stop now, or None to keep ringing.
 
-    Only the contract's three stop conditions (plus a day that turned free):
+    Only the contract's three stop conditions (plus a day that turned free
+    or sick):
     a phone that comes back on mid-ring does not silence the PC -- getting up
     does.
     """
-    if facts.free_day:
-        return FREE_DAY
+    off = day_off(facts)
+    if off is not None:
+        return off
     if facts.settled in FINAL_REASONS:
         return facts.settled
     if facts.escaped:
@@ -143,8 +156,9 @@ def stop_reason(facts: Facts) -> str | None:
 
 def decide(facts: Facts) -> Decision:
     """The table above; first match wins."""
-    if facts.free_day:
-        return Decision(ring=False, reason=FREE_DAY)
+    off = day_off(facts)
+    if off is not None:
+        return Decision(ring=False, reason=off)
     if not needs_facts(facts.now, facts.alarm_at, facts.latch):
         return Decision(ring=False, reason=OUTSIDE_WINDOW)
     stop = stop_reason(facts)

@@ -15,7 +15,11 @@ today == penalty_date means "no leniency today," the same shape as
 ``morning_session.json``'s own ``exempt_until`` predicate.
 
 An escape (``DOCS-wake-enforcement.md``) for a morning means no penalty is
-written for it, and one already issued that day is deleted.
+written for it, and one already issued that day is deleted. A sick day
+(``_sick``) is the same, for its own reason: nothing is written on a sick
+day, and a penalty *issued* on a day marked sick afterwards (a miss at 08:15,
+"sick" at 14:00) is deleted by the next ``--refresh`` or RTC tick. Other
+readers must not wait for that: see ``DOCS-wake-enforcement.md``.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from gatelock.log_integrity import compute_entry_hmac
 from wake_alarm._constants import WORKDAY_PENALTY_FILE
 from wake_alarm._events import emit
 from wake_alarm._session_policy import NONE_OUTCOME
+from wake_alarm._sick import is_sick, is_sick_synced
 
 _logger = logging.getLogger(__name__)
 
@@ -95,6 +100,22 @@ def issued_date() -> str | None:
     return issued if isinstance(issued, str) else None
 
 
+def _cancel(issued: str, cause: str) -> bool:
+    """Delete the penalty issued on ``issued``; log ``penalty_cancelled``."""
+    try:
+        WORKDAY_PENALTY_FILE.unlink()
+    except OSError as exc:
+        _logger.warning("Could not cancel %s: %s", WORKDAY_PENALTY_FILE, exc)
+        return False
+    emit(
+        "penalty_cancelled",
+        f"{cause.replace('_', ' ')} for {issued}",
+        issued_date=issued,
+        cause=cause,
+    )
+    return True
+
+
 def cancel_for_escapes(escaped_dates: frozenset[str]) -> bool:
     """Delete the penalty when an escape excuses the morning it was issued.
 
@@ -104,13 +125,47 @@ def cancel_for_escapes(escaped_dates: frozenset[str]) -> bool:
     issued = issued_date()
     if issued is None or issued not in escaped_dates:
         return False
-    try:
-        WORKDAY_PENALTY_FILE.unlink()
-    except OSError as exc:
-        _logger.warning("Could not cancel %s: %s", WORKDAY_PENALTY_FILE, exc)
+    return _cancel(issued, "escape")
+
+
+def cancel_for_sick_day() -> bool:
+    """Delete the penalty when the morning it was issued is now a sick day.
+
+    Local pool only: callers on a timer keep it fresh. Fail closed -- an
+    unreadable pool or date keeps the penalty.
+
+    Returns:
+        True when a penalty was removed.
+    """
+    issued = issued_date()
+    if issued is None:
         return False
-    emit("penalty_cancelled", f"escape for {issued}", issued_date=issued)
-    return True
+    try:
+        day = date.fromisoformat(issued)
+    except ValueError:
+        return False
+    return is_sick(day) and _cancel(issued, "sick_day")
+
+
+def skip_reason(
+    entry: dict[str, object],
+    now: datetime,
+    *,
+    escaped_dates: frozenset[str] = frozenset(),
+) -> str | None:
+    """Why today earns no penalty, or None when it does. Pure and local."""
+    today = now.date()
+    if today.isoformat() in escaped_dates:
+        return "escaped"
+    if freedays.is_free_day(today):
+        return "free day"
+    if not is_stick_day(today):
+        return "not a stick day"
+    if is_sick(today):
+        return "sick day"
+    if not is_workday_miss(entry, now):
+        return "no miss"
+    return None
 
 
 def maybe_apply(
@@ -126,19 +181,19 @@ def maybe_apply(
     would otherwise have rung the alarm -- the pool is fail-closed the other
     direction (a corrupt read is "not free"), which is exactly what is
     wanted here too: an unreadable pool means no penalty, never a spurious
-    one. An escaped morning is never penalised either.
+    one. An escaped morning or a sick day is never penalised either; the
+    sick-day pool is pulled once more before the day's *first* write, so a
+    day marked sick on the phone minutes ago still counts.
 
     ``penalty_written`` is logged once per issued day, not on every
     two-minute refresh that rewrites the same entry.
     """
+    if skip_reason(entry, now, escaped_dates=escaped_dates) is not None:
+        return False
     today = now.date()
-    if today.isoformat() in escaped_dates:
-        return False
-    if freedays.is_free_day(today) or not is_stick_day(today):
-        return False
-    if not is_workday_miss(entry, now):
-        return False
     previously = issued_date()
+    if previously != today.isoformat() and is_sick_synced(today):
+        return False
     entry_body = penalty_entry(today=today)
     if not write_penalty(entry_body):
         return False

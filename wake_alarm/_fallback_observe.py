@@ -1,8 +1,8 @@
 """One look at the world for the fallback alarm, and its bookkeeping.
 
 Split from ``_fallback`` (tick, ring lifecycle, CLI): this is "what is true
-right now" -- today's alarm, the latch, the free-day pool and, only when the
-decision needs it, every device's ``alarm.json``.
+right now" -- today's alarm, the latch, the free-day and sick-day pools
+and, only when the decision needs it, every device's ``alarm.json``.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from wake_alarm._fallback_policy import (
     needs_facts,
 )
 from wake_alarm._session_payload import newest_session
+from wake_alarm._sick import is_sick, is_sick_synced
 from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
 
@@ -49,18 +50,37 @@ def settled_reason(day: str, latch: Latch | None) -> str | None:
     return remembered[2] if remembered[0] == day and remembered[2] else None
 
 
-def observe(now: datetime) -> Observation:
-    """Gather the facts; the network only when the decision needs it."""
+def _sick_today(now: datetime, *, online: bool, sync: bool) -> bool:
+    """Whether today is a sick day; pulls the pool first when acting online.
+
+    Synced only on the ticks that already go to the network (the window, or
+    a ring in progress), so a day marked sick on the phone mid-ring stops
+    the ring at the next poll, and an off-window tick stays local.
+    """
+    if online and sync:
+        return is_sick_synced(now.date())
+    return is_sick(now.date())
+
+
+def observe(now: datetime, *, sync: bool) -> Observation:
+    """Gather the facts; the network only when the decision needs it.
+
+    ``sync`` is False for ``--dry-run``: pulling the sick-day pool rewrites
+    its local file, and a dry run writes nothing.
+    """
     day = now.date().isoformat()
     latch = read_latch(day)
+    alarm_at = alarm_instant(get_alarm(), now.date())
+    online = needs_facts(now, alarm_at, latch)
     facts = Facts(
         now=now,
-        alarm_at=alarm_instant(get_alarm(), now.date()),
+        alarm_at=alarm_at,
         free_day=freedays.is_free_day(now.date()),
+        sick_day=_sick_today(now, online=online, sync=sync),
         latch=latch,
         settled=settled_reason(day, latch),
     )
-    if facts.free_day or not needs_facts(now, facts.alarm_at, latch):
+    if facts.free_day or facts.sick_day or not online:
         return Observation(facts)
     published = fetch_firebase_logs()
     if published is None:
