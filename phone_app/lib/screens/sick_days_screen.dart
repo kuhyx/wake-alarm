@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/day_calendar.dart';
 import 'package:wake_alarm_sync/screens/sick_days_body.dart';
+import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
@@ -27,6 +28,7 @@ class SickDaysScreen extends StatefulWidget {
     this.openFreePool,
     this.freeSyncer,
     this.now,
+    this.scheduler,
     super.key,
   });
 
@@ -45,6 +47,9 @@ class SickDaysScreen extends StatefulWidget {
   /// The reference date, for tests.
   final DateTime Function()? now;
 
+  /// Reads the native cache back; defaults to the real channel.
+  final AlarmScheduler? scheduler;
+
   @override
   State<SickDaysScreen> createState() => _SickDaysScreenState();
 }
@@ -58,6 +63,9 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
   bool _busy = true;
   String _status = '';
   bool _refused = false;
+
+  /// What the native ring-path cache holds, read back over the channel.
+  String _cache = '';
 
   late DateTime _month = DateTime(_today.year, _today.month);
 
@@ -83,8 +91,30 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
       });
       return;
     }
+    // Read before syncing too: the sync rewrites the cache, so only this
+    // read shows what earlier marks left there.
+    await _readCache();
     await _loadFree();
     await _sync();
+  }
+
+  /// Shows the native cache `AlarmReceiver` reads, not the Dart pool.
+  /// Unreadable is never shown as "none": the ring treats it as no sick day.
+  Future<void> _readCache() async {
+    List<String>? dates;
+    try {
+      dates = await (widget.scheduler ?? AlarmScheduler()).getSickDays();
+    } on Object {
+      dates = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _cache = 'Alarm cache: ${switch (dates) {
+        null => 'unreadable',
+        [] => 'none',
+        final d => d.join(', '),
+      }}';
+    });
   }
 
   /// Opens and syncs the free-day pool, so a free day booked on the PC is
@@ -108,6 +138,7 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
       _status = 'Syncing…';
     });
     final message = await _syncer.sync(pool);
+    await _readCache();
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -172,6 +203,7 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
                   if (!day.isBefore(_today)) day,
               ],
               status: _status,
+              cache: _cache,
               refused: _refused,
               calendar: DayCalendar(
                 month: _month,

@@ -137,6 +137,11 @@ class AlarmScheduler {
   Future<void> setSickDays(List<String> isoDates) => _channel
       .invokeMethod<void>('setSickDays', <String, Object>{'dates': isoDates});
 
+  /// Reads the native sick-day cache back, sorted: what `AlarmReceiver`
+  /// will read at ring time. Null when the native side cannot read it.
+  Future<List<String>?> getSickDays() =>
+      _channel.invokeListMethod<String>('getSickDays');
+
   /// Starts the ring immediately, without waiting for the alarm instant.
   ///
   /// Exists so the foreground-service and full-screen-intent path can be

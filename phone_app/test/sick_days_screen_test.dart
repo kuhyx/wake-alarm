@@ -24,9 +24,11 @@ void main() {
   late FreeDayPool free;
   late int syncs;
   late List<List<String>> caches;
+  late bool cacheUnreadable;
 
   setUp(() async {
     caches = [];
+    cacheUnreadable = false;
     const channel = MethodChannel(AlarmScheduler.channelName);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -34,6 +36,9 @@ void main() {
             caches.add(
               ((call.arguments as Map)['dates'] as List).cast<String>(),
             );
+          }
+          if (call.method == 'getSickDays' && !cacheUnreadable) {
+            return caches.isEmpty ? <String>[] : caches.last;
           }
           return null;
         });
@@ -73,6 +78,7 @@ void main() {
         scheduler: scheduler,
       ),
       now: () => _today,
+      scheduler: scheduler,
     ),
   );
 
@@ -114,6 +120,22 @@ void main() {
     expect(sick.isSick(_today), isFalse);
     expect(caches.last, isEmpty);
     expect(syncs, 3);
+  });
+
+  testWidgets('the native cache is read back after a mark', (tester) async {
+    await open(tester);
+    expect(find.text('Alarm cache: none'), findsOneWidget);
+    await tapDay(tester, DateTime(2026, 10, 18));
+    await tapDay(tester, DateTime(2026, 10, 17));
+    expect(find.text('Alarm cache: 2026-10-17, 2026-10-18'), findsOneWidget);
+  });
+
+  testWidgets('an unreadable native cache never reads as none', (
+    tester,
+  ) async {
+    cacheUnreadable = true;
+    await open(tester);
+    expect(find.text('Alarm cache: unreadable'), findsOneWidget);
   });
 
   testWidgets('a future day is marked in the sick colour', (tester) async {

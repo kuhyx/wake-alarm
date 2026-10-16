@@ -28,6 +28,24 @@ object SickDays {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putStringSet(KEY_DATES, isoDates.toSet())
             .apply()
+        Log.i(TAG, "native cache stored: ${isoDates.sorted()}")
+    }
+
+    /**
+     * The cached dates, sorted, for the picker's read-back line (the only
+     * way to see this cache on a release build); null when unreadable,
+     * which the ring path treats as "not a sick day".
+     */
+    fun dates(context: Context): List<String>? {
+        val dates = try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getStringSet(KEY_DATES, emptySet())?.sorted()
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "sick-day cache unreadable", e)
+            null
+        }
+        Log.i(TAG, "native cache read: $dates")
+        return dates
     }
 
     /** Whether today (local calendar day) is in the cached set. */

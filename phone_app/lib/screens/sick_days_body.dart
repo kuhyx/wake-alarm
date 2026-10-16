@@ -14,6 +14,7 @@ class SickDaysBody extends StatelessWidget {
   const SickDaysBody({
     required this.upcoming,
     required this.status,
+    required this.cache,
     required this.refused,
     required this.calendar,
     super.key,
@@ -27,6 +28,9 @@ class SickDaysBody extends StatelessWidget {
 
   /// The status line; may be a raw `Error: …`.
   final String status;
+
+  /// The native ring-path cache, read back (`Alarm cache: …`).
+  final String cache;
 
   /// Whether [status] is a refused tap, drawn like an error.
   final bool refused;
@@ -67,6 +71,10 @@ class SickDaysBody extends StatelessWidget {
                 color: failed ? theme.colorScheme.error : statusColors.success,
               ),
             ),
+          ],
+          if (cache.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(cache, style: TextStyle(color: muted)),
           ],
           const SizedBox(height: 16),
           calendar,

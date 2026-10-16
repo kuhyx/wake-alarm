@@ -83,6 +83,8 @@ object AlarmChannel {
                     result.success(null)
                 }
             }
+            // Read-back for the picker: what AlarmReceiver will see.
+            "getSickDays" -> result.success(SickDays.dates(context))
             "hasNfc" -> result.success(NfcReader.isAvailable(context))
             // Raw observations only; home_presence.dart decides what they mean.
             // Lives here rather than in MainActivity's override (as NfcReader
