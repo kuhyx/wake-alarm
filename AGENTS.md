@@ -71,8 +71,8 @@ clock, and everything that is a hard crash or a silent no-ring:
 **Free days.** On a day in the shared pool (`~/src/utils/freedays`) the phone
 does not ring at all: `AlarmReceiver` checks a native cache Dart rewrites
 after every mark/release/sync. Picker, cache and its fail-closed contract:
-**`DOCS-free-days.md`**. **Sick days** (`~/src/utils/sickdays`, never a free
-day) stand the PC down too, via `_sick.py`: **`DOCS-wake-enforcement.md`**.
+**`DOCS-free-days.md`**. Sick days (`~/src/utils/sickdays`, never a free day):
+phone + pre-alarm sync **`DOCS-sick-days.md`**, PC **`DOCS-wake-enforcement.md`**.
 
 ## Scheduling — a per-minute timer
 

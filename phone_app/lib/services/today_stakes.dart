@@ -50,14 +50,21 @@ StakesView describeStakes({
   final day = todayOpen ? today : _plusDays(today, 1);
   final alarm = todayOpen ? stored : (nextAlarm ?? stored);
   final free = todayOpen ? state.freeToday : state.freeTomorrow;
+  final sick = todayOpen ? state.sickToday : state.sickTomorrow;
   final when = todayOpen ? 'Today' : 'Tomorrow';
   final stick = isWorkday(day);
-  final kind = free ? 'free day' : (stick ? 'stick day' : 'carrot day');
+  final kind = free
+      ? 'free day'
+      : sick
+      ? 'sick day'
+      : (stick ? 'stick day' : 'carrot day');
   final lines = <String>[];
   if (alarm == null) {
     lines.add('No alarm armed yet — nothing at stake.');
   } else if (free) {
     lines.add('Free day — no alarm, nothing at stake.');
+  } else if (sick) {
+    lines.add('Sick day — no alarm, nothing at stake.');
   } else {
     final ringAt = _at(day, alarm);
     if (stick) {
@@ -93,11 +100,14 @@ StakesView describeStakes({
 }
 
 /// The ring screen's one line: the stick-day consequence of not dismissing,
-/// or null when this ring has none (not a stick day, free, already
+/// or null when this ring has none (not a stick day, free, sick, already
 /// dismissed, excused or missed).
 String? ringStakesLine(EnforcementState state) {
   final stored = _stored(state);
-  if (stored == null || !isWorkday(state.today) || state.freeToday) {
+  if (stored == null ||
+      !isWorkday(state.today) ||
+      state.freeToday ||
+      state.sickToday) {
     return null;
   }
   if (state.dismissedToday || state.escapedToday) return null;

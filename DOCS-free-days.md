@@ -11,7 +11,7 @@ event — the phone stays silent — rather than an absent dialog.
 
 | | |
 |---|---|
-| Picker | `phone_app/lib/screens/free_days_screen.dart` (+ `free_days_body.dart`, `free_day_calendar.dart`), the calendar icon on the home screen |
+| Picker | `phone_app/lib/screens/free_days_screen.dart` (+ `free_days_body.dart`, the shared `day_calendar.dart`), the calendar icon on the home screen |
 | Rules, Dart port | `phone_app/lib/services/free_day_pool.dart` — same record shape as the Python package, byte for byte |
 | Sync | `phone_app/lib/services/free_day_sync.dart` — Firebase only, `freedays-sync/devices/<uuid>/free_days.json` |
 | Ring path | `android/.../FreeDays.kt` + the check at the top of `AlarmReceiver.onReceive` |
@@ -47,11 +47,14 @@ date → service start; a garbage XML file → service start.
 
 - **Marked on the phone:** immediate. The cache is rewritten before the sync
   even runs, so an offline phone still stands down on a day it marked itself.
-- **Marked on the PC (`freedays mark …`):** on the phone's next sync, which
-  happens at app launch and whenever the picker opens. The ring path takes
-  no background dependency by design (see `DOCS-phone-alarm.md`), so **a day
-  marked on the PC overnight can miss the morning ring.** Mark on the phone,
-  or open the app once after marking on the PC.
+- **Marked on the PC (`freedays mark …`):** on the phone's next sync: app
+  launch, either day picker opening, or the **pre-alarm sync** (21:00 and
+  A − 30 min, app closed; `DOCS-sick-days.md`). That sync needs network at
+  its slot; if it fails the cache keeps its last sync and the phone rings.
+
+A date is never both free and sick: this picker syncs the sick-day pool on
+open and refuses a sick date (`… is a sick day — clear it in Sick days
+first.`), and refuses every booking if that pool cannot be read.
 
 ## Cross-language check
 

@@ -8,6 +8,8 @@ import 'package:wake_alarm_sync/screens/free_days_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
+import 'package:wake_alarm_sync/services/sick_day_pool.dart';
+import 'package:wake_alarm_sync/services/sick_day_sync.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 class _MemPersistence implements LogPersistence {
@@ -58,6 +60,12 @@ void main() {
           syncs++;
           return null;
         },
+        scheduler: scheduler,
+      ),
+      openSickPool: () =>
+          SickDayPool.open(persistence: _MemPersistence(), deviceId: 'phone'),
+      sickSyncer: SickDaySync(
+        openClient: () async => null,
         scheduler: scheduler,
       ),
       now: () => _today,

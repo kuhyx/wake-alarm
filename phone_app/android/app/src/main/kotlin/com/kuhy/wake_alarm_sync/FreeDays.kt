@@ -13,9 +13,9 @@ import java.time.LocalDate
  * after every local change and every sync; [AlarmReceiver] reads it before
  * making any noise.
  *
- * Fail closed: anything unreadable means "not a free day", so a corrupt or
- * missing cache restores the normal rules rather than silencing the alarm.
- * That matches `freedays.is_free_day()` on the PC.
+ * Fail closed ([DayCache]): anything unreadable means "not a free day", so
+ * a corrupt or missing cache restores the normal rules rather than silencing
+ * the alarm. That matches `freedays.is_free_day()` on the PC.
  */
 object FreeDays {
 
@@ -38,12 +38,11 @@ object FreeDays {
      * hands over every free record), which is what lets the stick's streak
      * skip them.
      */
-    fun isFree(context: Context, day: LocalDate): Boolean = try {
-        val dates = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getStringSet(KEY_DATES, emptySet()) ?: emptySet()
-        dates.contains(day.toString())
-    } catch (e: RuntimeException) {
-        Log.w(TAG, "free-day cache unreadable; ringing as normal", e)
-        false
+    fun isFree(context: Context, day: LocalDate): Boolean = DayCache.contains(
+        day,
+        onError = { Log.w(TAG, "free-day cache unreadable; ringing as normal", it) },
+    ) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getStringSet(KEY_DATES, emptySet())
     }
 }

@@ -132,6 +132,11 @@ class AlarmScheduler {
   Future<void> setFreeDays(List<String> isoDates) => _channel
       .invokeMethod<void>('setFreeDays', <String, Object>{'dates': isoDates});
 
+  /// Hands the native ring path the current set of sick ISO dates: the
+  /// same kind of cache as [setFreeDays], kept separately (`SickDays.kt`).
+  Future<void> setSickDays(List<String> isoDates) => _channel
+      .invokeMethod<void>('setSickDays', <String, Object>{'dates': isoDates});
+
   /// Starts the ring immediately, without waiting for the alarm instant.
   ///
   /// Exists so the foreground-service and full-screen-intent path can be

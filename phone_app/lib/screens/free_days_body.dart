@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:wake_alarm_sync/screens/free_day_calendar.dart';
+import 'package:wake_alarm_sync/screens/day_calendar.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
@@ -25,7 +25,7 @@ class FreeDaysBody extends StatelessWidget {
   });
 
   /// The month grid, built by the screen, which owns the displayed month.
-  final FreeDayCalendar calendar;
+  final DayCalendar calendar;
 
   /// The calendar year the budget line describes.
   final int year;

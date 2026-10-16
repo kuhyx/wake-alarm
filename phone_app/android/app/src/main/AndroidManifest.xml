@@ -89,6 +89,11 @@
         <receiver
             android:name=".StickCheckReceiver"
             android:exported="false"/>
+        <!-- The pre-alarm sync of the free/sick day pools (PoolSyncAlarm.kt);
+             not exported, only this app's own PendingIntent reaches it. -->
+        <receiver
+            android:name=".PoolSyncReceiver"
+            android:exported="false"/>
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

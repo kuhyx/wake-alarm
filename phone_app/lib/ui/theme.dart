@@ -39,7 +39,7 @@ ThemeData buildAppTheme() {
     useMaterial3: true,
     colorScheme: colorScheme,
     scaffoldBackgroundColor: colorScheme.surface,
-    extensions: const [AppStatusColors.dark],
+    extensions: const [AppStatusColors.dark, DayMarkColors.dark],
     // No custom shadow/elevation exists elsewhere in this app — the one
     // Card (_StatusCard) is the sole place M3's default elevation would
     // otherwise introduce a shadow in an all-dark UI (rule 26).
@@ -69,11 +69,10 @@ class AppStatusColors extends ThemeExtension<AppStatusColors> {
   final Color warning;
 
   @override
-  AppStatusColors copyWith({Color? success, Color? warning}) =>
-      AppStatusColors(
-        success: success ?? this.success,
-        warning: warning ?? this.warning,
-      );
+  AppStatusColors copyWith({Color? success, Color? warning}) => AppStatusColors(
+    success: success ?? this.success,
+    warning: warning ?? this.warning,
+  );
 
   @override
   AppStatusColors lerp(AppStatusColors? other, double t) {
@@ -81,6 +80,44 @@ class AppStatusColors extends ThemeExtension<AppStatusColors> {
     return AppStatusColors(
       success: Color.lerp(success, other.success, t) ?? success,
       warning: Color.lerp(warning, other.warning, t) ?? warning,
+    );
+  }
+}
+
+/// The fill of a marked day on the two day-pool calendars.
+///
+/// Free days keep `accent` (the theme's primary). Sick days take `cat-2`
+/// from the shared categorical ramp: hue-separated from the warm accent /
+/// success / warning / danger wedge by design, so a sick day can never be
+/// read as a free day (accent), a warning or an error. Text on it is
+/// `on-fill` (`ink`, 4.7:1), never `text-on-dark` (3.0:1).
+@immutable
+class DayMarkColors extends ThemeExtension<DayMarkColors> {
+  /// Creates a day-mark color set.
+  const DayMarkColors({required this.sick, required this.onSick});
+
+  /// The shared dark-theme instance.
+  static const dark = DayMarkColors(
+    sick: Color(0xFF398FC0), // cat-2
+    onSick: Color(0xFF211D1B), // on-fill
+  );
+
+  /// A sick day's fill.
+  final Color sick;
+
+  /// Text on [sick].
+  final Color onSick;
+
+  @override
+  DayMarkColors copyWith({Color? sick, Color? onSick}) =>
+      DayMarkColors(sick: sick ?? this.sick, onSick: onSick ?? this.onSick);
+
+  @override
+  DayMarkColors lerp(DayMarkColors? other, double t) {
+    if (other is! DayMarkColors) return this;
+    return DayMarkColors(
+      sick: Color.lerp(sick, other.sick, t) ?? sick,
+      onSick: Color.lerp(onSick, other.onSick, t) ?? onSick,
     );
   }
 }
