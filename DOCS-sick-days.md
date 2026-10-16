@@ -92,8 +92,8 @@ sync runs between A and the session's end anyway.
   `test/services/today_stakes_sick_test.dart`.
 - Kotlin (JVM, `android/app/src/test`): `DayCacheTest`, `RingDecisionTest`,
   `PoolSyncScheduleTest`, `StickCheckSickTest`. Run with
-  `cd phone_app/android && ./gradlew :app:testDebugUnitTest` (needs
-  `local.properties` with `flutter.sdk=/opt/flutter`).
+  `cd phone_app/android && ./gradlew :app:testDebugUnitTest`, after one
+  `flutter build apk` has written `gradlew` and `local.properties`.
 - Cross-language: `phone_app/scripts/sick_days_interop/check.sh` writes a
   pool through Dart and reads it with `sickdays` (Python), failing on any
   disagreement. Needs `SICKDAYS_PYTHON` or the sickdays venv.

@@ -119,10 +119,10 @@ shown comes from Dart constants mirrored against the Python ones by
 ### Event names
 
 Phone (`phone_events.kind`): `alarm_fired` (data: `reason` =
-`daily`|`rering`|`free_day` — only `daily` is the morning's ring),
+`daily`|`rering`|`free_day`|`sick_day` — only `daily` is the morning's ring),
 `ring_screen_opened`, `ring_started_published` (data: `date`, `source` =
 `alarm`|`ring_screen`), `dismissed`, `stick_check` (data: `trigger` =
-`exact`|`boot`|`watchdog`, `date` judged, `verdict`), `lockdown_sent` (data:
+`exact`|`boot`|`watchdog`, `date` judged, `verdict`, incl. `free_day`|`sick_day`), `lockdown_sent` (data:
 `until`, `streak`), `lift_sent`, `escape_used`, `boot`.
 
 `ring_started` is published twice over: a headless Dart engine started by
