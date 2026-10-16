@@ -91,6 +91,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Taps [day], then [button] in the per-locker sheet it opens.
+  Future<void> viaSheet(
+    WidgetTester tester,
+    DateTime day,
+    String button,
+  ) async {
+    await tapDay(tester, day);
+    await tester.tap(find.text(button));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> open(WidgetTester tester, {Widget? widget}) async {
     phoneSize(tester);
     await tester.pumpWidget(widget ?? app());
@@ -110,13 +121,13 @@ void main() {
   testWidgets('today can be marked sick and cleared again', (tester) async {
     await open(tester);
 
-    await tapDay(tester, _today);
+    await viaSheet(tester, _today, 'Mark sick');
     expect(sick.isSick(_today), isTrue);
     expect(find.text('Fri 2026-10-16'), findsOneWidget);
     expect(caches.last, ['2026-10-16'], reason: 'native cache rewritten');
     expect(syncs, 2);
 
-    await tapDay(tester, _today);
+    await viaSheet(tester, _today, 'Clear sick day');
     expect(sick.isSick(_today), isFalse);
     expect(caches.last, isEmpty);
     expect(syncs, 3);
@@ -125,14 +136,12 @@ void main() {
   testWidgets('the native cache is read back after a mark', (tester) async {
     await open(tester);
     expect(find.text('Alarm cache: none'), findsOneWidget);
-    await tapDay(tester, DateTime(2026, 10, 18));
-    await tapDay(tester, DateTime(2026, 10, 17));
+    await viaSheet(tester, DateTime(2026, 10, 18), 'Mark sick');
+    await viaSheet(tester, DateTime(2026, 10, 17), 'Mark sick');
     expect(find.text('Alarm cache: 2026-10-17, 2026-10-18'), findsOneWidget);
   });
 
-  testWidgets('an unreadable native cache never reads as none', (
-    tester,
-  ) async {
+  testWidgets('an unreadable native cache never reads as none', (tester) async {
     cacheUnreadable = true;
     await open(tester);
     expect(find.text('Alarm cache: unreadable'), findsOneWidget);
@@ -140,7 +149,7 @@ void main() {
 
   testWidgets('a future day is marked in the sick colour', (tester) async {
     await open(tester);
-    await tapDay(tester, DateTime(2026, 10, 20));
+    await viaSheet(tester, DateTime(2026, 10, 20), 'Mark sick');
     expect(sick.isSick(DateTime(2026, 10, 20)), isTrue);
     final box = tester.widget<DayCell>(cell(DateTime(2026, 10, 20)));
     expect(box.markColor, DayMarkColors.dark.sick);

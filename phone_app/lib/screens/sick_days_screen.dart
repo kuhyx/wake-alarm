@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/day_calendar.dart';
+import 'package:wake_alarm_sync/screens/sick_day_sheet.dart';
 import 'package:wake_alarm_sync/screens/sick_days_body.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
@@ -13,13 +14,15 @@ import 'package:wake_alarm_sync/ui/theme.dart';
 /// The phone's picker for the shared sick-day pool (`~/src/utils/sickdays`).
 ///
 /// Not the free-day pool, and drawn so it cannot be mistaken for it: its own
-/// name, icon and fill. Every day is normal until tapped; one tap marks a
-/// day sick, another clears it. Today and later only -- past days are
-/// inert. No cap, no reason, no confirmation.
+/// name, icon and fill. Every day is normal until marked. Tapping today or
+/// a later day opens [SickDaySheet]: one switch per locker, all off, and
+/// "Mark sick"; on a sick day, its current switches, "Save" (a keep-only
+/// edit) and "Clear sick day". Past days are inert. No cap, no reason.
 ///
-/// On a sick day every gate stands down and this phone does not ring. A
-/// free day is refused here (with the pool named), so the free-day pool is
-/// synced on open as well.
+/// On a sick day every locker left off stands down; a kept one behaves as
+/// on a normal day (the cell carries a dot). This phone does not ring only
+/// when the alarm is not kept. A free day is refused before the sheet opens
+/// (with the pool named), so the free-day pool is synced on open as well.
 class SickDaysScreen extends StatefulWidget {
   /// Creates the picker; the seams are injectable for tests.
   const SickDaysScreen({
@@ -109,11 +112,12 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _cache = 'Alarm cache: ${switch (dates) {
-        null => 'unreadable',
-        [] => 'none',
-        final d => d.join(', '),
-      }}';
+      _cache =
+          'Alarm cache: ${switch (dates) {
+            null => 'unreadable',
+            [] => 'none',
+            final d => d.join(', '),
+          }}';
     });
   }
 
@@ -146,24 +150,29 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
     });
   }
 
-  /// One tap per day: a sick day is cleared, any other is marked sick.
-  Future<void> _toggle(DateTime day) async {
+  /// Opens the per-locker sheet for [day] and applies what it returns.
+  Future<void> _onTapDay(DateTime day) async {
     final pool = _pool;
     if (pool == null) return;
-    final today = _today;
+    final sick = pool.isSick(day);
+    final refusal = sick ? null : freeDayRefusal(_free, day);
+    if (refusal != null) {
+      setState(() {
+        _refused = true;
+        _status = refusal;
+      });
+      return;
+    }
+    final result = await showSickDaySheet(
+      context,
+      day: day,
+      isSick: sick,
+      kept: pool.keptLockers(day),
+    );
+    if (result == null || !mounted) return;
+    final bool wrote;
     try {
-      if (pool.isSick(day)) {
-        await pool.remove(day, now: today);
-      } else {
-        final free = _free;
-        if (free == null) {
-          throw SickDayPolicyError(
-            'Free-day pool unavailable — cannot rule out a free day on '
-            '${FreeDayPool.toIso(day)}.',
-          );
-        }
-        await pool.add(day, isFree: free.isFree, now: today);
-      }
+      wrote = await applySickSheet(pool, day, result, free: _free, now: _today);
     } on SickDayPolicyError catch (e) {
       setState(() {
         _refused = true;
@@ -171,7 +180,7 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
       });
       return;
     }
-    await _sync();
+    if (wrote) await _sync();
   }
 
   @override
@@ -202,6 +211,7 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
                 for (final day in pool.sickDays())
                   if (!day.isBefore(_today)) day,
               ],
+              keptOf: pool.keptLockers,
               status: _status,
               cache: _cache,
               refused: _refused,
@@ -209,12 +219,13 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
                 month: _month,
                 today: _today,
                 isMarked: pool.isSick,
+                hasBadge: (day) => pool.keptLockers(day).isNotEmpty,
                 busy: _busy,
                 todayTappable: true,
                 keyPrefix: 'sick-day',
                 markColor: marks.sick,
                 onMarkColor: marks.onSick,
-                onTapDay: (day) => unawaited(_toggle(day)),
+                onTapDay: (day) => unawaited(_onTapDay(day)),
                 onMonth: (month) => setState(() => _month = month),
                 // Back to January for this year's history; forward to the
                 // end of next year, the same horizon as the free days.

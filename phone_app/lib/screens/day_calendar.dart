@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:wake_alarm_sync/screens/day_cell.dart';
 import 'package:wake_alarm_sync/services/alarm_ramp.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
+
+export 'package:wake_alarm_sync/screens/day_cell.dart';
 
 /// A month grid of one day pool (free days or sick days), one tap per day.
 ///
@@ -26,8 +29,13 @@ class DayCalendar extends StatelessWidget {
     this.keyPrefix = 'free-day',
     this.markColor,
     this.onMarkColor,
+    this.hasBadge,
     super.key,
   });
+
+  /// Whether a marked date carries a dot (a sick day keeping lockers);
+  /// null means never.
+  final bool Function(DateTime day)? hasBadge;
 
   /// The month on display; only its year and month are read.
   final DateTime month;
@@ -150,81 +158,12 @@ class DayCalendar extends StatelessWidget {
       key: ValueKey<String>('$keyPrefix-${FreeDayPool.toIso(date)}'),
       day: day,
       isMarked: isMarked(date),
+      badge: hasBadge?.call(date) ?? false,
       isWorkday: isWorkday(date),
       isPast: !open,
       markColor: markColor ?? theme.colorScheme.primary,
       onMarkColor: onMarkColor ?? theme.colorScheme.onPrimary,
       onTap: open && !busy ? () => onTapDay(date) : null,
-    );
-  }
-}
-
-/// One day box: renders the state it is handed and reports taps.
-class DayCell extends StatelessWidget {
-  /// Creates a cell for [day] of the month.
-  const DayCell({
-    required this.day,
-    required this.isMarked,
-    required this.isWorkday,
-    required this.isPast,
-    required this.markColor,
-    required this.onMarkColor,
-    required this.onTap,
-    super.key,
-  });
-
-  /// The day of the month, as shown in the box.
-  final int day;
-
-  /// Whether this date is marked in the pool.
-  final bool isMarked;
-
-  /// A marked day's fill.
-  final Color markColor;
-
-  /// Text on [markColor].
-  final Color onMarkColor;
-
-  /// Whether this date is a weekly workday (Tue/Wed/Thu), shaded.
-  final bool isWorkday;
-
-  /// Whether this date is read-only (past, or today on the free grid).
-  final bool isPast;
-
-  /// Called on tap, or null when the cell is inert.
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    // Past days keep their marker, faded: the record is history, not a
-    // choice still open.
-    final fade = isPast ? 0.38 : 1.0;
-    final background = isMarked
-        ? markColor.withValues(alpha: fade)
-        : isWorkday
-        ? colors.surfaceContainerHigh
-        : null;
-    final foreground = isMarked
-        ? onMarkColor
-        : colors.onSurface.withValues(alpha: fade);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          '$day',
-          style: TextStyle(
-            color: foreground,
-            fontWeight: isMarked ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-      ),
     );
   }
 }

@@ -67,7 +67,8 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
       if (!mounted) return;
       setState(() {
         _scanningSlot = null;
-        _status = 'That is already tag ${slot == 0 ? 2 : 1}. Use a different '
+        _status =
+            'That is already tag ${slot == 0 ? 2 : 1}. Use a different '
             'tag, in a different room.';
       });
       return;

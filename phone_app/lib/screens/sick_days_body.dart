@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/day_calendar.dart';
+import 'package:wake_alarm_sync/screens/sick_day_sheet.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
@@ -17,8 +18,12 @@ class SickDaysBody extends StatelessWidget {
     required this.cache,
     required this.refused,
     required this.calendar,
+    required this.keptOf,
     super.key,
   });
+
+  /// The lockers a sick day keeps active, for its line in the list.
+  final Set<String> Function(DateTime day) keptOf;
 
   /// The month grid, built by the screen, which owns the displayed month.
   final DayCalendar calendar;
@@ -51,14 +56,17 @@ class SickDaysBody extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Tap a day to mark it sick; tap it again to clear it. Today or '
+            'Tap a day to mark it sick and choose which lockers still '
+            'apply; tap a sick day to change them or clear it. Today or '
             'later only. No limit and no reason needed.',
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
           Text(
-            'On a sick day the alarm stays silent, nothing locks, and work '
-            'left undone is dropped rather than carried forward.',
+            'On a sick day every locker left off stands down: no alarm, no '
+            'lock, and work left undone is dropped rather than carried '
+            'forward. A locker switched on behaves as on a normal day; a dot '
+            'marks a sick day that keeps one.',
             style: theme.textTheme.bodySmall?.copyWith(color: muted),
           ),
           if (status.isNotEmpty) ...[
@@ -84,7 +92,14 @@ class SickDaysBody extends StatelessWidget {
           if (upcoming.isEmpty)
             Text('None ahead.', style: TextStyle(color: muted)),
           for (final day in upcoming)
-            ListTile(contentPadding: EdgeInsets.zero, title: Text(_label(day))),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(_label(day)),
+              subtitle: switch (keptLabel(keptOf(day))) {
+                '' => null,
+                final kept => Text('Kept: $kept'),
+              },
+            ),
         ],
       ),
     );
