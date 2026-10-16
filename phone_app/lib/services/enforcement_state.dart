@@ -14,6 +14,8 @@ class EnforcementState {
     required this.freeToday,
     required this.freeTomorrow,
     required this.streak,
+    this.sickToday = false,
+    this.sickTomorrow = false,
     this.alarmHour,
     this.alarmMinute,
     this.lockedThrough,
@@ -36,6 +38,8 @@ class EnforcementState {
       escapedToday: map['escapedToday'] == true,
       freeToday: map['freeToday'] == true,
       freeTomorrow: map['freeTomorrow'] == true,
+      sickToday: map['sickToday'] == true,
+      sickTomorrow: map['sickTomorrow'] == true,
       streak: (map['streak'] as int?) ?? 0,
       lockedThrough: _date(map['lockedThrough']),
       lastMiss: _date(map['lastMiss']),
@@ -65,6 +69,12 @@ class EnforcementState {
 
   /// Whether tomorrow is a free day in the native cache.
   final bool freeTomorrow;
+
+  /// Whether today is a sick day in the native cache.
+  final bool sickToday;
+
+  /// Whether tomorrow is a sick day in the native cache.
+  final bool sickTomorrow;
 
   /// Consecutive stick-day misses.
   final int streak;

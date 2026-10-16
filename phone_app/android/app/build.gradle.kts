@@ -77,3 +77,10 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // JVM unit tests (src/test) for the pure decision code -- StickCheck,
+    // DayCache, RingDecision, PoolSyncSchedule. No Robolectric: anything
+    // that needs a Context stays out of them.
+    testImplementation("junit:junit:4.13.2")
+}

@@ -50,6 +50,8 @@ object EnforcementChannel {
         val stick = StickStore.load(context)
         val alarm = AlarmScheduler.storedAlarm(context)
         val isFree = { day: LocalDate -> FreeDays.isFree(context, day) }
+        val isSick = { day: LocalDate -> SickDays.isSick(context, day) }
+        val standsDown = { day: LocalDate -> isFree(day) || isSick(day) }
         return mapOf(
             "today" to today.toString(),
             "alarmHour" to alarm?.hour,
@@ -58,14 +60,16 @@ object EnforcementChannel {
             "escapedToday" to StickStore.escapedOn(context, today),
             "freeToday" to isFree(today),
             "freeTomorrow" to isFree(tomorrow),
+            "sickToday" to isSick(today),
+            "sickTomorrow" to isSick(tomorrow),
             "streak" to stick.streak,
             "lockedThrough" to stick.lockedThrough?.toString(),
             "lastMiss" to stick.lastMiss?.toString(),
             "updatedAt" to StickStore.updatedAt(context),
             "lockIfMissToday" to
-                StickCheck.afterMiss(today, stick, isFree).lockedThrough?.toString(),
+                StickCheck.afterMiss(today, stick, standsDown).lockedThrough?.toString(),
             "lockIfMissTomorrow" to
-                StickCheck.afterMiss(tomorrow, stick, isFree).lockedThrough?.toString(),
+                StickCheck.afterMiss(tomorrow, stick, standsDown).lockedThrough?.toString(),
         )
     }
 }

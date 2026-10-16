@@ -65,6 +65,8 @@ object AlarmScheduler {
         // Every arm path (picker, boot, dismiss, free-day skip, watchdog)
         // ends here, so the stick's own check can never be left unarmed.
         StickAlarm.schedule(context, LocalTime.of(hour, minute))
+        // Same funnel for the pre-alarm day-pool sync (PoolSyncAlarm.kt).
+        PoolSyncAlarm.schedule(context, LocalTime.of(hour, minute))
     }
 
     /** Cancels the armed alarm and forgets the stored time. */
@@ -72,6 +74,7 @@ object AlarmScheduler {
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         manager.cancel(firePendingIntent(context))
         StickAlarm.cancel(context)
+        PoolSyncAlarm.cancel(context)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_HOUR).remove(KEY_MINUTE).apply()
     }

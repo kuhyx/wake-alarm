@@ -32,6 +32,7 @@ object StickRunner {
                 dismissedOn = { RingWatch.dismissedOn(context, it) },
                 escapedOn = { StickStore.escapedOn(context, it) },
                 isFree = { FreeDays.isFree(context, it) },
+                isSick = { SickDays.isSick(context, it) },
                 state = before,
                 checkedThrough = StickStore.checkedThrough(context),
             ),
@@ -67,7 +68,11 @@ object StickRunner {
     @Synchronized
     fun onDismissed(context: Context) {
         val today = LocalDate.now()
-        if (!StickCheck.isStickDay(today) || FreeDays.isFree(context, today)) return
+        if (!StickCheck.isStickDay(today) || FreeDays.isFree(context, today) ||
+            SickDays.isSick(context, today)
+        ) {
+            return
+        }
         val state = StickStore.load(context)
         if (state.lastMiss == today || state.streak == 0) return
         StickStore.save(context, state.copy(streak = 0))

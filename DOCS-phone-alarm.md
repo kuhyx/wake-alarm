@@ -14,6 +14,7 @@ the ring/dismiss path in `phone_app/lib/`.
 `AlarmService` (foreground service: wakelock, sound, vibration, full-screen
 intent) · `AlarmActivity` (dismiss screen over the lockscreen) ·
 `BootReceiver` (re-arm after reboot) · `StepCounter` (item 3 fallback).
+Free/sick days and the pre-alarm pool sync: `DOCS-sick-days.md`.
 
 **Never replace any of this with a pub plugin.** The stack is AGP 9.0.1 /
 Gradle 9.1 / Kotlin 2.3.20; a plugin that will not compile against AGP 9 breaks

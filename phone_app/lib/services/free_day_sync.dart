@@ -1,7 +1,6 @@
-import 'dart:developer' as developer;
-
 import 'package:crdt_sync/crdt_sync.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
+import 'package:wake_alarm_sync/services/day_pool_sync.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
 
@@ -27,62 +26,24 @@ class FreeDaySync {
 
   /// Pulls, merges and pushes [pool], then refreshes the native cache.
   ///
-  /// Returns a status line for the screen. Never throws: this also runs
-  /// unattended at launch, where a dead network must degrade to a message.
-  /// The native cache is refreshed even when the sync could not run, so a
-  /// day marked offline still stands the phone down.
-  Future<String> sync(FreeDayPool pool) async {
-    final RemoteStore? client;
-    try {
-      client = await _openClient();
-    } on Object catch (error, stackTrace) {
-      developer.log(
-        'free-day sync: could not open Firebase',
-        name: 'FreeDaySync',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      await publishToNative(pool);
-      return 'Error: $error';
-    }
-    if (client == null) {
-      await publishToNative(pool);
-      return 'Not synced — connect Firebase in Settings.';
-    }
-    try {
-      final merged = await syncLog(
-        client: client,
-        deviceId: pool.deviceId,
-        pathPrefix: FreeDayPool.pathPrefix,
-        filename: FreeDayPool.filename,
-        localLog: pool.snapshot(),
-        encode: logToJson,
-        decode: logFromJson,
-        commitMessage: 'freedays: update pool',
-      );
-      await pool.replaceAll(merged);
-      return 'Synced ✓';
-    } on Exception catch (e) {
-      return 'Error: $e';
-    } finally {
-      await publishToNative(pool);
-    }
-  }
+  /// Never throws; see [syncDayPoolLog]. The native cache is refreshed even
+  /// when the sync could not run, so a day marked offline still stands the
+  /// phone down.
+  Future<String> sync(FreeDayPool pool) => syncDayPoolLog(
+    openClient: _openClient,
+    deviceId: pool.deviceId,
+    pathPrefix: FreeDayPool.pathPrefix,
+    filename: FreeDayPool.filename,
+    commitMessage: 'freedays: update pool',
+    snapshot: pool.snapshot,
+    replaceAll: pool.replaceAll,
+    publish: () => publishToNative(pool),
+    logName: 'FreeDaySync',
+  );
 
   /// Writes the pool's free dates where `AlarmReceiver` can read them.
-  ///
-  /// Swallows a missing platform (widget tests, a probe entry point): the
-  /// Dart pool is still correct, and the cache is rewritten on the next
-  /// launch anyway.
-  Future<void> publishToNative(FreeDayPool pool) async {
-    try {
-      await _scheduler.setFreeDays(pool.freeIsoDates());
-    } on Object catch (error) {
-      developer.log(
-        'free-day cache not written: $error',
-        name: 'FreeDaySync',
-        error: error,
-      );
-    }
-  }
+  Future<void> publishToNative(FreeDayPool pool) => publishQuietly(
+    () => _scheduler.setFreeDays(pool.freeIsoDates()),
+    logName: 'FreeDaySync',
+  );
 }

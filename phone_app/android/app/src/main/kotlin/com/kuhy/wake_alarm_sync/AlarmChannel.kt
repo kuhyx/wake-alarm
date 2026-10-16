@@ -73,6 +73,16 @@ object AlarmChannel {
                     result.success(null)
                 }
             }
+            // The sick-day twin of setFreeDays; see SickDays.kt.
+            "setSickDays" -> {
+                val dates = call.argument<List<String>>("dates")
+                if (dates == null) {
+                    result.error("bad_args", "dates is required", null)
+                } else {
+                    SickDays.store(context, dates)
+                    result.success(null)
+                }
+            }
             "hasNfc" -> result.success(NfcReader.isAvailable(context))
             // Raw observations only; home_presence.dart decides what they mean.
             // Lives here rather than in MainActivity's override (as NfcReader

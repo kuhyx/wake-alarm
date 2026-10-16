@@ -17,7 +17,7 @@ import android.util.Log
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // A session deadline: the user dismissed the alarm and then stalled.
-        // No free-day check (a free day never starts a session) and no daily
+        // No free/sick-day check (neither ever starts a session) and no daily
         // re-arm -- that is the wake alarm's business, not this one's.
         if (intent.getStringExtra(AlarmScheduler.EXTRA_REASON) == AlarmScheduler.REASON_RERING) {
             Log.i(TAG, "session deadline missed: re-ringing")
@@ -25,12 +25,16 @@ class AlarmReceiver : BroadcastReceiver() {
             AlarmService.start(context)
             return
         }
-        // A shared free day means the alarm does not ring -- not later, not
-        // quieter, not at all. Re-arm for tomorrow (nextOccurrence rolls over
-        // because the armed instant has passed) so the day after is normal.
-        if (FreeDays.isToday(context)) {
-            Log.i(TAG, "free day: not ringing; re-armed for tomorrow")
-            EventLog.append(context, "alarm_fired", mapOf("reason" to "free_day"))
+        // A shared free or sick day means the alarm does not ring -- not
+        // later, not quieter, not at all -- and nothing ring-related is
+        // recorded: no markFired (the stick's own check skips the day too)
+        // and no ring_started for the PC. Re-arm for tomorrow (the armed
+        // instant has passed, so it rolls over) so the day after is normal.
+        // Both caches fail closed: unreadable means ring.
+        val skip = RingDecision.skip(FreeDays.isToday(context), SickDays.isToday(context))
+        if (skip != null) {
+            Log.i(TAG, "${skip.label}: not ringing; re-armed for tomorrow")
+            EventLog.append(context, "alarm_fired", mapOf("reason" to skip.wire))
             AlarmScheduler.rearmFromStorage(context)
             return
         }
