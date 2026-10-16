@@ -75,6 +75,27 @@ void main() {
     expect(lastCache(), isEmpty);
   });
 
+  test('only days on which the alarm stands down reach the cache', () async {
+    final pool = await openPool();
+    await pool.add(_today, isFree: _never, now: _today, keep: ['alarm']);
+    await pool.add(
+      DateTime(2026, 10, 20),
+      isFree: _never,
+      now: _today,
+      keep: ['leetcode'],
+    );
+    final sync = SickDaySync(
+      openClient: () async => null,
+      scheduler: scheduler,
+    );
+    await sync.sync(pool);
+    expect(lastCache(), ['2026-10-20'], reason: 'kept alarm rings');
+
+    await pool.setKept(DateTime(2026, 10, 20), ['alarm'], now: _today);
+    await sync.sync(pool);
+    expect(lastCache(), isEmpty, reason: 'a keep-only edit reaches it too');
+  });
+
   test('not connected to Firebase still refreshes the cache', () async {
     final pool = await openPool();
     await pool.add(_today, isFree: _never, now: _today);

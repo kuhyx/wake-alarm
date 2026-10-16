@@ -2,6 +2,7 @@ import 'package:crdt_sync/crdt_sync.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/day_pool_sync.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
+import 'package:wake_alarm_sync/services/sick_day_keep.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 
 /// Moves the sick-day pool between this phone and every other device, over
@@ -9,7 +10,9 @@ import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 ///
 /// Every sync ends by handing the merged pool to the native ring path
 /// ([AlarmScheduler.setSickDays]): that cache, not the Dart store, is what
-/// `AlarmReceiver` reads when it decides whether to ring.
+/// `AlarmReceiver` reads when it decides whether to ring. Only days on
+/// which the *alarm* stands down go there: a sick day that keeps the alarm
+/// rings, judges the stick and shows its stakes exactly like a normal day.
 class SickDaySync {
   /// Creates a syncer; both seams are injectable for tests.
   SickDaySync({
@@ -35,9 +38,12 @@ class SickDaySync {
     logName: 'SickDaySync',
   );
 
-  /// Writes the pool's sick dates where `AlarmReceiver` can read them.
+  /// Writes the dates on which the alarm stands down (sick, alarm not
+  /// kept; past ones included) where `AlarmReceiver` can read them. The one
+  /// place the keep set is applied for the native side: every native reader
+  /// (ring, stick, stakes) means "the alarm stands down".
   Future<void> publishToNative(SickDayPool pool) => publishQuietly(
-    () => _scheduler.setSickDays(pool.sickIsoDates()),
+    () => _scheduler.setSickDays(pool.standDownIsoDates(SickLocker.alarm)),
     logName: 'SickDaySync',
   );
 }

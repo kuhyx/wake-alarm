@@ -8,6 +8,15 @@ import java.time.LocalDate
  * The native copy of the shared sick-day pool (`~/src/utils/sickdays`): the
  * ISO dates on which the alarm must not ring and the stick stands down.
  *
+ * Not every sick day: since sickdays 0.2.0 a sick day may *keep* some
+ * lockers active, and Dart writes here only the days on which the `alarm`
+ * locker stands down (sick, alarm not kept; `SickDayPool.standDownIsoDates`
+ * in `sick_day_pool.dart`). A sick day that keeps the alarm is absent, so
+ * it rings, judges the stick and shows its stakes like a normal day. Every
+ * reader of this cache ([RingDecision], [StickCheck], the stakes card via
+ * [EnforcementChannel]) therefore means "the alarm stands down", and none
+ * of them needs to know the keep set exists.
+ *
  * A separate cache from [FreeDays], with its own prefs file, because the
  * pools are separate things: a sick day is never called a free day, in a
  * log line or anywhere else. Dart rewrites it after every mark, clear and

@@ -71,6 +71,27 @@ void main() {
     expect(done, ['done']);
   });
 
+  test('a PC sick day that keeps the alarm never reaches the cache', () async {
+    // `sickdays add 2026-10-22` + `sickdays keep 2026-10-22 alarm` on the PC.
+    final remote = MemRemote();
+    remote.files['sickdays-sync/devices/pc/sick_days.json'] = pythonKeepLog;
+    await refreshDayPools(
+      openFree: () =>
+          FreeDayPool.open(persistence: MemPersistence(), deviceId: 'phone'),
+      openSick: () =>
+          SickDayPool.open(persistence: MemPersistence(), deviceId: 'phone'),
+      freeSync: FreeDaySync(
+        openClient: () async => remote,
+        scheduler: scheduler,
+      ),
+      sickSync: SickDaySync(
+        openClient: () async => remote,
+        scheduler: scheduler,
+      ),
+    );
+    expect(caches['setSickDays'], ['2026-10-20', '2026-10-23']);
+  });
+
   test('a pool that cannot open leaves the other one syncing', () async {
     final remote = MemRemote();
     remote.files['sickdays-sync/devices/pc/sick_days.json'] = pythonSickLog;
