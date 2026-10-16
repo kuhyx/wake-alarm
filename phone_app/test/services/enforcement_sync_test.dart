@@ -73,7 +73,9 @@ void main() {
         ..events.add(_event(DateTime(2026, 10, 1, 7, 15), 'lockdown_sent'));
       final service = await _open();
 
-      await stageLocalSettings(service);
+      // The clock is pinned: on the real one the 2026-10-01 event aged past
+      // boundEvents' 14-day window on 2026-10-16 and the test went red.
+      await stageLocalSettings(service, now: () => now);
 
       expect(service.field(ringStartedField)?.$1, ring);
       final escapes = service.field(escapesField)!;

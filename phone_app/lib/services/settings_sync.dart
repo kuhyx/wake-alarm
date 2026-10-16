@@ -53,7 +53,10 @@ String stampOf(Hlc hlc) => DateTime.fromMillisecondsSinceEpoch(
 /// unless it holds a value from before stamps existed, which goes in at
 /// [_legacyMs] so it is kept when nothing else is known and loses to any
 /// stamped peer.
-Future<void> stageLocalSettings(AlarmSyncService service) async {
+Future<void> stageLocalSettings(
+  AlarmSyncService service, {
+  DateTime Function()? now,
+}) async {
   final tags = await RoomProofSettings.load();
   await stageField(
     service,
@@ -72,7 +75,7 @@ Future<void> stageLocalSettings(AlarmSyncService service) async {
   );
   await _stageEarned(service);
   await stageSessionData(service);
-  await stageEnforcementData(service);
+  await stageEnforcementData(service, now: now);
 }
 
 /// Pushes the union of the local and logged earned dates when it is new.
