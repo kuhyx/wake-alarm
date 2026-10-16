@@ -4,12 +4,17 @@ A sick day (``~/src/utils/sickdays``) is not a free day -- a separate pool,
 no cap, no reason -- but on the PC it stands down the same things: no
 fallback ring, no RTC self-wake, no workday penalty, no morning routine.
 
+All of that is **one switch**: the ``alarm`` locker. A sick day may *keep*
+the alarm (``sickdays`` 0.2.0), and then every piece above behaves exactly as
+on a normal day, so the question this module answers is
+``stands_down(LOCKER_ALARM, day)``, never plain ``is_sick_day``.
+
 Two rules this module exists to keep in one spot:
 
-* **Fail closed.** ``sickdays.is_sick_day`` never raises and reads a corrupt
+* **Fail closed.** ``sickdays.stands_down`` never raises and reads a corrupt
   pool as "not sick". The import is guarded as well: these jobs run under
   ``/usr/bin/python``, and a package that failed to install must leave
-  enforcement *on* (not sick), never crash the per-minute tick -- a crashed
+  enforcement *on* (not standing down), never crash the per-minute tick -- a crashed
   tick rings nothing.
 * **Sync only where something is about to happen, never in a read-only
   mode.** ``sync_quietly`` rewrites the local pool, so ``--dry-run`` and
@@ -38,9 +43,12 @@ if TYPE_CHECKING:
     from datetime import date
 
 
-def is_sick(day: date) -> bool:
-    """Whether ``day`` is a sick day; local file only, never raises."""
-    return _AVAILABLE and sickdays.is_sick_day(day)
+def alarm_stands_down(day: date) -> bool:
+    """Whether the alarm is switched off on ``day``; local file, never raises.
+
+    True iff ``day`` is sick and its keep set does not hold the alarm.
+    """
+    return _AVAILABLE and sickdays.stands_down(sickdays.LOCKER_ALARM, day)
 
 
 def sync() -> bool:
@@ -48,7 +56,7 @@ def sync() -> bool:
     return _AVAILABLE and sickdays.sync_quietly()
 
 
-def is_sick_synced(day: date) -> bool:
-    """:func:`is_sick` after a fresh :func:`sync` -- for act modes only."""
+def alarm_stands_down_synced(day: date) -> bool:
+    """:func:`alarm_stands_down` after a fresh :func:`sync` -- act modes only."""
     sync()
-    return is_sick(day)
+    return alarm_stands_down(day)

@@ -40,9 +40,9 @@ MISS: dict[str, object] = {
 }
 
 
-def mark_sick(day: date) -> None:
-    """Put ``day`` in the (redirected) pool; may be in the past."""
-    sickdays.import_legacy([day])
+def mark_sick(day: date, *, keep: tuple[str, ...] = ()) -> None:
+    """Put ``day`` in the (redirected) pool, keeping ``keep``; may be past."""
+    sickdays.add_sick_day(day, keep=keep, now=day)
 
 
 def pull_marks_tuesday() -> bool:
@@ -64,6 +64,16 @@ class TestWriting:
         assert skip_reason(MISS, AFTER_GRACE) == "sick day"
         assert not maybe_apply(MISS, AFTER_GRACE)
         assert issued_date() is None
+
+    def test_a_kept_alarm_is_penalised_like_a_normal_day(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+        assert skip_reason(MISS, AFTER_GRACE) is None
+        assert maybe_apply(MISS, AFTER_GRACE)
+        assert issued_date() == TUESDAY.isoformat()
+
+    def test_a_kept_workout_does_not_keep_the_missed_ring(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_WORKOUT,))
+        assert skip_reason(MISS, AFTER_GRACE) == "sick day"
 
     def test_the_first_write_pulls_the_pool(self) -> None:
         with patch("sickdays.sync_quietly", side_effect=pull_marks_tuesday) as pulled:
@@ -100,6 +110,11 @@ class TestRetraction:
             assert cancel_for_sick_day()
         assert issued_date() is None
         assert "penalty_cancelled: sick day for 2026-09-22" in caplog.text
+
+    def test_kept_alarm_keeps_the_penalty(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+        assert not cancel_for_sick_day()
+        assert issued_date() == TUESDAY.isoformat()
 
     def test_a_sick_penalty_date_alone_does_not_retract(self) -> None:
         mark_sick(date(2026, 9, 23))
@@ -161,6 +176,18 @@ class TestAudit:
         ]
         assert check_lockdown(_ev(phone=phone)).ok is False
         assert check_lockdown(_ev(phone=phone[:1])).ok is None
+
+    def test_a_kept_alarm_is_a_stick_day_in_the_audit(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+        with (
+            patch.object(_audit, "fetch_firebase_logs", return_value=[]),
+            patch.object(_audit, "get_alarm", return_value=Alarm(7, 0, "cache")),
+            patch.object(_audit, "boots", return_value=[]),
+            patch.object(_audit, "resumes", return_value=[]),
+        ):
+            evidence, _ = _audit.gather(TUESDAY)
+        assert not evidence.sick_day
+        assert "(Tue, stick day)" in _audit.render(evidence, [], reachable=True)
 
     def test_the_report_names_the_day(self) -> None:
         mark_sick(TUESDAY)

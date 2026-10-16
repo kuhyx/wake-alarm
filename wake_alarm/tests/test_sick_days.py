@@ -28,9 +28,9 @@ A = datetime(2026, 10, 6, 7, 0).astimezone()
 MONDAY_EVENING = datetime(2026, 10, 5, 22, 0).astimezone()
 
 
-def mark_sick(day: date) -> None:
-    """Put ``day`` in the (redirected) pool; may be in the past."""
-    sickdays.import_legacy([day])
+def mark_sick(day: date, *, keep: tuple[str, ...] = ()) -> None:
+    """Put ``day`` in the (redirected) pool, keeping ``keep``; may be past."""
+    sickdays.add_sick_day(day, keep=keep, now=day)
 
 
 def pull_marks_tuesday() -> bool:
@@ -48,13 +48,22 @@ def sync() -> Generator[MagicMock]:
 
 class TestSickModule:
     def test_reads_the_pool(self) -> None:
-        assert not _sick.is_sick(TUESDAY)
+        assert not _sick.alarm_stands_down(TUESDAY)
         mark_sick(TUESDAY)
-        assert _sick.is_sick(TUESDAY)
+        assert _sick.alarm_stands_down(TUESDAY)
+
+    def test_a_kept_alarm_does_not_stand_down(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+        assert sickdays.is_sick_day(TUESDAY)
+        assert not _sick.alarm_stands_down(TUESDAY)
+
+    def test_keeping_another_locker_does_not_keep_the_alarm(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_WORKOUT, sickdays.LOCKER_LEETCODE))
+        assert _sick.alarm_stands_down(TUESDAY)
 
     def test_synced_pulls_first(self, sync: MagicMock) -> None:
         sync.side_effect = pull_marks_tuesday
-        assert _sick.is_sick_synced(TUESDAY)
+        assert _sick.alarm_stands_down_synced(TUESDAY)
         sync.assert_called_once_with()
 
     def test_missing_package_is_never_sick(self) -> None:
@@ -62,7 +71,7 @@ class TestSickModule:
             with patch.dict(sys.modules, {"sickdays": None}):
                 reloaded = importlib.reload(_sick)
                 assert reloaded._AVAILABLE is False
-                assert not reloaded.is_sick(TUESDAY)
+                assert not reloaded.alarm_stands_down(TUESDAY)
                 assert not reloaded.sync()
         finally:
             importlib.reload(_sick)
@@ -121,6 +130,21 @@ class TestFallback:
         assert latch is not None
         assert latch.stop_reason == SICK_DAY
 
+    def test_a_kept_alarm_rings_like_a_normal_day(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+        seen = _fallback_observe.observe(A + timedelta(minutes=3), sync=False)
+        assert not seen.facts.sick_day
+
+    def test_a_kept_alarm_does_not_stop_a_ring_in_progress(self) -> None:
+        mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+        mark_started(None, day=TUESDAY.isoformat(), now=A, reason="phone_silent")
+        with patch.object(_fallback, "ring_now"):
+            decision = _fallback.tick(A + timedelta(minutes=5))
+        assert decision.reason != SICK_DAY
+        latch = _fallback.read_latch(TUESDAY.isoformat())
+        assert latch is not None
+        assert latch.stop_reason != SICK_DAY
+
     def test_reports_say_sick(self, capsys: pytest.CaptureFixture[str]) -> None:
         mark_sick(TUESDAY)
         _fallback.main(["--dry-run", "--at", "2026-10-06T07:05:00"])
@@ -151,6 +175,17 @@ class TestRtc:
             assert _rtc.main(["--arm"]) == 0  # a skip is not a failure
         sync.assert_called_once_with()
         retract.assert_called_once_with()
+
+
+def test_a_kept_alarm_plans_the_rtc_wake() -> None:
+    mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+    chosen = _rtc.plan(MONDAY_EVENING, Alarm(7, 0, "c"))
+    assert (chosen.arm, chosen.reason) == (True, "stick day")
+
+
+def test_a_kept_alarm_lets_the_trigger_fire() -> None:
+    mark_sick(TUESDAY, keep=(sickdays.LOCKER_ALARM,))
+    assert _trigger._skip_reason(A) is None
 
 
 def test_the_trigger_skips_a_sick_day() -> None:

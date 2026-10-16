@@ -36,7 +36,7 @@ from wake_alarm._enforcement_records import parse_instant
 from wake_alarm._events import emit
 from wake_alarm._fallback_policy import alarm_instant
 from wake_alarm._logging_setup import configure_logging
-from wake_alarm._sick import is_sick
+from wake_alarm._sick import alarm_stands_down
 from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
 from wake_alarm._workday_penalty import issued_date
@@ -65,7 +65,7 @@ def gather(day: date) -> tuple[Evidence, bool]:
         day=day,
         stick_day=freedays.is_workday(day),
         free_day=freedays.is_free_day(day),
-        sick_day=is_sick(day),
+        sick_day=alarm_stands_down(day),
         alarm_at=alarm_at,
         alarm_source=source,
         pc_side=PcSide(

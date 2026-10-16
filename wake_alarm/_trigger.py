@@ -35,7 +35,7 @@ from wake_alarm._constants import (
     TRIGGER_TARGET_UNIT,
 )
 from wake_alarm._logging_setup import configure_logging
-from wake_alarm._sick import is_sick
+from wake_alarm._sick import alarm_stands_down
 from wake_alarm._state import (
     save_trigger_fired,
     was_trigger_fired_today,
@@ -101,7 +101,7 @@ def _skip_reason(now: datetime) -> str | None:
     """
     if freedays.is_free_day(now.date()):
         return "free day"
-    if is_sick(now.date()):
+    if alarm_stands_down(now.date()):
         return "sick day"
     if now.weekday() not in ALARM_DAYS:
         return "not an alarm day"

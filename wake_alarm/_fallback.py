@@ -44,7 +44,7 @@ from wake_alarm._fallback_policy import (
 from wake_alarm._fallback_ring import ring
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._ring_wav import SYSTEM_WAV_DIR, USER_WAV_DIR, ensure_pair
-from wake_alarm._sick import is_sick
+from wake_alarm._sick import alarm_stands_down
 from wake_alarm._sync import get_alarm
 
 if TYPE_CHECKING:
@@ -150,7 +150,7 @@ def show(now: datetime) -> str:
     return (
         f"today {day}: A={alarm_at:%H:%M} "
         f"free_day={freedays.is_free_day(now.date())} "
-        f"sick_day={is_sick(now.date())}\n"
+        f"sick_day={alarm_stands_down(now.date())}\n"
         f"  latch={read_latch(day)}\n"
         f"  last fallback_tick={last_value('fallback_tick')}\n"
         f"  settled={settled_reason(day, read_latch(day))}\n"

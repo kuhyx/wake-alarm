@@ -23,7 +23,7 @@ from wake_alarm._fallback_policy import (
     needs_facts,
 )
 from wake_alarm._session_payload import newest_session
-from wake_alarm._sick import is_sick, is_sick_synced
+from wake_alarm._sick import alarm_stands_down, alarm_stands_down_synced
 from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
 
@@ -58,8 +58,8 @@ def _sick_today(now: datetime, *, online: bool, sync: bool) -> bool:
     the ring at the next poll, and an off-window tick stays local.
     """
     if online and sync:
-        return is_sick_synced(now.date())
-    return is_sick(now.date())
+        return alarm_stands_down_synced(now.date())
+    return alarm_stands_down(now.date())
 
 
 def observe(now: datetime, *, sync: bool) -> Observation:

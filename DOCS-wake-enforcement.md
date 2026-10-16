@@ -78,7 +78,7 @@ wake-alarm, todo) — narrower than the night list.
 
 ### Sick days (PC side, 2026-10-16)
 
-A sick day is a date in the shared `sickdays` pool (`~/src/utils/sickdays`):
+A sick day (that does not keep `alarm`, see below) is a date in the shared `sickdays` pool (`~/src/utils/sickdays`):
 uncapped, no reason, today or later, and **not a free day** -- its own pool,
 its own reason strings (`sick_day` / `sick day`). On a sick day `D` (the
 alarm's day, so the RTC asks about *tomorrow* the evening before):
@@ -109,12 +109,21 @@ has pulled from `A-5`. `--dry-run` / `--show` never pull (a pull rewrites
 the pool file).
 
 **Other readers of `workday_penalty.json`** (screen-locker, leetcode-guard)
-must treat the file as void when **either** `issued_date` **or**
-`penalty_date` is a sick day (`sickdays.is_sick_day(date.fromisoformat(...))`).
-`issued_date` covers a miss at 08:15 marked sick at 14:00 -- the deletion
-runs on the next RTC tick (<= 15 min) or the next morning's refresh, and a
-reader must not depend on that; `penalty_date` is a sick day on which every
-locker stands down anyway.
+must treat the file as void when **either** its `issued_date` is a day the
+*alarm* stands down on (`sickdays.stands_down(sickdays.LOCKER_ALARM,
+date.fromisoformat(issued_date))`) **or** its `penalty_date` is a day *their
+own* locker stands down on (`stands_down(LOCKER_WORKOUT, ...)` for
+screen-locker, `LOCKER_LEETCODE` for leetcode-guard). `issued_date` covers a
+miss at 08:15 marked sick at 14:00 -- the deletion runs on the next RTC tick
+(<= 15 min) or the next morning's refresh, and a reader must not depend on
+that; the ring day belongs to the alarm switch, the penalty day to whatever
+the penalty charges.
+
+**Keeping the alarm (`sickdays` 0.2.0).** A sick day may keep lockers
+(`sickdays add --keep alarm`). Everything in the table above is the single
+`alarm` switch (`_sick.alarm_stands_down`): on a sick day that keeps `alarm`
+the fallback ring, RTC self-wake, trigger, workday penalty (written, and not
+retracted) and audit behave exactly as on a normal stick day.
 
 **Phone, assumed name:** the phone's `alarm_fired` on a sick day carries
 `data.reason = "sick_day"` (by analogy with `free_day`); the audit treats

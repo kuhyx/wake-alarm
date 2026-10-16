@@ -34,7 +34,7 @@ from gatelock.log_integrity import compute_entry_hmac
 from wake_alarm._constants import WORKDAY_PENALTY_FILE
 from wake_alarm._events import emit
 from wake_alarm._session_policy import NONE_OUTCOME
-from wake_alarm._sick import is_sick, is_sick_synced
+from wake_alarm._sick import alarm_stands_down, alarm_stands_down_synced
 
 _logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ def cancel_for_sick_day() -> bool:
         day = date.fromisoformat(issued)
     except ValueError:
         return False
-    return is_sick(day) and _cancel(issued, "sick_day")
+    return alarm_stands_down(day) and _cancel(issued, "sick_day")
 
 
 def skip_reason(
@@ -161,7 +161,7 @@ def skip_reason(
         return "free day"
     if not is_stick_day(today):
         return "not a stick day"
-    if is_sick(today):
+    if alarm_stands_down(today):
         return "sick day"
     if not is_workday_miss(entry, now):
         return "no miss"
@@ -192,7 +192,7 @@ def maybe_apply(
         return False
     today = now.date()
     previously = issued_date()
-    if previously != today.isoformat() and is_sick_synced(today):
+    if previously != today.isoformat() and alarm_stands_down_synced(today):
         return False
     entry_body = penalty_entry(today=today)
     if not write_penalty(entry_body):

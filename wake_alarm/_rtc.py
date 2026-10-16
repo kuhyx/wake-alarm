@@ -47,7 +47,7 @@ from wake_alarm._fallback_policy import alarm_instant
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._pc_wake_mode import read_mode
 from wake_alarm._rtc_hw import arm, current_alarm, disarm_ours, read_record
-from wake_alarm._sick import is_sick, is_sick_synced
+from wake_alarm._sick import alarm_stands_down, alarm_stands_down_synced
 from wake_alarm._sync import Alarm, get_alarm
 from wake_alarm._workday_penalty import cancel_for_sick_day
 
@@ -76,7 +76,7 @@ def _now() -> datetime:
 
 
 def plan(
-    now: datetime, alarm: Alarm, *, sick: Callable[[date], bool] = is_sick
+    now: datetime, alarm: Alarm, *, sick: Callable[[date], bool] = alarm_stands_down
 ) -> Plan:
     """Which morning is next, and whether it is one to wake the PC for.
 
@@ -164,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.arm:
         configure_logging(component="rtc")
         cancel_for_sick_day()
-        chosen = plan(now, get_alarm(), sick=is_sick_synced)
+        chosen = plan(now, get_alarm(), sick=alarm_stands_down_synced)
         return 0 if apply(chosen) or not chosen.arm else 1
     chosen = plan(now, get_alarm())
     sys.stdout.write(describe(chosen))
