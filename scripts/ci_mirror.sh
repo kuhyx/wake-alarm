@@ -64,6 +64,20 @@ ensure_venv() {
 
     log "requirements.txt changed — rebuilding clean venv (mirrors CI install)"
     rm -rf "$VENV_DIR"
+    # uv is what CI installs with (`uv pip install -r`), and it rebuilt this
+    # venv in 2.1 s where venv + pip took 18.3 s (2026-10-16) -- the largest
+    # cold-path cost of `check_gate_stamp.sh full`. pip stays as the fallback.
+    if command -v uv >/dev/null 2>&1; then
+        # A PATH, not the bare name: `--python python3` let uv prefer an
+        # active ~/.venv (3.13) over the python3 the pip path would use.
+        uv venv --quiet --python "$(command -v python3)" "$VENV_DIR" \
+            || fail "uv venv for the clean venv"
+        uv pip install --quiet --python "$VENV_DIR/bin/python" -r "$REQ_PATH" \
+            || fail "uv pip install -r $REQUIREMENTS_FILE (a dep may be undeclared)"
+        printf '%s' "$current" > "$HASH_FILE"
+        log "clean venv ready (uv)"
+        return
+    fi
     python3 -m venv "$VENV_DIR"
     "$VENV_DIR/bin/python" -m pip install --quiet --upgrade pip \
         || fail "pip self-upgrade in the clean venv"
