@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Trigger that starts the morning routine at the phone's alarm time"
 requires-python = ">=3.14"
 dependencies = [
-    "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.9.0#subdirectory=gatelock",
+    "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.10.0#subdirectory=gatelock",
     # Firebase transport for the alarm read. _sync.py imports it lazily and
     # falls back to its stdlib GitHub path if the import fails, so a broken
     # install degrades the read instead of killing the per-minute trigger.
