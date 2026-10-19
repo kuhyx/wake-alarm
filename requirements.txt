@@ -7,7 +7,7 @@ codespell==2.4.3
 coverage==7.16.2
 crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.2#subdirectory=crdt-sync
 freedays @ git+https://github.com/kuhyx/utils@freedays-v0.4.0#subdirectory=freedays
-gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.10.0#subdirectory=gatelock
+gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.11.0#subdirectory=gatelock
 mypy==2.4.0
 pre-commit==4.7.0
 pylint==4.1.3
