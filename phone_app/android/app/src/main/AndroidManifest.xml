@@ -36,7 +36,7 @@
          both apps are signed with the same release key. -->
     <uses-permission android:name="com.kuhy.focus_owner.permission.SIGNAL_LOCKDOWN"/>
     <application
-        android:label="wake_alarm_sync"
+        android:label="WakeAlarm"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
