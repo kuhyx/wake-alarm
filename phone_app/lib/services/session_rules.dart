@@ -84,7 +84,17 @@ extension SessionRules on MorningSession {
   String onTag(SessionTagSlot slot, DateTime now) {
     final leg = currentLeg;
     if (leg == null) return 'Session finished';
-    if (slot != leg.slot) return 'Not the ${leg.slot.name} tag';
+    if (slot != leg.slot) {
+      final ahead = _catchUpTo(slot, now);
+      if (ahead == null) return 'Not the ${leg.slot.name} tag';
+      for (var i = leg.index; i < ahead.index; i++) {
+        final skipped = SessionLeg.values[i];
+        if (!passedAt.containsKey(skipped)) {
+          _pass(skipped, now, LegPass.caughtUp);
+        }
+      }
+      return onTag(slot, now);
+    }
     switch (leg) {
       case SessionLeg.bathroomIn:
         final typedAt = pendingWeightAt;
@@ -173,6 +183,20 @@ extension SessionRules on MorningSession {
     if (!isActive || leg == null) return null;
     if (deadlineRung.contains(leg) || !canReRing) return null;
     return deadline(leg);
+  }
+
+  /// The later leg [slot] covers; the weigh-in and shower floor never skip.
+  SessionLeg? _catchUpTo(SessionTagSlot slot, DateTime now) {
+    final leg = currentLeg!;
+    for (var i = leg.index; i < SessionLeg.values.length; i++) {
+      final next = SessionLeg.values[i];
+      if (i > leg.index && next.slot == slot) return next;
+      if (passedAt.containsKey(next)) continue;
+      if (next == SessionLeg.bathroomIn) return null;
+      final floor = earliest(next);
+      if (floor != null && now.isBefore(floor)) return null;
+    }
+    return null;
   }
 
   void _pass(SessionLeg leg, DateTime now, LegPass how) {

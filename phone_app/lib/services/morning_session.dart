@@ -43,6 +43,9 @@ enum LegPass {
 
   /// Never satisfied; passed by the clock after a missed deadline.
   bypassed,
+
+  /// Forgotten, then covered by a later room's tag once its floor had passed.
+  caughtUp,
 }
 
 /// Where the session stands.

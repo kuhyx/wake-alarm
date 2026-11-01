@@ -25,6 +25,10 @@ weigh in  ->  bathroom tag (≤ 2 min later)  ->  shower  ->  bathroom tag again
 | `dressed` | wardrobe tag | previous + 10 min | |
 | `atDesk` | desk tag | previous + 10 min | |
 
+**A later tag catches up a forgotten one** (`LegPass.caughtUp`, 2026-11-01:
+shower tag forgotten, re-rung while dressing). The weigh-in never catches
+up, and the shower's 8-minute floor still applies.
+
 Legs latch like the ring's stages. A leg whose tag is not registered is
 **skipped at start** (`LegPass.skipped`), so the feature is usable before it
 is configured: with no session tags at all it is a weigh-in and nothing
@@ -58,6 +62,8 @@ the first leg by itself — there is nothing to walk to.
 - **Silencing a re-ring is the full dismiss sequence**: tag 1, the walk,
   tag 2, three questions. The ring screen's `_finishDismiss` sees a live
   session for today and resumes it with `reRings + 1`.
+- **A silent buzz 3 min before each deadline** (`SessionWarn.kt`, request
+  code 1004), armed and cleared only with the re-ring.
 - **One re-ring per leg.** After a deadline re-ring is dismissed the leg is
   in `deadlineRung`; 5 min after its deadline (`bypassGrace`) it passes as
   `LegPass.bypassed` — the dead-tag hatch, paid for with one full ring.

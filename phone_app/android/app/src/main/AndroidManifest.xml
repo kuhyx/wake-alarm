@@ -94,6 +94,10 @@
         <receiver
             android:name=".PoolSyncReceiver"
             android:exported="false"/>
+        <!-- The silent buzz before a session deadline (SessionWarn.kt). -->
+        <receiver
+            android:name=".SessionWarnReceiver"
+            android:exported="false"/>
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

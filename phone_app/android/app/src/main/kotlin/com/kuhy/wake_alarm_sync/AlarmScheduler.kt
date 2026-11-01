@@ -119,6 +119,7 @@ object AlarmScheduler {
             AlarmManager.AlarmClockInfo(atMillis, showIntent(context)),
             reRingPendingIntent(context),
         )
+        SessionWarn.arm(context, atMillis)
     }
 
     /**
@@ -129,6 +130,7 @@ object AlarmScheduler {
     fun clearReRing(context: Context) {
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         manager.cancel(reRingPendingIntent(context))
+        SessionWarn.clear(context)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_RERING_AT).apply()
     }
