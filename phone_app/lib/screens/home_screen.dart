@@ -204,7 +204,9 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () async {
               await Navigator.push<void>(
                 context,
-                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+                MaterialPageRoute<void>(
+                  builder: (_) => SettingsScreen(alarmService: _service),
+                ),
               );
               // Publish too, not just reload: a tag registered in Settings
               // reaches the backend now, not on the next cold start.

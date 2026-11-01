@@ -117,6 +117,12 @@ class AlarmSyncService {
     return null;
   }
 
+  /// The whole log, for the user-facing export.
+  Log snapshot() => _store.snapshot();
+
+  /// Replaces the log with a merged result and persists it (import).
+  Future<void> replaceAll(Log merged) => _store.replaceAll(merged);
+
   /// Stores [hour]:[minute] locally, stamped with a fresh monotonic HLC.
   ///
   /// Both fields share one clock tick — they are always set together, so a

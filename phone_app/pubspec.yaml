@@ -15,6 +15,13 @@ dependencies:
       ref: crdt_sync_dart-v0.11.1
       path: crdt_sync_dart
   cupertino_icons: 2.0.0
+
+  # Shared JSON export/import plumbing (Save-as, picker, envelope).
+  data_transfer_flutter:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: data_transfer_flutter-v0.2.0
+      path: data_transfer_flutter
   flutter:
     sdk: flutter
   flutter_secure_storage: 11.2.0

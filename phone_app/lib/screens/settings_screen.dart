@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:sync_settings_ui/sync_settings_ui.dart';
 
@@ -5,6 +7,8 @@ import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
 import 'package:wake_alarm_sync/screens/home_location_screen.dart';
 import 'package:wake_alarm_sync/screens/room_proof_screen.dart';
 import 'package:wake_alarm_sync/screens/session_tags_screen.dart';
+import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
+import 'package:wake_alarm_sync/services/data_transfer.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
 
@@ -19,12 +23,77 @@ import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
 /// the alarm can skip them when it rings somewhere else.
 class SettingsScreen extends StatelessWidget {
   /// Creates a [SettingsScreen].
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+    this.alarmService,
+    this.onExport,
+    this.onImport,
+  });
+
+  /// The home screen's live alarm store, reused by export/import.
+  final AlarmSyncService? alarmService;
+
+  /// Export action; defaults to [saveExport].
+  final Future<void> Function()? onExport;
+
+  /// Import action, false on cancel; defaults to [pickAndImport].
+  final Future<bool> Function()? onImport;
+
+  Future<void> _run(
+    BuildContext context,
+    Future<bool> Function() action,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final colors = Theme.of(context).colorScheme;
+    var ok = false;
+    try {
+      if (!await action()) return;
+      ok = true;
+    } on Object catch (e, stack) {
+      developer.log(
+        'data transfer failed: $e',
+        name: 'WakeAlarmSync',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Icon(
+            ok ? Icons.check_circle : Icons.error_outline,
+            color: ok ? colors.primary : colors.error,
+            semanticLabel: ok ? 'Done' : 'Failed',
+          ),
+        ),
+      );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        actions: [
+          IconButton(
+            key: const Key('settings-export'),
+            icon: const Icon(Icons.upload_file, semanticLabel: 'Export data'),
+            onPressed: () => _run(context, () async {
+              await (onExport ?? () => saveExport(alarm: alarmService))();
+              return true;
+            }),
+          ),
+          IconButton(
+            key: const Key('settings-import'),
+            icon: const Icon(Icons.download, semanticLabel: 'Import data'),
+            onPressed: () => _run(
+              context,
+              onImport ?? () => pickAndImport(alarm: alarmService),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
