@@ -25,6 +25,7 @@ class StakesCard extends StatefulWidget {
     this.nextAlarm,
     this.onEscaped,
     this.busy = false,
+    this.emptyText,
   });
 
   /// Native stick reader; defaults to the real channel.
@@ -45,6 +46,10 @@ class StakesCard extends StatefulWidget {
   /// Disables the escape while the screen is syncing.
   final bool busy;
 
+  /// Shown once loading found no native stick, instead of nothing. The home
+  /// screen opens this card from a tile, so a blank sheet needs a sentence.
+  final String? emptyText;
+
   @override
   State<StakesCard> createState() => _StakesCardState();
 }
@@ -56,6 +61,7 @@ class _StakesCardState extends State<StakesCard> {
   EnforcementState? _state;
   AlarmTime? _next;
   String _message = '';
+  bool _loaded = false;
 
   DateTime _now() => (widget.now ?? DateTime.now)();
 
@@ -78,6 +84,7 @@ class _StakesCardState extends State<StakesCard> {
     setState(() {
       _state = state;
       _next = next;
+      _loaded = true;
     });
   }
 
@@ -107,7 +114,10 @@ class _StakesCardState extends State<StakesCard> {
   @override
   Widget build(BuildContext context) {
     final state = _state;
-    if (state == null) return const SizedBox.shrink();
+    final empty = widget.emptyText;
+    if (state == null) {
+      return _loaded && empty != null ? Text(empty) : const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     final warning = theme.extension<AppStatusColors>()?.warning;
     final view = describeStakes(now: _now(), state: state, nextAlarm: _next);

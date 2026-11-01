@@ -179,7 +179,7 @@ void main() {
     expect(await EscapeLog.load(), isEmpty);
   });
 
-  testWidgets('the home body carries the card', (tester) async {
+  testWidgets('the home body opens the card from its tile', (tester) async {
     native.state = nativeState();
     await tester.pumpWidget(
       MaterialApp(
@@ -198,6 +198,21 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(find.byType(StakesCard), findsNothing);
+    await tester.tap(find.byKey(const Key('home-tile-stakes')));
+    await tester.pumpAndSettle();
     expect(find.byType(StakesCard), findsOneWidget);
+  });
+
+  testWidgets('says so when the native side answers nothing', (tester) async {
+    native.state = null;
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: StakesCard(emptyText: 'No stakes.')),
+      ),
+    );
+    expect(find.text('No stakes.'), findsNothing);
+    await tester.pump();
+    expect(find.text('No stakes.'), findsOneWidget);
   });
 }

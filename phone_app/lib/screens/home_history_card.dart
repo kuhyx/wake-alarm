@@ -15,10 +15,15 @@ const int kHistoryShown = 7;
 /// first session has finished — an empty card would only say "not yet".
 class HomeHistoryCard extends StatefulWidget {
   /// Creates the card; [store] is injectable for tests.
-  const HomeHistoryCard({super.key, this.store});
+  const HomeHistoryCard({super.key, this.store, this.emptyText});
 
   /// Session persistence; defaults to SharedPreferences.
   final SessionStore? store;
+
+  /// Shown once loading found no finished morning, instead of nothing. The
+  /// home screen opens this card from a tile, so a blank sheet needs a
+  /// sentence.
+  final String? emptyText;
 
   @override
   State<HomeHistoryCard> createState() => _HomeHistoryCardState();
@@ -26,6 +31,7 @@ class HomeHistoryCard extends StatefulWidget {
 
 class _HomeHistoryCardState extends State<HomeHistoryCard> {
   List<MorningSession> _sessions = const <MorningSession>[];
+  bool _loaded = false;
 
   @override
   void initState() {
@@ -36,12 +42,18 @@ class _HomeHistoryCardState extends State<HomeHistoryCard> {
   Future<void> _load() async {
     final history = await (widget.store ?? SessionStore()).history();
     if (!mounted) return;
-    setState(() => _sessions = history.take(kHistoryShown).toList());
+    setState(() {
+      _sessions = history.take(kHistoryShown).toList();
+      _loaded = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_sessions.isEmpty) return const SizedBox.shrink();
+    if (_sessions.isEmpty) {
+      final empty = widget.emptyText;
+      return _loaded && empty != null ? Text(empty) : const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

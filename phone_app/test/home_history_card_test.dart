@@ -69,6 +69,15 @@ void main() {
     expect(find.text('Last mornings'), findsNothing);
   });
 
+  testWidgets('says so when no morning has finished', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeHistoryCard(emptyText: 'None yet.')),
+    );
+    expect(find.text('None yet.'), findsNothing);
+    await tester.pump();
+    expect(find.text('None yet.'), findsOneWidget);
+  });
+
   testWidgets('lists the last seven with weight deltas', (tester) async {
     final store = SessionStore();
     for (var day = 1; day <= 9; day++) {

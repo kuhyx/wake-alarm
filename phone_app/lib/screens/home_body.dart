@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:wake_alarm_sync/screens/home_history_card.dart';
 import 'package:wake_alarm_sync/screens/home_presence_line.dart';
-import 'package:wake_alarm_sync/screens/stakes_card.dart';
+import 'package:wake_alarm_sync/screens/home_tiles.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// The home screen's body: the armed time, the earlier-only control and the
@@ -56,90 +55,88 @@ class HomeBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Alarm is armed for', style: TextStyle(fontSize: 16)),
-              HomePresenceLine(key: ValueKey<int>(syncEpoch)),
-              const SizedBox(height: 16),
-              Text(
-                time,
-                style: Theme.of(
-                  context,
-                ).textTheme.displayLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isOverridden
-                    ? 'One-shot early start — back to $baseline '
-                          'after it rings'
-                    : 'Every day. It cannot be turned off.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: busy ? null : onPickEarlier,
-                  icon: const Icon(Icons.arrow_upward),
-                  label: const Text('Wake me earlier tomorrow'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+      // Fits one screen: stakes and history sit behind tiles. The scroll view
+      // is only the landscape safety net (~360px of body height); in portrait
+      // its extent is 0, which `home_fit_test.dart` asserts.
+      child: LayoutBuilder(
+        builder: (context, box) => SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: box.maxHeight - 48),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Alarm is armed for',
+                    style: TextStyle(fontSize: 16),
                   ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              if (status.isNotEmpty)
-                Text(
-                  status,
-                  textAlign: TextAlign.center,
-                  // Bounded: status can be a raw `'Error: $e'`, i.e. an
-                  // arbitrarily long exception toString(). Unbounded, that
-                  // alone added 100-150px and pushed this column past the
-                  // viewport even in portrait. The scroll view above makes
-                  // the overflow recoverable; this keeps it from happening.
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: status.contains('Error')
-                        ? Theme.of(context).colorScheme.error
-                        : Theme.of(
-                            context,
-                          ).extension<AppStatusColors>()!.success,
+                  HomePresenceLine(key: ValueKey<int>(syncEpoch)),
+                  const SizedBox(height: 16),
+                  Text(
+                    time,
+                    style: theme.textTheme.displayLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              const SizedBox(height: 24),
-              // A third distinct key in this Column, for the same reason as
-              // the history card's below.
-              StakesCard(
-                key: ValueKey<String>('stakes-$syncEpoch'),
-                busy: busy,
-                onEscaped: onEscaped,
-              ),
-              const SizedBox(height: 24),
-              // Not `ValueKey<int>(syncEpoch)`: the presence line above
-              // already carries that key in this Column, and two children
-              // with one key mis-reconcile silently in release -- the old
-              // presence element was painted here.
-              HomeHistoryCard(key: ValueKey<String>('history-$syncEpoch')),
-              if (!configured) ...[
-                const SizedBox(height: 16),
-                Text(
-                  'Open Settings (gear icon) to connect Firebase.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).extension<AppStatusColors>()!.warning,
+                  const SizedBox(height: 8),
+                  Text(
+                    isOverridden
+                        ? 'One-shot early start — back to $baseline '
+                              'after it rings'
+                        : 'Every day. It cannot be turned off.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13),
                   ),
-                ),
-              ],
-            ],
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: busy ? null : onPickEarlier,
+                      icon: const Icon(Icons.arrow_upward),
+                      label: const Text('Wake me earlier tomorrow'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (status.isNotEmpty) ...[
+                    Text(
+                      status,
+                      textAlign: TextAlign.center,
+                      // Bounded: status can be a raw `'Error: $e'`, i.e. an
+                      // arbitrarily long exception toString().
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: status.contains('Error')
+                            ? theme.colorScheme.error
+                            : theme.extension<AppStatusColors>()!.success,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  HomeTiles(
+                    syncEpoch: syncEpoch,
+                    busy: busy,
+                    onEscaped: onEscaped,
+                  ),
+                  if (!configured) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Open Settings (gear icon) to connect Firebase.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: theme.extension<AppStatusColors>()!.warning,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
