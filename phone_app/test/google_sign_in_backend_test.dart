@@ -1,15 +1,24 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
 
+const _channel = MethodChannel('dev.kuhy/google_account_token');
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  tearDown(() {
+    debugDefaultTargetPlatformOverride = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_channel, null);
+  });
+
   group('googleIdToken', () {
     test('returns the token the sign-in function yields', () async {
       // The injected path: proves the closure is what feeds crdt_sync, and
       // that no platform channel is touched to get there.
-      expect(
-        await googleIdToken(signInFn: () async => 'a-token'),
-        'a-token',
-      );
+      expect(await googleIdToken(signInFn: () async => 'a-token'), 'a-token');
     });
 
     test('passes a null cancellation straight through', () async {
@@ -19,10 +28,22 @@ void main() {
     });
 
     test('reports "not configured" when the client id is missing', () async {
-      // Passed explicitly rather than relying on the const: an app whose
-      // client id is filled in would otherwise reach the real plugin here.
-      // The behaviour under test is the empty-id fallback itself.
+      // An empty client id must fall back rather than reach the OS chooser.
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
       expect(await googleIdToken(serverClientId: ''), isNull);
+    });
+
+    test('asks the account-token plugin for the Web client id', () async {
+      // The real path: the plugin's channel gets the pinned Web client id.
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      Object? sent;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+            sent = call.arguments;
+            return 'plugin-token';
+          });
+      expect(await googleIdToken(), 'plugin-token');
+      expect(sent, {'serverClientId': kServerClientId});
     });
 
     test('pins the uid the security rules expect', () {
