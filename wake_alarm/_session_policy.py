@@ -25,6 +25,7 @@ from wake_alarm._constants import (
     SESSION_PROVISIONAL_CAP,
     SESSION_PROVISIONAL_GRACE,
 )
+from wake_alarm._session_legs import next_step
 
 if TYPE_CHECKING:
     from wake_alarm._session_payload import SessionRecord
@@ -113,6 +114,7 @@ def to_entry(
             "device_id": "",
             "published_at": None,
             "refreshed_at": refreshed_at,
+            "next_step": None,
         }
         if alarm is not None:
             entry["exempt_until"] = (_at(today, alarm) + SESSION_NONE_GRACE).isoformat()
@@ -128,6 +130,10 @@ def to_entry(
         "device_id": record.device_id,
         "published_at": record.published_at,
         "refreshed_at": refreshed_at,
+        # Signed with the rest: the HMAC covers every key of the entry.
+        "next_step": (
+            next_step(record.passed_legs) if record.outcome == "in_progress" else None
+        ),
     }
     until = exempt_until(record)
     if until is not None:

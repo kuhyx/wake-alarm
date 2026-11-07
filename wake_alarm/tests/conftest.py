@@ -49,6 +49,33 @@ def _no_process(cmd: list[str]) -> object:
     raise AssertionError(msg)
 
 
+class FakeClock:
+    """A monotonic clock that only moves when ``sleep`` is called.
+
+    Pass ``clock.sleep`` and ``clock.now`` to ``_session.refresh`` so a dead
+    backend burns its 150 s retry budget instantly instead of for real.
+    """
+
+    def __init__(self) -> None:
+        self.elapsed = 0.0
+        self.sleeps: list[float] = []
+
+    def now(self) -> float:
+        """Seconds elapsed on the fake clock."""
+        return self.elapsed
+
+    def sleep(self, seconds: float) -> None:
+        """Advance the clock without waiting."""
+        self.sleeps.append(seconds)
+        self.elapsed += seconds
+
+
+@pytest.fixture
+def fake_clock() -> FakeClock:
+    """A fresh :class:`FakeClock`."""
+    return FakeClock()
+
+
 @pytest.fixture(autouse=True)
 def _hermetic(tmp_path: Path) -> Generator[None]:
     """Keep signing keys, state writes and processes inside ``tmp_path``."""

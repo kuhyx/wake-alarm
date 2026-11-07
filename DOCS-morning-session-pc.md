@@ -82,8 +82,18 @@ cutoffs, neither imports `crdt_sync`, neither talks to Firebase:
 **A PC booted mid-morning** has a missing or yesterday's file until the
 timer's `Persistent=true` catch-up lands, and that needs the network. Only
 the enforce path, only inside 05:00–11:00, and only when the file is not
-today's, both consumers retry for ≤ 30 s (5 s steps) and then proceed as
+today's, both consumers retry for ≤ 180 s (5 s steps) and then proceed as
 normal with a WARNING. Status paths never wait; tests pin the retry to 0.
+The refresher itself retries an unreadable backend every 5 s for 150 s
+(`REFRESH_RETRY_SECONDS`) before exiting 1 with a WARNING: a PC booted at
+07:48 had no DNS for its first seconds, and the old single try left the next
+chance at the 07:50 tick (2026-11-07).
+
+**`next_step`** (signed with the rest): while the session is `in_progress`,
+the label of the first leg not in the phone's `passed` map, else `null`.
+Names and labels live in `_session_legs.py` and are pinned to the phone's
+`SessionLeg` by `wake_alarm/tests/fixtures/session_legs.json`, asserted by a
+Python and a Dart test.
 
 ## Known limits (v1, deliberate)
 

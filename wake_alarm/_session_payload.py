@@ -52,6 +52,8 @@ class SessionRecord:
     re_rings: int
     device_id: str
     published_at: float | None
+    # Names (``_session_legs.LEGS``) of the legs the phone has passed.
+    passed_legs: tuple[str, ...] = ()
 
     @property
     def finished(self) -> bool:
@@ -71,6 +73,19 @@ def _float_or_none(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)
+
+
+def _passed_legs(value: object) -> tuple[str, ...]:
+    """Leg names in the phone's ``passed`` map that carry a pass timestamp."""
+    if not isinstance(value, dict):
+        return ()
+    return tuple(
+        name
+        for name, entry in value.items()
+        if isinstance(name, str)
+        and isinstance(entry, dict)
+        and isinstance(entry.get("at"), str)
+    )
 
 
 def record_from_json(
@@ -106,6 +121,7 @@ def record_from_json(
         re_rings=_int_or_none(value.get("re_rings")) or 0,
         device_id=device_id,
         published_at=published_at,
+        passed_legs=_passed_legs(value.get("passed")),
     )
 
 

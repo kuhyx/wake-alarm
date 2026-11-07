@@ -64,6 +64,26 @@ class TestRecordFromJson:
         assert record.finished_at is None
         assert not record.finished
 
+    def test_passed_legs_are_the_keys_with_a_timestamp(self) -> None:
+        passed = {
+            "bathroomIn": {"at": "2026-09-19T08:05:00.000", "how": "tag"},
+            "showerDone": "garbage",
+            "dressed": {"how": "tag"},
+        }
+        record = record_from_json(
+            _session("2026-09-19", "active", passed=passed),
+            device_id="p",
+            published_at=None,
+        )
+        assert record is not None
+        assert record.passed_legs == ("bathroomIn",)
+        for bad in (None, [], "x"):
+            record = record_from_json(
+                _session(passed=bad), device_id="p", published_at=None
+            )
+            assert record is not None
+            assert record.passed_legs == ()
+
     def test_rejects_every_malformed_shape(self) -> None:
         bad = [
             "text",

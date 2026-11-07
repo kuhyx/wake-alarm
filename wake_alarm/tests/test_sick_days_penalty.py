@@ -7,6 +7,7 @@ from datetime import date, datetime
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -31,6 +32,9 @@ from wake_alarm._workday_penalty import (
     skip_reason,
     write_penalty,
 )
+
+if TYPE_CHECKING:
+    from wake_alarm.tests.conftest import FakeClock
 
 TUESDAY = date(2026, 9, 22)
 AFTER_GRACE = datetime(2026, 9, 22, 9, 0).astimezone()
@@ -131,10 +135,15 @@ class TestRetraction:
         )
         assert not cancel_for_sick_day()
 
-    def test_refresh_retracts_even_offline(self) -> None:
+    def test_refresh_retracts_even_offline(self, fake_clock: FakeClock) -> None:
         mark_sick(TUESDAY)
         with patch.object(_session, "fetch_firebase_logs", return_value=None):
-            assert _session.refresh(AFTER_GRACE) is None
+            assert (
+                _session.refresh(
+                    AFTER_GRACE, sleep=fake_clock.sleep, clock=fake_clock.now
+                )
+                is None
+            )
         assert issued_date() is None
 
 

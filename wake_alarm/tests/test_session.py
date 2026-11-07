@@ -172,12 +172,6 @@ class TestRefresh:
         assert entry is not None
         assert entry["exempt_until"] == _local("2026-09-19T06:45:00").isoformat()
 
-    def test_unreadable_backend_leaves_the_file_alone(self) -> None:
-        write_entry(to_entry(_record(), today="2026-09-19", refreshed_at=5.0))
-        with patch("wake_alarm._session.fetch_firebase_logs", return_value=None):
-            assert refresh(NOW) is None
-        assert read_entry() is not None
-
     def test_write_failure_is_none(self) -> None:
         with (
             patch("wake_alarm._session.fetch_firebase_logs", return_value=[]),

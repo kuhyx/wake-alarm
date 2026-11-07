@@ -156,6 +156,13 @@ SESSION_COMPLETED_UNTIL: tuple[int, int] = (11, 0)
 # PC). A phone switched off at the alarm locks this long after it.
 SESSION_NONE_GRACE: timedelta = timedelta(minutes=15)
 
+# A PC booted mid-morning often has no DNS for its first seconds (2026-11-07:
+# one try at 07:48:43, exit 1, next timer tick at 07:50). ``--refresh`` keeps
+# trying in-process this long, every REFRESH_POLL_SECONDS, before giving up.
+# Consumers (gatelock.morning_session) wait up to 180 s, so this stays under.
+REFRESH_RETRY_SECONDS: int = 150
+REFRESH_POLL_SECONDS: int = 5
+
 
 # Workday stick (a Tue/Wed/Thu miss -> tomorrow loses its leniency). The days
 # themselves are freedays.WORKDAYS, the one set every gate app reads.

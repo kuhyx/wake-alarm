@@ -11,8 +11,9 @@ OnCalendar=*-*-* 05..06:00/10:00
 OnCalendar=*-*-* 07..10:00/2:00
 OnCalendar=*-*-* 11:00:00
 AccuracySec=1s
-# A PC booted mid-morning refreshes at once; the consumers wait up to 30 s
-# for exactly this catch-up before treating the file as stale.
+# A PC booted mid-morning refreshes at once, retrying in-process every 5 s
+# for 150 s (no DNS yet at boot); the consumers wait up to 180 s for exactly
+# this catch-up before treating the file as stale.
 Persistent=true
 
 [Install]

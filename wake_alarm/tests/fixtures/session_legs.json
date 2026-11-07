@@ -1,0 +1,8 @@
+{
+  "legs": [
+    {"name": "bathroomIn", "label": "Tap the bathroom tag"},
+    {"name": "showerDone", "label": "Shower, then tap the bathroom tag again"},
+    {"name": "dressed", "label": "Get dressed — tap the wardrobe tag"},
+    {"name": "atDesk", "label": "Sit down — tap the desk tag"}
+  ]
+}

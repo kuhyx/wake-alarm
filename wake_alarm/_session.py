@@ -31,10 +31,17 @@ from datetime import datetime
 import json
 import logging
 import sys
+import time
+from typing import TYPE_CHECKING
 
 from gatelock.log_integrity import compute_entry_hmac, verify_entry_hmac
 
-from wake_alarm._constants import FALLBACK_ALARM_HOUR, MORNING_SESSION_FILE
+from wake_alarm._constants import (
+    FALLBACK_ALARM_HOUR,
+    MORNING_SESSION_FILE,
+    REFRESH_POLL_SECONDS,
+    REFRESH_RETRY_SECONDS,
+)
 from wake_alarm._enforcement_payload import enforcement_view
 from wake_alarm._escapes import note_escapes
 from wake_alarm._logging_setup import configure_logging
@@ -44,6 +51,9 @@ from wake_alarm._sync import get_alarm
 from wake_alarm._sync_transport import fetch_firebase_logs
 from wake_alarm._workday_penalty import cancel_for_sick_day as _cancel_for_sick_day
 from wake_alarm._workday_penalty import maybe_apply as _maybe_apply_workday_penalty
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _logger = logging.getLogger(__name__)
 
@@ -81,18 +91,49 @@ def read_entry() -> dict[str, object] | None:
     return entry
 
 
-def refresh(now: datetime) -> dict[str, object] | None:
+def _fetch_with_retry(
+    sleep: Callable[[float], None], clock: Callable[[], float]
+) -> list[tuple[str, str]] | None:
+    """``fetch_firebase_logs`` retried every poll interval within the budget.
+
+    A PC booted mid-morning usually has no DNS for its first seconds, and the
+    next timer tick is minutes away while consumers are already waiting on the
+    file. None only once ``REFRESH_RETRY_SECONDS`` have passed.
+    """
+    started = clock()
+    while True:
+        published = fetch_firebase_logs()
+        if published is not None:
+            return published
+        waited = clock() - started
+        if waited + REFRESH_POLL_SECONDS > REFRESH_RETRY_SECONDS:
+            _logger.warning(
+                "Morning session not refreshed: backend unreadable for %d s "
+                "(retried every %d s)",
+                REFRESH_RETRY_SECONDS,
+                REFRESH_POLL_SECONDS,
+            )
+            return None
+        sleep(REFRESH_POLL_SECONDS)
+
+
+def refresh(
+    now: datetime,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, object] | None:
     """Fetch, select, and rewrite the file; None when the backend was unreadable.
 
-    An unreadable backend leaves the file alone: whatever it says is still
-    the newest thing known, and a consumer judges freshness by its date. A
-    penalty issued on a day since marked sick is retracted first, from the
-    local pool alone, so it does not wait on Firebase.
+    An unreadable backend is retried for ``REFRESH_RETRY_SECONDS``, then
+    leaves the file alone: whatever it says is still the newest thing known,
+    and a consumer judges freshness by its date. A penalty issued on a day
+    since marked sick is retracted first, once, from the local pool alone, so
+    it does not wait on Firebase. ``sleep`` and ``clock`` are seams for tests.
     """
     _cancel_for_sick_day()
-    published = fetch_firebase_logs()
+    published = _fetch_with_retry(sleep, clock)
     if published is None:
-        _logger.info("Morning session not refreshed: backend unreadable")
         return None
     today = now.date().isoformat()
     record = newest_session(published)
