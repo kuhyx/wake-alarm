@@ -1,0 +1,14 @@
+[Unit]
+Description=Wake Alarm morning-session strip (top-right corner reminder)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+Type=simple
+# Same display handling as leetcode-guard.service, the other Tk user unit:
+# the session's own X server, no env fallbacks invented here.
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+# Exits 0 by itself when the morning session is not in progress (the normal
+# case for most path triggers) and again the moment it ends. Exit 1 means no
+# display or no live output; the next file rewrite tries again.
+ExecStart=/usr/bin/python -m wake_alarm._session_strip

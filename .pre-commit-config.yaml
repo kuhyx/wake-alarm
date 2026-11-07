@@ -106,7 +106,7 @@ repos:
           # direct URLs for one distribution, so any pin that drifts from
           # the manifest becomes an unresolvable hook environment rather
           # than merely an old one.
-          - gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.10.0#subdirectory=gatelock
+          - gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.12.0#subdirectory=gatelock
           - crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.9.2#subdirectory=crdt-sync
           - freedays @ git+https://github.com/kuhyx/utils@freedays-v0.4.0#subdirectory=freedays
           - sickdays @ git+https://github.com/kuhyx/utils@sickdays-v0.3.0#subdirectory=sickdays

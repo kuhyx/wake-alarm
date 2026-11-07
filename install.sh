@@ -11,7 +11,7 @@
 # What it does:
 #   1. Installs wake_alarm + dependencies for /usr/bin/python
 #   2. Installs the systemd user units and enables their timers (trigger,
-#      session, fallback, rtc, audit)
+#      session, strip, fallback, rtc, audit)
 #   3. Installs the root pieces of the fallback alarm: the ring WAVs, the
 #      ALSA ring script + system unit, the sudoers lines that let the user
 #      start/stop that unit, and (pc_wake.json "hibernate" mode only) the
@@ -47,6 +47,8 @@ readonly TRIGGER_SERVICE_SRC="$SCRIPT_DIR/wake-alarm-trigger.service"
 readonly TRIGGER_TIMER_SRC="$SCRIPT_DIR/wake-alarm-trigger.timer"
 readonly SESSION_SERVICE_SRC="$SCRIPT_DIR/wake-alarm-session.service"
 readonly SESSION_TIMER_SRC="$SCRIPT_DIR/wake-alarm-session.timer"
+readonly STRIP_SERVICE_SRC="$SCRIPT_DIR/wake-alarm-strip.service"
+readonly STRIP_PATH_SRC="$SCRIPT_DIR/wake-alarm-strip.path"
 readonly SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 # Enforcement v2 user units (service + timer each).
 readonly V2_UNITS=(wake-alarm-fallback wake-alarm-rtc wake-alarm-audit)
@@ -134,7 +136,8 @@ echo "  wake_alarm and gatelock import under /usr/bin/python."
 echo "[2/4] Installing systemd user units..."
 mkdir -p "$SYSTEMD_USER_DIR"
 cp "$TRIGGER_SERVICE_SRC" "$TRIGGER_TIMER_SRC" \
-   "$SESSION_SERVICE_SRC" "$SESSION_TIMER_SRC" "$SYSTEMD_USER_DIR/"
+   "$SESSION_SERVICE_SRC" "$SESSION_TIMER_SRC" \
+   "$STRIP_SERVICE_SRC" "$STRIP_PATH_SRC" "$SYSTEMD_USER_DIR/"
 for unit in "${V2_UNITS[@]}"; do
     cp "$SCRIPT_DIR/$unit.service" "$SCRIPT_DIR/$unit.timer" "$SYSTEMD_USER_DIR/"
 done
@@ -143,6 +146,8 @@ systemctl --user enable --now wake-alarm-trigger.timer
 echo "  Trigger timer enabled and started (ticks once a minute)."
 systemctl --user enable --now wake-alarm-session.timer
 echo "  Session timer enabled (07:00-11:00, every 2 min)."
+systemctl --user enable --now wake-alarm-strip.path
+echo "  Strip path enabled (corner reminder while the morning is in progress)."
 for unit in "${V2_UNITS[@]}"; do
     systemctl --user enable --now "$unit.timer"
 done

@@ -38,6 +38,8 @@ import freedays
 import pytest
 import sickdays
 
+from wake_alarm import _session_strip
+
 if TYPE_CHECKING:
     from collections.abc import Generator
     from pathlib import Path
@@ -94,6 +96,15 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             "wake_alarm._session.MORNING_SESSION_FILE",
             tmp_path / "morning_session.json",
         ),
+        # The strip imported the path by value too; its tick re-reads it every
+        # second, its refresh spawns systemctl, and its warn-once memory must
+        # not leak from one test into the next.
+        patch(
+            "wake_alarm._session_strip.MORNING_SESSION_FILE",
+            tmp_path / "morning_session.json",
+        ),
+        patch("wake_alarm._session_strip._popen", _no_process),
+        patch("wake_alarm._session_strip._once", _session_strip._Once()),
         patch(
             "wake_alarm._workday_penalty.WORKDAY_PENALTY_FILE",
             tmp_path / "workday_penalty.json",
