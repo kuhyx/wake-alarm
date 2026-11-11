@@ -15,7 +15,7 @@ import java.time.LocalDate
  *
  * Two jobs, one record. The launcher starts [MainActivity], and it has to
  * know *before any Dart runs* whether to step aside into the session screen;
- * the notification needs the leg text with no engine running behind it.
+ * the notification needs the leg glyph with no engine running behind it.
  * Dart rewrites this cache on every leg change (`updateSessionNotice`) and
  * `finishSession` clears it, so it is only ever as stale as the last change.
  *
@@ -50,8 +50,7 @@ object SessionNotice {
             .apply()
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Morning session", NotificationManager.IMPORTANCE_LOW)
-                .apply { description = "The live morning checklist" },
+            NotificationChannel(CHANNEL_ID, "WakeAlarm", NotificationManager.IMPORTANCE_LOW),
         )
         manager.notify(NOTIFICATION_ID, build(context, label, deadlineMillis))
     }
@@ -87,7 +86,6 @@ object SessionNotice {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val builder = Notification.Builder(context, CHANNEL_ID)
-            .setContentTitle("Morning session")
             .setContentText(label)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setCategory(Notification.CATEGORY_REMINDER)

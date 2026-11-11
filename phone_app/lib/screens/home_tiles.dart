@@ -34,7 +34,7 @@ class HomeTiles extends StatelessWidget {
           child: _Tile(
             key: const Key('home-tile-stakes'),
             icon: Icons.gavel_outlined,
-            label: "Today's stakes",
+            semanticLabel: "Today's stakes",
             sheet: StakesCard(
               key: ValueKey<String>('stakes-$syncEpoch'),
               busy: busy,
@@ -48,7 +48,7 @@ class HomeTiles extends StatelessWidget {
           child: _Tile(
             key: const Key('home-tile-history'),
             icon: Icons.history,
-            label: 'Last mornings',
+            semanticLabel: 'Last mornings',
             sheet: HomeHistoryCard(
               key: ValueKey<String>('history-$syncEpoch'),
               emptyText: 'No finished morning yet.',
@@ -63,13 +63,13 @@ class HomeTiles extends StatelessWidget {
 class _Tile extends StatelessWidget {
   const _Tile({
     required this.icon,
-    required this.label,
+    required this.semanticLabel,
     required this.sheet,
     super.key,
   });
 
   final IconData icon;
-  final String label;
+  final String semanticLabel;
   final Widget sheet;
 
   @override
@@ -95,9 +95,8 @@ class _Tile extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(icon, color: theme.colorScheme.onSurfaceVariant),
+              Icon(icon, size: 32, semanticLabel: semanticLabel),
               const SizedBox(height: 8),
-              Text(label, textAlign: TextAlign.center, maxLines: 1),
             ],
           ),
         ),

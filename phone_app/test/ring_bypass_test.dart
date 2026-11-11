@@ -9,9 +9,14 @@ import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 
 const String _tag1 = '04a2b3c4';
 const String _tag2 = '04ffee11';
+
+/// The ring's status sentence, now spoken only (StatusCue.semanticLabel).
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue)).semanticLabel;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -69,8 +74,8 @@ void main() {
   testWidgets('it is not offered before the timer elapses', (tester) async {
     await pumpRing(tester);
     await tester.pump(DismissGate.bypassAfter - const Duration(seconds: 1));
-    expect(find.textContaining('Tags unavailable'), findsNothing);
-    expect(find.text('Tap tag 1'), findsOneWidget);
+    expect(find.byKey(const Key('ring-bypass')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('ring-row-tag1')), findsOneWidget);
   });
 
   testWidgets('after the timer it skips the tags but still needs the walk', (
@@ -80,17 +85,20 @@ void main() {
     await tester.pump(DismissGate.bypassAfter);
     await tester.pump();
 
-    expect(find.textContaining('Tags unavailable'), findsOneWidget);
+    expect(find.byKey(const Key('ring-bypass')), findsOneWidget);
     // A hardware bypass must not borrow the away wording.
-    expect(find.textContaining('Away from home'), findsNothing);
-    expect(find.text('Tap tag 1'), findsNothing);
-    expect(find.text('Walk 25 steps'), findsOneWidget);
-    expect(find.text('Submit'), findsNothing);
+    expect(find.byKey(const Key('ring-bypass')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('ring-row-tag1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('ring-row-steps')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('ring-submit')), findsNothing);
 
     steps = 500;
     elapsed = const Duration(minutes: 6);
     await pollSteps(tester);
-    expect(find.text('Question 1 of 6'), findsOneWidget);
+    expect(find.text('1/6'), findsOneWidget);
   });
 
   testWidgets('under bypass the walk still needs elapsed time', (tester) async {
@@ -104,7 +112,7 @@ void main() {
     steps = 500;
     elapsed = const Duration(seconds: 5);
     await pollSteps(tester);
-    expect(find.textContaining('Keep moving'), findsOneWidget);
+    expect(statusOf(tester), contains('Keep moving'));
     expect(find.text('Submit'), findsNothing);
   });
 
@@ -116,15 +124,15 @@ void main() {
       MaterialApp(home: RingScreen(clock: () => elapsed)),
     );
     await tester.pump();
-    expect(find.textContaining('Register two NFC tags'), findsOneWidget);
-    expect(find.textContaining('Tags unavailable'), findsOneWidget);
+    expect(find.byKey(const Key('ring-bypass')), findsOneWidget);
+    expect(find.byIcon(Icons.block), findsOneWidget);
   });
 
   testWidgets('no NFC hardware bypasses immediately', (tester) async {
     hasNfc = false;
     mockChannel();
     await pumpRing(tester);
-    expect(find.textContaining('NFC is off'), findsOneWidget);
+    expect(statusOf(tester), contains('NFC is off'));
     expect(find.text('Tap tag 1'), findsNothing);
   });
 }

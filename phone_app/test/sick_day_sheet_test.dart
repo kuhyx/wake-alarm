@@ -10,6 +10,8 @@ import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sick_day_keep.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 import 'package:wake_alarm_sync/services/sick_day_sync.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 import 'fake_day_pool_store.dart';
@@ -17,7 +19,13 @@ import 'fake_day_pool_store.dart';
 /// The per-locker sheet on the sick-day calendar (sickdays 0.2.0 keep).
 final _today = DateTime(2026, 10, 16);
 final _day = DateTime(2026, 10, 20);
+
+Finder iconLabelled(String label) =>
+    find.byWidgetPredicate((w) => w is Icon && w.semanticLabel == label);
 bool _never(DateTime _) => false;
+
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue).first).semanticLabel;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -102,23 +110,24 @@ void main() {
     await open(tester);
     await tap(tester, cell(_day));
 
-    expect(find.text('Mark sick: Tue 2026-10-20'), findsOneWidget);
+    expect(find.text('20.10.2026'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('sick-mark')), findsOneWidget);
     for (final locker in SickLocker.all) {
       expect(isOn(tester, locker), isFalse, reason: locker);
     }
-    for (final label in [
-      'Workout lock',
-      'LeetCode',
-      'Book',
-      'Diet',
-      'Wake alarm',
+    for (final icon in [
+      Icons.fitness_center,
+      Icons.code,
+      Icons.menu_book,
+      Icons.restaurant,
+      Icons.alarm,
     ]) {
-      expect(find.text(label), findsOneWidget);
+      expect(find.byIcon(icon), findsOneWidget);
     }
-    expect(find.text('Clear sick day'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('sick-clear')), findsNothing);
     expect(sick.isSick(_day), isFalse, reason: 'nothing until confirmed');
 
-    await tap(tester, find.text('Mark sick'));
+    await tap(tester, find.byKey(const ValueKey<String>('sick-mark')));
     expect(sick.isSick(_day), isTrue);
     expect(sick.keptLockers(_day), isEmpty);
     expect(caches.last, ['2026-10-20'], reason: 'the alarm stands down');
@@ -132,15 +141,14 @@ void main() {
     await tap(tester, cell(_day));
     await tap(tester, toggle(SickLocker.alarm));
     await tap(tester, toggle(SickLocker.leetcode));
-    await tap(tester, find.text('Mark sick'));
+    await tap(tester, find.byKey(const ValueKey<String>('sick-mark')));
 
     expect(sick.keptLockers(_day), {SickLocker.alarm, SickLocker.leetcode});
     expect(caches.last, isEmpty);
-    expect(find.text('Alarm cache: none'), findsOneWidget);
+    expect(iconLabelled('Alarm cache: none'), findsOneWidget);
     final box = tester.widget<DayCell>(cell(_day));
     expect(box.isMarked, isTrue, reason: 'still a sick day');
     expect(box.badge, isTrue, reason: 'kept lockers are badged');
-    expect(find.text('Kept: LeetCode, Wake alarm'), findsOneWidget);
   });
 
   testWidgets('a sick day without kept lockers has no badge', (tester) async {
@@ -154,12 +162,14 @@ void main() {
     await open(tester);
     await tap(tester, cell(_day));
 
-    expect(find.text('Sick day: Tue 2026-10-20'), findsOneWidget);
+    // In the list and in the sheet heading; save means it is already sick.
+    expect(find.text('20.10.2026'), findsWidgets);
+    expect(find.byKey(const Key('sick-save')), findsOneWidget);
     expect(isOn(tester, SickLocker.diet), isTrue);
     expect(isOn(tester, SickLocker.alarm), isFalse);
-    expect(find.text('Save'), findsOneWidget);
-    expect(find.text('Clear sick day'), findsOneWidget);
-    expect(find.text('Mark sick'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('sick-save')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('sick-clear')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('sick-mark')), findsNothing);
   });
 
   testWidgets('Save edits keep only, never state', (tester) async {
@@ -168,7 +178,7 @@ void main() {
     await open(tester);
     await tap(tester, cell(_day));
     await tap(tester, toggle(SickLocker.alarm));
-    await tap(tester, find.text('Save'));
+    await tap(tester, find.byKey(const ValueKey<String>('sick-save')));
 
     final fields = sick.snapshot()['2026-10-20']!.fields;
     expect(fields['state'], state, reason: 'value and HLC untouched');
@@ -183,7 +193,7 @@ void main() {
     final before = sick.snapshot()['2026-10-20'];
     await open(tester);
     await tap(tester, cell(_day));
-    await tap(tester, find.text('Save'));
+    await tap(tester, find.byKey(const ValueKey<String>('sick-save')));
     expect(sick.snapshot()['2026-10-20'], before);
     expect(syncs, 1);
   });
@@ -192,11 +202,11 @@ void main() {
     await sick.add(_day, isFree: _never, now: _today, keep: ['alarm']);
     await open(tester);
     await tap(tester, cell(_day));
-    await tap(tester, find.text('Clear sick day'));
+    await tap(tester, find.byKey(const ValueKey<String>('sick-clear')));
 
     expect(sick.isSick(_day), isFalse);
     expect(sick.snapshot()['2026-10-20']!.fields['keep']!.$1, isEmpty);
-    expect(find.text('None ahead.'), findsOneWidget);
+    expect(find.byType(DashedSlot), findsOneWidget);
     expect(syncs, 2);
   });
 

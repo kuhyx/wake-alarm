@@ -8,6 +8,11 @@ import 'package:wake_alarm_sync/screens/session_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+
+/// The session's status sentence, now spoken only.
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue)).semanticLabel;
 
 /// The check-in half of the session screen (energy + weight) and the two
 /// publishes: split from `session_screen_test.dart` at the 250-line cap.
@@ -75,7 +80,7 @@ void main() {
 
   Future<void> submit(WidgetTester tester, String kg) async {
     await tester.enterText(find.byType(TextField), kg);
-    await tester.tap(find.text('Log weight'));
+    await tester.tap(find.byKey(const Key('session-log-weight')));
     await tester.pump();
   }
 
@@ -92,7 +97,7 @@ void main() {
   ) async {
     await pumpSession(tester);
     await submit(tester, '72');
-    expect(find.textContaining('Tap your energy'), findsOneWidget);
+    expect(statusOf(tester), contains('Tap your energy'));
     expect(find.byType(TextField), findsOneWidget);
     expect((await SessionStore().loadCurrent())?.pendingWeightKg, isNull);
   });
@@ -102,7 +107,7 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, '5'));
     await tester.pump();
     await submit(tester, '72');
-    expect(find.textContaining('now tap the bathroom tag'), findsOneWidget);
+    expect(find.byKey(const ValueKey('session-row-weigh')), findsOneWidget);
     final session = await SessionStore().loadCurrent();
     expect(session?.energy, 5);
     expect(session?.pendingWeightKg, 72);
@@ -113,13 +118,13 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, '3'));
     await tester.pump();
     await submit(tester, 'x');
-    expect(find.textContaining('Enter your weight'), findsOneWidget);
+    expect(statusOf(tester), contains('Enter your weight'));
     await submit(tester, '1');
-    expect(find.textContaining('not a body weight'), findsOneWidget);
+    expect(statusOf(tester), contains('not a body weight'));
     expect(find.byType(TextField), findsOneWidget);
     await tap('mystery');
     await tester.pump();
-    expect(find.text('Unknown tag'), findsOneWidget);
+    expect(statusOf(tester), 'Unknown tag');
   });
 
   testWidgets('the finish publish waits for a start publish in flight', (

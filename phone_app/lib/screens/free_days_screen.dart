@@ -7,6 +7,7 @@ import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 import 'package:wake_alarm_sync/services/sick_day_sync.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 
 /// The one picker for the shared free-day pool.
 ///
@@ -173,17 +174,20 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
     final pool = _pool;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Free days'),
+        // title removed
         actions: [
           IconButton(
-            icon: const Icon(Icons.sync),
-            tooltip: 'Sync now',
+            icon: const Icon(Icons.sync, semanticLabel: 'Sync now'),
             onPressed: _busy ? null : () => unawaited(_sync()),
           ),
         ],
       ),
       body: pool == null
-          ? Center(child: Text(_status.isEmpty ? 'Loading…' : _status))
+          ? Center(
+              child: _status.isEmpty
+                  ? const CircularProgressIndicator()
+                  : StatusCue(semanticLabel: _status),
+            )
           : FreeDaysBody(
               year: _today.year,
               remaining: pool.remaining(_today.year),

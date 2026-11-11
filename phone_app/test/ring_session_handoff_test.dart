@@ -88,7 +88,7 @@ void main() {
     await tapTag(tester, _tag2);
     for (var i = 0; i < 3; i++) {
       await tester.enterText(find.byType(TextField), answers.next().answer);
-      await tester.tap(find.text('Submit'));
+      await tester.tap(find.byKey(const Key('ring-submit')));
       await tester.pump();
     }
     await tester.pumpAndSettle();
@@ -144,12 +144,14 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, '4'));
     await tester.pump();
     await tester.enterText(find.byType(TextField), '72');
-    await tester.tap(find.text('Log weight'));
+    await tester.tap(find.byKey(const Key('session-log-weight')));
     await tester.pump();
     await tapTag(tester, 'bath');
     await tester.pump();
-    expect(find.text('Weigh in — 72.0 kg · energy 4/5'), findsOneWidget);
-    expect(find.textContaining('tag counts in'), findsOneWidget);
+    expect(find.text('72.0'), findsOneWidget);
+    expect(find.text('4/5'), findsOneWidget);
+    // The shower floor: the second bathroom tap does not count yet.
+    expect(find.byIcon(Icons.hourglass_top), findsOneWidget);
   });
 
   testWidgets('away from home the dismiss still just closes', (tester) async {
@@ -162,7 +164,7 @@ void main() {
     await tester.pump();
     for (var i = 0; i < 3; i++) {
       await tester.enterText(find.byType(TextField), answers.next().answer);
-      await tester.tap(find.text('Submit'));
+      await tester.tap(find.byKey(const Key('ring-submit')));
       await tester.pump();
     }
     await tester.pumpAndSettle();

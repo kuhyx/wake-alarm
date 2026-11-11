@@ -105,10 +105,9 @@ class AlarmService : Service() {
         // IMPORTANCE_HIGH is required for a full-screen intent to be honoured.
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Wake alarm",
+            "WakeAlarm",
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "The ringing wake alarm"
             // The service owns sound and vibration, so the channel must not add
             // its own — a channel sound would play on the notification stream
             // and be silenced by DND, unlike STREAM_ALARM.
@@ -129,8 +128,6 @@ class AlarmService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Wake alarm")
-            .setContentText("Tap to dismiss")
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setCategory(Notification.CATEGORY_ALARM)
             .setOngoing(true)

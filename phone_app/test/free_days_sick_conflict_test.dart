@@ -9,11 +9,15 @@ import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 import 'package:wake_alarm_sync/services/sick_day_sync.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 import 'fake_day_pool_store.dart';
 
 final _today = DateTime(2026, 10, 16);
+
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue).first).semanticLabel;
 
 /// The free-day picker's half of "a date is never in both pools".
 void main() {
@@ -87,8 +91,8 @@ void main() {
 
     expect(free.isFree(DateTime(2026, 10, 20)), isFalse);
     expect(
-      find.text('2026-10-20 is a sick day — clear it in Sick days first.'),
-      findsOneWidget,
+      statusOf(tester),
+      contains('2026-10-20 is a sick day — clear it in Sick days first.'),
     );
     // A normal day still books.
     await tapDay(tester, DateTime(2026, 10, 21));
@@ -104,6 +108,6 @@ void main() {
     );
     await tapDay(tester, DateTime(2026, 10, 21));
     expect(free.isFree(DateTime(2026, 10, 21)), isFalse);
-    expect(find.textContaining('Sick-day pool unavailable'), findsOneWidget);
+    expect(statusOf(tester), contains('Sick-day pool unavailable'));
   });
 }

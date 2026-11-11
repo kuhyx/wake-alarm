@@ -52,13 +52,11 @@ void main() {
           ..onTag(SessionTagSlot.bathroom, at);
     await SessionStore().save(session);
     await pumpCold(tester);
-    expect(find.text('Weigh in — 72.0 kg · energy 3/5'), findsOneWidget);
-    expect(find.textContaining('tag counts in'), findsOneWidget);
+    expect(find.text('72.0'), findsOneWidget);
+    expect(find.text('3/5'), findsOneWidget);
+    expect(find.textContaining('04:00'), findsOneWidget);
     final notice = calls.lastWhere((c) => c.method == 'updateSessionNotice');
-    expect(
-      (notice.arguments as Map<Object?, Object?>)['label'],
-      'Shower, then tap the bathroom tag again',
-    );
+    expect((notice.arguments as Map<Object?, Object?>)['label'], '🚿 2/4');
     expect(calls.map((c) => c.method), isNot(contains('closeRingScreen')));
   });
 

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/enforcement_bridge.dart';
 import 'package:wake_alarm_sync/services/today_stakes.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/spoken_label.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// The ring screen's one line: what not dismissing costs today.
@@ -23,7 +25,7 @@ class RingStakesLine extends StatefulWidget {
 }
 
 class _RingStakesLineState extends State<RingStakesLine> {
-  String? _line;
+  ({DateTime by, DateTime lockThrough})? _stakes;
 
   @override
   void initState() {
@@ -32,32 +34,53 @@ class _RingStakesLineState extends State<RingStakesLine> {
   }
 
   Future<void> _load() async {
-    String? line;
+    ({DateTime by, DateTime lockThrough})? stakes;
     try {
       final state = await (widget.bridge ?? EnforcementBridge()).state();
-      line = state == null ? null : ringStakesLine(state);
+      stakes = state == null ? null : ringStakes(state);
     } on Exception {
-      line = null;
+      stakes = null;
     }
-    if (!mounted || line == null) return;
-    setState(() => _line = line);
+    if (!mounted || stakes == null) return;
+    setState(() => _stakes = stakes);
   }
 
   @override
   Widget build(BuildContext context) {
-    final line = _line;
-    if (line == null) return const SizedBox.shrink();
+    final stakes = _stakes;
+    if (stakes == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    final statusColors = theme.extension<AppStatusColors>();
+    final warningColor = statusColors?.warning ?? Colors.amber;
+    final line =
+        'Stick day: no dismiss by ${hhmm(stakes.by)} → apps locked through '
+        '${formatDay(stakes.lockThrough)}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Text(
-        line,
-        textAlign: TextAlign.center,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          // Null-safe: a missing theme extension must not break a ring.
-          color: theme.extension<AppStatusColors>()?.warning,
+      child: SpokenLabel(
+        semanticLabel: line,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.gavel_outlined, color: warningColor),
+            const SizedBox(width: 4),
+            Text(hhmm(stakes.by), style: TextStyle(color: warningColor)),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_forward, size: 16),
+            const SizedBox(width: 4),
+            Icon(Icons.lock_outline, color: warningColor),
+            const SizedBox(width: 4),
+            Text(
+              _formatLockDate(stakes.lockThrough),
+              style: TextStyle(color: warningColor),
+            ),
+          ],
         ),
       ),
     );
   }
+
+  String _formatLockDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}'
+      '.${d.month.toString().padLeft(2, '0')}';
 }

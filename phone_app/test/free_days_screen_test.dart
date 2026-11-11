@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:crdt_sync/crdt_sync.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,19 +9,16 @@ import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 import 'package:wake_alarm_sync/services/sick_day_sync.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
-class _MemPersistence implements LogPersistence {
-  String? text;
-
-  @override
-  Future<String?> read() async => text;
-
-  @override
-  Future<void> write(String value) async => text = value;
-}
+import 'fake_day_pool_store.dart';
 
 final _today = DateTime(2026, 9, 11);
+
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue).first).semanticLabel;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +33,7 @@ void main() {
         .setMockMethodCallHandler(channel, (call) async => null);
     scheduler = AlarmScheduler(channel: channel);
     pool = await FreeDayPool.open(
-      persistence: _MemPersistence(),
+      persistence: MemPersistence(),
       deviceId: 'phone',
     );
     syncs = 0;
@@ -63,7 +59,7 @@ void main() {
         scheduler: scheduler,
       ),
       openSickPool: () =>
-          SickDayPool.open(persistence: _MemPersistence(), deviceId: 'phone'),
+          SickDayPool.open(persistence: MemPersistence(), deviceId: 'phone'),
       sickSyncer: SickDaySync(
         openClient: () async => null,
         scheduler: scheduler,
@@ -83,14 +79,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(syncs, 1);
-    expect(find.text('33 of 35'), findsOneWidget);
-    expect(find.text('free days left in 2026'), findsOneWidget);
-    expect(find.text('Sun 2026-09-20'), findsOneWidget);
+    expect(find.text('33/35'), findsOneWidget);
+    expect(find.text('20.09.2026'), findsOneWidget);
     expect(find.text('travelling'), findsOneWidget);
     expect(find.textContaining('2026-09-10'), findsNothing);
     expect(
-      find.text('Not synced — connect Firebase in Settings.'),
-      findsOneWidget,
+      statusOf(tester),
+      contains('Not synced — connect Firebase in Settings.'),
     );
   });
 
@@ -112,13 +107,12 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Release'));
-    await tester.tap(find.text('Release'));
+    await tester.tap(find.byKey(const ValueKey<String>('release-2026-09-20')));
     await tester.pumpAndSettle();
 
     expect(pool.isFree(DateTime(2026, 9, 20)), isFalse);
-    expect(find.text('35 of 35'), findsOneWidget);
-    expect(find.textContaining('Tap a date above'), findsOneWidget);
+    expect(find.text('35/35'), findsOneWidget);
+    expect(find.byType(DashedSlot), findsOneWidget);
     expect(syncs, 2);
   });
 
@@ -127,7 +121,7 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    expect(find.text('September 2026'), findsOneWidget);
+    expect(find.text('09/2026'), findsOneWidget);
     expect(find.text('Take a day'), findsNothing);
   });
 
@@ -140,8 +134,8 @@ void main() {
 
     expect(pool.isFree(DateTime(2026, 9, 12)), isTrue);
     expect(pool.reasonFor(DateTime(2026, 9, 12)), '');
-    expect(find.text('34 of 35'), findsOneWidget);
-    expect(find.text('Sat 2026-09-12'), findsOneWidget);
+    expect(find.text('34/35'), findsOneWidget);
+    expect(find.text('12.09.2026'), findsOneWidget);
     expect(syncs, 2);
   });
 
@@ -152,12 +146,12 @@ void main() {
     phoneSize(tester);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    expect(find.text('34 of 35'), findsOneWidget);
+    expect(find.text('34/35'), findsOneWidget);
 
     await tapDay(tester, DateTime(2026, 9, 20));
 
     expect(pool.isFree(DateTime(2026, 9, 20)), isFalse);
-    expect(find.text('35 of 35'), findsOneWidget);
+    expect(find.text('35/35'), findsOneWidget);
     expect(syncs, 2);
   });
 
@@ -182,29 +176,29 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    Future<void> press(String tooltip, int times) async {
+    Future<void> press(IconData icon, int times) async {
       for (var i = 0; i < times; i++) {
-        await tester.tap(find.byTooltip(tooltip));
+        await tester.tap(find.byIcon(icon));
         await tester.pumpAndSettle();
       }
     }
 
-    await press('Next month', 1);
-    expect(find.text('October 2026'), findsOneWidget);
+    await press(Icons.chevron_right, 1);
+    expect(find.text('10/2026'), findsOneWidget);
     await tapDay(tester, DateTime(2026, 10, 2));
     expect(pool.isFree(DateTime(2026, 10, 2)), isTrue);
 
     // Back to January of this year, and no further.
-    await press('Previous month', 9);
-    expect(find.text('January 2026'), findsOneWidget);
-    await press('Previous month', 1);
-    expect(find.text('January 2026'), findsOneWidget);
+    await press(Icons.chevron_left, 9);
+    expect(find.text('01/2026'), findsOneWidget);
+    await press(Icons.chevron_left, 1);
+    expect(find.text('01/2026'), findsOneWidget);
 
     // Forward to December of next year, and no further.
-    await press('Next month', 23);
-    expect(find.text('December 2027'), findsOneWidget);
-    await press('Next month', 1);
-    expect(find.text('December 2027'), findsOneWidget);
+    await press(Icons.chevron_right, 23);
+    expect(find.text('12/2027'), findsOneWidget);
+    await press(Icons.chevron_right, 1);
+    expect(find.text('12/2027'), findsOneWidget);
   });
 
   testWidgets('a refused booking shows the reason and does not sync', (
@@ -217,7 +211,7 @@ void main() {
     phoneSize(tester);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    expect(find.text('0 of 35'), findsOneWidget);
+    expect(find.text('0/35'), findsOneWidget);
 
     await tapDay(tester, DateTime(2026, 9, 12));
 
@@ -225,7 +219,7 @@ void main() {
     // The 35 booked days make the page long; back to the status line.
     await tester.drag(find.byType(ListView), const Offset(0, 3000));
     await tester.pumpAndSettle();
-    expect(find.textContaining('No free days left in 2026'), findsOneWidget);
+    expect(statusOf(tester), contains('No free days left in 2026'));
     expect(syncs, 1);
   });
 
@@ -244,7 +238,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Error: pool unavailable'), findsOneWidget);
+    expect(statusOf(tester), contains('Error: pool unavailable'));
     expect(find.text('Take a day'), findsNothing);
   });
 }

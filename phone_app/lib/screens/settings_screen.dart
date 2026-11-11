@@ -11,6 +11,7 @@ import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/data_transfer.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
+import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// Settings screen: links to the two sync surfaces.
 ///
@@ -72,9 +73,11 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final statusColors = theme.extension<AppStatusColors>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
         actions: [
           IconButton(
             key: const Key('settings-export'),
@@ -98,9 +101,10 @@ class SettingsScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           ListTile(
+            key: const Key('settings-sync'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Sync settings'),
-            subtitle: const Text('Firebase sync'),
+            leading: const Icon(Icons.cloud_sync_outlined,
+                semanticLabel: 'Sync settings'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(
@@ -117,37 +121,57 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           ListTile(
+            key: const Key('settings-room-proof'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Room proof'),
-            subtitle: const Text('Two NFC tags, at two locations'),
+            leading: const Icon(Icons.nfc, semanticLabel: 'Room proof'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(builder: (_) => const RoomProofScreen()),
             ),
           ),
           ListTile(
+            key: const Key('settings-session-tags'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Morning session tags'),
-            subtitle: const Text('Bathroom, wardrobe, desk — after the ring'),
+            leading: const Icon(
+              Icons.checklist,
+              semanticLabel: 'Morning session tags',
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(builder: (_) => const SessionTagsScreen()),
             ),
           ),
           ListTile(
+            key: const Key('settings-home'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Home location'),
-            subtitle: const Text('The Wi-Fi and place that mean you are home'),
+            leading: const Icon(
+              Icons.home_outlined,
+              semanticLabel: 'Home location',
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(builder: (_) => const HomeLocationScreen()),
             ),
           ),
           ListTile(
+            key: const Key('settings-github'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Advanced sync (GitHub)'),
-            subtitle: const Text('Cutover mirror — not recommended'),
-            trailing: const Icon(Icons.chevron_right),
+            leading: Icon(
+              Icons.code,
+              color: colors.onSurfaceVariant.withValues(alpha: 0.6),
+              semanticLabel: 'Advanced sync (GitHub)',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: statusColors?.warning ?? colors.error,
+                  semanticLabel: 'Cutover mirror, not recommended',
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(builder: (_) => const GitHubMirrorScreen()),
             ),

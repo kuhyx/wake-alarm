@@ -4,6 +4,8 @@ import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/sick_day_keep.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 
+export 'package:wake_alarm_sync/screens/sick_day_sheet.dart';
+
 /// What each locker is called on screen, in `sickdays.LOCKERS` order.
 const sickLockerLabels = <String, String>{
   SickLocker.workout: 'Workout lock',
@@ -11,6 +13,15 @@ const sickLockerLabels = <String, String>{
   SickLocker.book: 'Book',
   SickLocker.diet: 'Diet',
   SickLocker.alarm: 'Wake alarm',
+};
+
+/// Icons for each locker, matching [sickLockerLabels] order.
+const sickLockerIcons = <String, IconData>{
+  SickLocker.workout: Icons.fitness_center,
+  SickLocker.leetcode: Icons.code,
+  SickLocker.book: Icons.menu_book,
+  SickLocker.diet: Icons.restaurant,
+  SickLocker.alarm: Icons.alarm,
 };
 
 /// The kept lockers of a day as one line, in [sickLockerLabels] order.
@@ -116,7 +127,11 @@ class SickDaySheet extends StatefulWidget {
 class _SickDaySheetState extends State<SickDaySheet> {
   late final Set<String> _keep = {...widget.kept};
 
-  static const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  String _toDdMmYyyy(DateTime day) {
+    final d = day.day.toString().padLeft(2, '0');
+    final m = day.month.toString().padLeft(2, '0');
+    return '$d.$m.${day.year}';
+  }
 
   void _close(SickSheetAction action) => Navigator.of(
     context,
@@ -132,26 +147,19 @@ class _SickDaySheetState extends State<SickDaySheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '${widget.isSick ? 'Sick day' : 'Mark sick'}: '
-              '${_weekdays[day.weekday - 1]} ${FreeDayPool.toIso(day)}',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Off = stands down for the day. Switch on any locker that '
-              'should still apply; it then behaves exactly as on a normal '
-              'day.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            Row(
+              children: [
+                const Icon(Icons.sick_outlined),
+                const SizedBox(width: 8),
+                Text(_toDdMmYyyy(day), style: theme.textTheme.titleMedium),
+              ],
             ),
             const SizedBox(height: 8),
             for (final MapEntry(:key, :value) in sickLockerLabels.entries)
               SwitchListTile(
                 key: ValueKey<String>('keep-$key'),
                 contentPadding: EdgeInsets.zero,
-                title: Text(value),
+                title: Icon(sickLockerIcons[key], semanticLabel: value),
                 value: _keep.contains(key),
                 onChanged: (on) =>
                     setState(() => on ? _keep.add(key) : _keep.remove(key)),
@@ -159,21 +167,27 @@ class _SickDaySheetState extends State<SickDaySheet> {
             const SizedBox(height: 16),
             if (widget.isSick) ...[
               FilledButton(
+                key: const ValueKey<String>('sick-save'),
                 onPressed: () => _close(SickSheetAction.save),
-                child: const Text('Save'),
+                child: const Icon(Icons.check, semanticLabel: 'Save'),
               ),
               const SizedBox(height: 8),
               TextButton(
                 style: TextButton.styleFrom(
                   foregroundColor: theme.colorScheme.error,
                 ),
+                key: const ValueKey<String>('sick-clear'),
                 onPressed: () => _close(SickSheetAction.clear),
-                child: const Text('Clear sick day'),
+                child: const Icon(
+                  Icons.delete_outline,
+                  semanticLabel: 'Clear sick day',
+                ),
               ),
             ] else
               FilledButton(
+                key: const ValueKey<String>('sick-mark'),
                 onPressed: () => _close(SickSheetAction.mark),
-                child: const Text('Mark sick'),
+                child: const Icon(Icons.sick, semanticLabel: 'Mark sick'),
               ),
           ],
         ),

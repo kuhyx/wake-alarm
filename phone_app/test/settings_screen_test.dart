@@ -2,21 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
+import 'package:wake_alarm_sync/ui/theme.dart';
 
 void main() {
   testWidgets('shows the two sync links and navigates to each', (
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: SettingsScreen()),
+      MaterialApp(theme: buildAppTheme(), home: const SettingsScreen()),
     );
 
-    expect(find.text('Sync settings'), findsOneWidget);
-    expect(find.text('Advanced sync (GitHub)'), findsOneWidget);
-    expect(find.text('Room proof'), findsOneWidget);
-    expect(find.text('Home location'), findsOneWidget);
+    expect(find.byKey(const Key('settings-sync')), findsOneWidget);
+    expect(find.byKey(const Key('settings-github')), findsOneWidget);
+    expect(find.byKey(const Key('settings-room-proof')), findsOneWidget);
+    expect(find.byKey(const Key('settings-home')), findsOneWidget);
 
-    await tester.tap(find.text('Advanced sync (GitHub)'));
+    await tester.tap(find.byKey(const Key('settings-github')));
     await tester.pumpAndSettle();
 
     expect(find.byType(GitHubMirrorScreen), findsOneWidget);
@@ -29,6 +30,7 @@ void main() {
     var imported = 0;
     await tester.pumpWidget(
       MaterialApp(
+        theme: buildAppTheme(),
         home: SettingsScreen(
           onExport: () async => exported++,
           onImport: () async {
@@ -39,12 +41,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.bySemanticsLabel('Export data'));
+    await tester.tap(find.byKey(const Key('settings-export')));
     await tester.pump();
     expect(exported, 1);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
 
-    await tester.tap(find.bySemanticsLabel('Import data'));
+    await tester.tap(find.byKey(const Key('settings-import')));
     await tester.pumpAndSettle(const Duration(seconds: 5));
     expect(imported, 1);
     expect(find.byIcon(Icons.error_outline), findsOneWidget);
@@ -54,6 +56,7 @@ void main() {
     var imported = 0;
     await tester.pumpWidget(
       MaterialApp(
+        theme: buildAppTheme(),
         home: SettingsScreen(
           onImport: () async {
             imported++;
@@ -63,7 +66,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.bySemanticsLabel('Import data'));
+    await tester.tap(find.byKey(const Key('settings-import')));
     await tester.pump();
     expect(imported, 1);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
@@ -71,10 +74,13 @@ void main() {
 
   testWidgets('a cancelled import shows no feedback', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: SettingsScreen(onImport: () async => false)),
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: SettingsScreen(onImport: () async => false),
+      ),
     );
 
-    await tester.tap(find.bySemanticsLabel('Import data'));
+    await tester.tap(find.byKey(const Key('settings-import')));
     await tester.pump();
     expect(find.byType(SnackBar), findsNothing);
   });
@@ -84,6 +90,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: buildAppTheme(),
         home: SettingsScreen(
           onExport: () async {},
           onImport: () async => throw const FormatException('bad file'),
@@ -91,9 +98,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.bySemanticsLabel('Export data'));
+    await tester.tap(find.byKey(const Key('settings-export')));
     await tester.pump();
-    await tester.tap(find.bySemanticsLabel('Import data'));
+    await tester.tap(find.byKey(const Key('settings-import')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byIcon(Icons.error_outline), findsOneWidget);

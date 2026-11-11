@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/home_presence.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 
 /// One line saying what tonight's alarm will demand, and why.
 ///
@@ -52,14 +53,26 @@ class _HomePresenceLineState extends State<HomePresenceLine> {
     final verdict = _verdict;
     if (verdict == null) return const SizedBox.shrink();
     final atHome = verdict.state == PresenceState.home;
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: Text(
-        atHome
+      child: SpokenLabel(
+        semanticLabel: atHome
             ? 'Tonight: tags required — ${verdict.detail}'
             : 'Tonight: tags skipped — ${verdict.detail}',
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodySmall,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              atHome ? Icons.nfc : Icons.directions_walk,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 4),
+            Icon(atHome ? Icons.home : Icons.explore, size: 18),
+          ],
+        ),
       ),
     );
   }

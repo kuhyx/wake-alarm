@@ -6,6 +6,8 @@ import 'package:wake_alarm_sync/services/morning_session.dart';
 import 'package:wake_alarm_sync/services/session_rules.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
+import 'package:wake_alarm_sync/ui/spoken_label.dart';
 
 MorningSession _session(
   DateTime at, {
@@ -66,16 +68,23 @@ void main() {
   testWidgets('is absent until a morning has finished', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: HomeHistoryCard()));
     await tester.pump();
-    expect(find.text('Last mornings'), findsNothing);
+    expect(find.byType(Row), findsNothing);
+    expect(find.byType(DashedSlot), findsNothing);
   });
 
-  testWidgets('says so when no morning has finished', (tester) async {
+  testWidgets('shows an empty slot when no morning has finished', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(home: HomeHistoryCard(emptyText: 'None yet.')),
     );
-    expect(find.text('None yet.'), findsNothing);
+    expect(find.byType(DashedSlot), findsNothing);
     await tester.pump();
-    expect(find.text('None yet.'), findsOneWidget);
+    expect(find.byType(DashedSlot), findsOneWidget);
+    expect(
+      tester.widget<SpokenLabel>(find.byType(SpokenLabel).first).semanticLabel,
+      'None yet.',
+    );
   });
 
   testWidgets('lists the last seven with weight deltas', (tester) async {
@@ -83,14 +92,22 @@ void main() {
     for (var day = 1; day <= 9; day++) {
       await store.archive(_session(DateTime(2026, 9, day, 8), kg: 70.0 + day));
     }
-    await tester.pumpWidget(const MaterialApp(home: HomeHistoryCard()));
-    await tester.pump();
-    expect(find.text('Last mornings'), findsOneWidget);
-    expect(
-      find.textContaining('09-09 ✓ 0 re-rings · 79.0 kg (+1.0)'),
-      findsOne,
+    // As the home tile shows it: a scrolling bottom sheet.
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: SingleChildScrollView(child: HomeHistoryCard())),
+      ),
     );
-    expect(find.textContaining('09-03'), findsOneWidget);
-    expect(find.textContaining('09-02'), findsNothing);
+    await tester.pump();
+    final rows = tester
+        .widgetList<SpokenLabel>(find.byType(SpokenLabel))
+        .map((w) => w.semanticLabel)
+        .toList();
+    expect(rows, hasLength(kHistoryShown));
+    expect(rows.first, '09-09 ✓ 0 re-rings · 79.0 kg (+1.0)');
+    expect(find.text('79.0'), findsOneWidget);
+    expect(find.text(' (+1.0)'), findsWidgets);
+    expect(find.text('09-03'), findsOneWidget);
+    expect(find.text('09-02'), findsNothing);
   });
 }

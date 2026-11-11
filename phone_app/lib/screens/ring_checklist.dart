@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
+import 'package:wake_alarm_sync/services/room_proof.dart';
+import 'package:wake_alarm_sync/ui/spoken_label.dart';
 
 /// The three-step progress list shown while the room proof is incomplete.
 ///
@@ -25,6 +27,7 @@ class RingChecklist extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -32,42 +35,98 @@ class RingChecklist extends StatelessWidget {
           if (!(gate.bypassActive && stage != DismissStage.steps))
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: <Widget>[
-                  Icon(
-                    _isDone(stage)
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    color: _isDone(stage)
-                        ? theme.colorScheme.primary
-                        : theme.disabledColor,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: gate.stage == stage
-                        ? theme.textTheme.titleMedium
-                        : theme.textTheme.bodyMedium,
-                  ),
-                ],
+              child: SpokenLabel(
+                semanticLabel: label,
+                key: ValueKey<String>('ring-row-${stage.name}'),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      _isDone(stage)
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      color: _isDone(stage)
+                          ? colorScheme.primary
+                          : theme.disabledColor,
+                      size: gate.stage == stage ? 32 : 24,
+                    ),
+                    const SizedBox(width: 12),
+                    _stageGlyphs(stage, gate.stage == stage, colorScheme),
+                  ],
+                ),
               ),
             ),
         if (gate.bypassActive)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(
-              // This line persists; the status below it is overwritten by the
-              // live step count within seconds, so the reason the tags went
-              // away has to live here or the user never sees it.
-              gate.awayActive
+            child: SpokenLabel(
+              semanticLabel: gate.awayActive
                   ? 'Away from home — the tags are elsewhere. Walk, then '
                         'answer ${gate.challengesRequired} questions.'
                   : 'Tags unavailable — walk, then answer '
                         '${gate.challengesRequired} questions instead.',
-              style: theme.textTheme.bodyMedium,
+              key: const Key('ring-bypass'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    gate.awayActive ? Icons.explore : Icons.block,
+                    color: colorScheme.error,
+                  ),
+                  const Icon(Icons.arrow_forward, size: 16),
+                  const Icon(Icons.directions_walk),
+                  const Icon(Icons.arrow_forward, size: 16),
+                  const Icon(Icons.quiz_outlined),
+                  Text('${gate.challengesRequired}'),
+                ],
+              ),
             ),
           ),
       ],
     );
+  }
+
+  Widget _stageGlyphs(DismissStage stage, bool current, ColorScheme cs) {
+    final primary = cs.primary;
+    final muted = cs.onSurfaceVariant;
+    final color = current ? primary : muted;
+    final size = current ? 32.0 : 24.0;
+    switch (stage) {
+      case DismissStage.tag1:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.nfc, size: size, color: color),
+            Text(
+              '1',
+              style: TextStyle(fontSize: size, color: color),
+            ),
+          ],
+        );
+      case DismissStage.steps:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.directions_walk, size: size, color: color),
+            Text(
+              '${RoomProof.requiredSteps}',
+              style: TextStyle(fontSize: size, color: color),
+            ),
+          ],
+        );
+      case DismissStage.tag2:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.nfc, size: size, color: color),
+            Text(
+              '2',
+              style: TextStyle(fontSize: size, color: color),
+            ),
+          ],
+        );
+      case DismissStage.challenges:
+      case DismissStage.done:
+        return const SizedBox.shrink();
+    }
   }
 }

@@ -178,7 +178,7 @@ class ChallengeGenerator {
     final backwards = word.split('').reversed.join();
     return Challenge(
       kind: ChallengeKind.reverse,
-      display: 'Type this word backwards:\n$word',
+      display: word,
       answer: backwards,
       hint: 'Type the word backwards',
     );

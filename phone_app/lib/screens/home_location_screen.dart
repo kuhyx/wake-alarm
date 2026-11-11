@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 
 /// Registers the Wi-Fi and coordinate that mean "home".
 ///
@@ -111,53 +113,95 @@ class _HomeLocationScreenState extends State<HomeLocationScreen> {
     _ => 'Nothing readable here.',
   };
 
+  Widget _valueRow(IconData icon, String semanticLabel, Widget value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(icon, semanticLabel: semanticLabel, size: 24),
+          const SizedBox(width: 12),
+          Expanded(child: value),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Home location')),
+      appBar: AppBar(),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          Text(
-            'Away from home the two NFC tags are unreachable, so they are '
-            'skipped and the alarm asks the usual questions instead. The '
-            'walk is always required.',
-            style: theme.textTheme.bodyMedium,
+          _valueRow(
+            Icons.wifi,
+            'Home Wi-Fi',
+            KeyedSubtree(
+              key: const ValueKey<String>('content:home-ssid'),
+              child: _home.ssid != null
+                  ? Text(_home.ssid!)
+                  : const DashedSlot(),
+            ),
           ),
-          const SizedBox(height: 20),
-          Text('Home Wi-Fi', style: theme.textTheme.titleMedium),
-          Text(_home.ssid ?? 'not captured'),
-          const SizedBox(height: 12),
-          Text('Access points', style: theme.textTheme.titleMedium),
-          Text(_home.bssids.isEmpty ? 'none' : _home.bssids.join('\n')),
-          const SizedBox(height: 12),
-          Text('Coordinate', style: theme.textTheme.titleMedium),
-          Text(
-            _home.hasCoordinate
-                ? '${_home.lat!.toStringAsFixed(5)}, '
+          _valueRow(
+            Icons.router,
+            'Access points',
+            KeyedSubtree(
+              key: const ValueKey<String>('content:home-bssids'),
+              child: _home.bssids.isEmpty
+                  ? const DashedSlot()
+                  : Text(_home.bssids.join('\n')),
+            ),
+          ),
+          _valueRow(
+            Icons.place,
+            'Coordinate',
+            KeyedSubtree(
+              key: const ValueKey<String>('content:home-coord'),
+              child: _home.hasCoordinate
+                  ? Text(
+                      '${_home.lat!.toStringAsFixed(5)}, '
                       '${_home.lon!.toStringAsFixed(5)} '
-                      '(±${_home.radiusMeters.round()} m)'
-                : 'not captured',
+                      '(±${_home.radiusMeters.round()} m)',
+                    )
+                  : const DashedSlot(),
+            ),
           ),
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _busy ? null : _capture,
-            child: const Text('Capture this place as home'),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Press once on each Wi-Fi band (2.4 GHz and 5 GHz) so a band '
-            'switch overnight is not mistaken for travelling.',
-            style: theme.textTheme.bodySmall,
+          Row(
+            children: <Widget>[
+              FilledButton(
+                onPressed: _busy ? null : _capture,
+                child: const Icon(
+                  Icons.my_location,
+                  semanticLabel: 'Capture this place as home',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.network_wifi_2_bar,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                semanticLabel: 'Press once on each Wi-Fi band, 2.4 and 5 GHz',
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.network_wifi,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                semanticLabel: 'Press once on each Wi-Fi band, 2.4 and 5 GHz',
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           TextButton(
             onPressed: _home.isConfigured ? _clear : null,
-            child: const Text('Forget home'),
+            child: const Icon(
+              Icons.delete_outline,
+              semanticLabel: 'Forget home',
+            ),
           ),
           const SizedBox(height: 16),
-          Text(_status, style: theme.textTheme.bodyMedium),
+          StatusCue(semanticLabel: _status),
         ],
       ),
     );

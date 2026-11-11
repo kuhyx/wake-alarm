@@ -114,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _hour, minute: _minute),
-      helpText: 'Earlier than $current only',
+      helpText: '',
     );
     if (picked == null) return;
     final accepted = await AlarmPolicy.setEarlier(picked.hour, picked.minute);
@@ -171,14 +171,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Wake Alarm Sync'),
         actions: [
           IconButton(
             icon: Icon(
               Icons.event_available,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
+              semanticLabel: 'Free days',
             ),
-            tooltip: 'Free days',
             onPressed: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(builder: (_) => const FreeDaysScreen()),
@@ -188,8 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(
               Icons.sick_outlined,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
+              semanticLabel: 'Sick days',
             ),
-            tooltip: 'Sick days',
             onPressed: () => Navigator.push<void>(
               context,
               MaterialPageRoute<void>(builder: (_) => const SickDaysScreen()),
@@ -200,6 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Icons.settings,
               // Dimmed relative to the adjacent title text (rule 28).
               color: Theme.of(context).colorScheme.onSurfaceVariant,
+              semanticLabel: 'Settings',
             ),
             onPressed: () async {
               await Navigator.push<void>(

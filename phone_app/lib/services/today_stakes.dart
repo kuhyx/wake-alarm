@@ -1,32 +1,12 @@
 import 'package:wake_alarm_sync/services/alarm_ramp.dart';
 import 'package:wake_alarm_sync/services/enforcement_state.dart';
 import 'package:wake_alarm_sync/services/stakes.dart';
+import 'package:wake_alarm_sync/services/stakes_view.dart';
+
+export 'package:wake_alarm_sync/services/stakes_view.dart';
 
 /// An alarm time of day.
 typedef AlarmTime = ClockTime;
-
-/// What the stakes card says, already in words.
-class StakesView {
-  /// Creates a view.
-  const StakesView({
-    required this.title,
-    required this.stakes,
-    required this.pending,
-    required this.streak,
-  });
-
-  /// "Today · Thu 2 Oct — stick day".
-  final String title;
-
-  /// What the coming morning costs or earns.
-  final List<String> stakes;
-
-  /// A lockdown, penalty or escape already in force.
-  final List<String> pending;
-
-  /// The streak line.
-  final String streak;
-}
 
 /// The stakes of the next undecided morning, from the native [state].
 ///
@@ -59,6 +39,10 @@ StakesView describeStakes({
       ? 'sick day'
       : (stick ? 'stick day' : 'carrot day');
   final lines = <String>[];
+  DateTime? dismissBy;
+  DateTime? lockThrough;
+  DateTime? finishBy;
+  DateTime? pcRingAt;
   if (alarm == null) {
     lines.add('No alarm armed yet — nothing at stake.');
   } else if (free) {
@@ -74,21 +58,26 @@ StakesView describeStakes({
       final next = todayOpen
           ? "tomorrow's"
           : "${_weekday(_plusDays(day, 1))}'s";
+      dismissBy = ringAt.add(stickGrace);
+      lockThrough = lock;
       lines.add(
-        'Miss (no dismiss by ${hhmm(ringAt.add(stickGrace))}) → apps '
+        'Miss (no dismiss by ${hhmm(dismissBy)}) → apps '
         'locked through ${formatDay(lock)} + $next PC leniency gone',
       );
     } else {
+      finishBy = carrotCutoff(ringAt);
       lines.add(
-        'Finish the morning by ${hhmm(carrotCutoff(ringAt))} → PC open '
+        'Finish the morning by ${hhmm(finishBy)} → PC open '
         'until ${_hhmm(completedUntil.hour, completedUntil.minute)}',
       );
     }
+    pcRingAt = ringAt.add(pcPhoneSilentAfter);
     lines.add(
-      'PC rings at ${hhmm(ringAt.add(pcPhoneSilentAfter))} if the phone is '
+      'PC rings at ${hhmm(pcRingAt)} if the phone is '
       'silent (up to ${pcRingCap.inMinutes} min)',
     );
   }
+  final locked = state.lockedThrough;
   return StakesView(
     title: '$when · ${formatDay(day)} — $kind',
     stakes: lines,
@@ -96,6 +85,25 @@ StakesView describeStakes({
     streak:
         'Streak: ${state.streak} missed stick '
         'day${state.streak == 1 ? '' : 's'} in a row',
+    kind: free
+        ? StakesDayKind.free
+        : sick
+        ? StakesDayKind.sick
+        : (stick ? StakesDayKind.stick : StakesDayKind.carrot),
+    isToday: todayOpen,
+    day: day,
+    streakCount: state.streak,
+    dismissBy: dismissBy,
+    lockThrough: lockThrough,
+    finishBy: finishBy,
+    pcOpenUntil: finishBy == null ? null : completedUntil,
+    pcRingAt: pcRingAt,
+    escapedToday: state.escapedToday,
+    lockedThrough:
+        locked != null && !locked.isBefore(today) && !state.escapedToday
+        ? locked
+        : null,
+    missedToday: state.lastMiss == today && !state.escapedToday,
   );
 }
 
@@ -103,6 +111,16 @@ StakesView describeStakes({
 /// or null when this ring has none (not a stick day, free, sick, already
 /// dismissed, excused or missed).
 String? ringStakesLine(EnforcementState state) {
+  final stakes = ringStakes(state);
+  if (stakes == null) return null;
+  return 'Stick day: no dismiss by ${hhmm(stakes.by)} → apps locked through '
+      '${formatDay(stakes.lockThrough)}';
+}
+
+/// Returns the deadline and lockdown date for the ring stakes line, or null
+/// when this ring has none (not a stick day, free, sick, already dismissed,
+/// excused or missed).
+({DateTime by, DateTime lockThrough})? ringStakes(EnforcementState state) {
   final stored = _stored(state);
   if (stored == null ||
       !isWorkday(state.today) ||
@@ -114,8 +132,7 @@ String? ringStakesLine(EnforcementState state) {
   if (state.lastMiss == state.today) return null;
   final by = _at(state.today, stored).add(stickGrace);
   final lock = state.lockIfMissToday ?? _plusDays(state.today, 1);
-  return 'Stick day: no dismiss by ${hhmm(by)} → apps locked through '
-      '${formatDay(lock)}';
+  return (by: by, lockThrough: lock);
 }
 
 /// The carrot's cutoff for a morning whose alarm rings at [ringAt]:

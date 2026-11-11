@@ -28,7 +28,12 @@ class EnergyPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text('Energy', style: Theme.of(context).textTheme.labelLarge),
+        const Row(
+          children: <Widget>[
+            Icon(Icons.bolt, semanticLabel: 'Energy'),
+            SizedBox(width: 8),
+          ],
+        ),
         const SizedBox(height: 4),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

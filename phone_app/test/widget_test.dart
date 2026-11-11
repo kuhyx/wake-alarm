@@ -4,6 +4,6 @@ import 'package:wake_alarm_sync/main.dart';
 void main() {
   testWidgets('App renders without crashing', (tester) async {
     await tester.pumpWidget(const WakeAlarmSyncApp());
-    expect(find.text('Wake Alarm Sync'), findsOneWidget);
+    expect(find.bySemanticsLabel('Alarm is armed for'), findsOneWidget);
   });
 }

@@ -40,13 +40,13 @@ from gatelock.log_integrity import verify_entry_hmac
 
 from wake_alarm._constants import MORNING_SESSION_FILE
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._strip_pips import pips as _pips
 
 if TYPE_CHECKING:
     from subprocess import Popen
 
 _logger = logging.getLogger(__name__)
 
-TITLE = "Morning session not finished"
 REFRESH_EVERY_SECONDS = 30.0
 REFRESH_COMMAND = [
     "systemctl",
@@ -164,10 +164,9 @@ def _verdict(entry: dict[str, object] | None, now: datetime) -> StripContent | s
         return f"the exemption ended at {exempt_until.isoformat()}"
     lines: list[str] = []
     step = entry.get("next_step")
-    if isinstance(step, str) and step:
-        lines.append(f"Next: {step}")
-    lines.append(f"Locks return at {exempt_until.astimezone(now.tzinfo):%H:%M}")
-    return StripContent(TITLE, tuple(lines))
+    title = _pips(step)
+    lines.append(f"◷ {exempt_until.astimezone(now.tzinfo):%H:%M}")
+    return StripContent(title, tuple(lines))
 
 
 def strip_content(

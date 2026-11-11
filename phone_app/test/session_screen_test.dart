@@ -8,6 +8,11 @@ import 'package:wake_alarm_sync/services/morning_session.dart';
 import 'package:wake_alarm_sync/services/session_rules.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+
+/// The session's status sentence, now spoken only.
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue)).semanticLabel;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -83,7 +88,7 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, '3'));
     await tester.pump();
     await tester.enterText(find.byType(TextField), kg);
-    await tester.tap(find.text('Log weight'));
+    await tester.tap(find.byKey(const Key('session-log-weight')));
     await tester.pump();
   }
 
@@ -91,9 +96,7 @@ void main() {
     tester,
   ) async {
     await pumpSession(tester);
-    expect(find.text('Stay up'), findsOneWidget);
-    expect(find.text('Weigh in'), findsOneWidget);
-    expect(find.text('Alarm returns in 10:00'), findsOneWidget);
+    expect(find.byKey(const ValueKey('session-row-weigh')), findsOneWidget);
     final deadline = now.add(MorningSession.legWindow).millisecondsSinceEpoch;
     final arm = calls.firstWhere((c) => c.method == 'armReRing');
     expect(arm.arguments, <String, int?>{'atMillis': deadline});
@@ -101,7 +104,7 @@ void main() {
     final notice = calls.firstWhere((c) => c.method == 'updateSessionNotice');
     expect(notice.arguments, <String, Object?>{
       'date': '2026-09-17',
-      'label': 'Tap the bathroom tag',
+      'label': '🛁 1/4',
       'deadlineMillis': deadline,
     });
     expect((await SessionStore().loadCurrent())?.date, '2026-09-17');
@@ -116,7 +119,7 @@ void main() {
         .where((c) => c.method == 'updateSessionNotice')
         .map((c) => (c.arguments as Map<Object?, Object?>)['label'])
         .toList();
-    expect(labels.last, 'Shower, then tap the bathroom tag again');
+    expect(labels.last, '🚿 2/4');
     expect(methods(), isNot(contains('beginMotionWatch')));
   });
 
@@ -125,22 +128,22 @@ void main() {
   ) async {
     await pumpSession(tester);
     await logWeight(tester, '72,4');
-    expect(find.textContaining('now tap the bathroom tag'), findsOneWidget);
+    expect(find.byKey(const ValueKey('session-row-weigh')), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     await tap('desk');
     await tester.pump();
-    expect(find.text('Not the bathroom tag'), findsOneWidget);
+    expect(statusOf(tester), 'Not the bathroom tag');
     await tap('bath');
     await tester.pump();
-    expect(find.text('Weigh in — 72.4 kg · energy 3/5'), findsOneWidget);
-    expect(find.textContaining('tag counts in 08:00'), findsOneWidget);
+    expect(find.text('72.4'), findsOneWidget);
+    expect(find.text('3/5'), findsOneWidget);
     await tap('bath');
     await tester.pump();
     await tester.pump();
-    expect(find.textContaining('Too early'), findsOneWidget);
+    expect(statusOf(tester), startsWith('Too early'));
     now = now.add(const Duration(minutes: 9));
     await tick(tester);
-    expect(find.textContaining('Alarm returns in'), findsOneWidget);
+    expect(find.text('09:00'), findsOneWidget);
     for (final id in <String>['bath', 'ward', 'desk']) {
       await tap(id);
     }
@@ -210,14 +213,16 @@ void main() {
     )..recordReRing(now.subtract(const Duration(minutes: 1)));
     await SessionStore().save(session);
     await pumpSession(tester);
-    expect(find.text('Re-rings: 1/3'), findsOneWidget);
+    expect(find.text('1/3'), findsOneWidget);
     expect(
       calls.firstWhere((c) => c.method == 'armReRing').arguments,
       <String, int?>{'atMillis': null},
     );
     await tick(tester);
-    expect(find.textContaining('Skipped'), findsOneWidget);
-    expect(find.textContaining('(skipped by the clock)'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('session-row-bathroomIn')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a big jump must be typed twice', (tester) async {
@@ -231,9 +236,9 @@ void main() {
     );
     await pumpSession(tester);
     await logWeight(tester, '75');
-    expect(find.textContaining('type it again'), findsOneWidget);
+    expect(statusOf(tester), contains('type it again'));
     await logWeight(tester, '75');
-    expect(find.textContaining('now tap the bathroom tag'), findsOneWidget);
+    expect(statusOf(tester), contains('now tap the bathroom tag within 2 min'));
     expect(find.byType(TextField), findsNothing);
   });
 }

@@ -5,9 +5,23 @@ import 'package:wake_alarm_sync/screens/home_body.dart';
 import 'package:wake_alarm_sync/screens/stakes_card.dart';
 import 'package:wake_alarm_sync/services/escape_log.dart';
 import 'package:wake_alarm_sync/services/stakes.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 import 'fake_enforcement_channel.dart';
+
+/// Every row's spoken sentence: the card paints glyphs, the words are here.
+List<String> spoken(WidgetTester tester) => tester
+    .widgetList<SpokenLabel>(find.byType(SpokenLabel))
+    .map((w) => w.semanticLabel)
+    .toList();
+
+/// The escape outcome, now a StatusCue.
+String cueWords(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue)).semanticLabel;
+
+final Finder escapeButton = find.byKey(const Key('stakes-escape'));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,12 +68,18 @@ void main() {
       lastMiss: '2026-09-30',
     );
     await pumpCard(tester);
-    expect(find.text('Today · Thu 1 Oct — stick day'), findsOneWidget);
-    expect(find.textContaining('no dismiss by 07:15'), findsOneWidget);
-    expect(find.textContaining('PC rings at 07:02'), findsOneWidget);
-    expect(find.text('Apps locked through Fri 2 Oct.'), findsOneWidget);
-    expect(find.text('Streak: 1 missed stick day in a row'), findsOneWidget);
-    expect(find.text('That was a bug'), findsOneWidget);
+    final words = spoken(tester);
+    expect(words, contains('Today · Thu 1 Oct — stick day'));
+    expect(words.where((w) => w.contains('no dismiss by 07:15')), hasLength(1));
+    expect(words.where((w) => w.contains('PC rings at 07:02')), hasLength(1));
+    expect(words, contains('Apps locked through Fri 2 Oct.'));
+    expect(words, contains('Streak: 1 missed stick day in a row'));
+    // Painted: the gavel day, the deadline, the lock date and the streak.
+    expect(find.byIcon(Icons.gavel_outlined), findsOneWidget);
+    expect(find.text('07:15'), findsOneWidget);
+    expect(find.text('02.10'), findsWidgets);
+    expect(find.text('1'), findsOneWidget);
+    expect(escapeButton, findsOneWidget);
   });
 
   testWidgets('absent when the native side answers nothing', (tester) async {
@@ -83,26 +103,25 @@ void main() {
     );
     await tester.pump();
     // Friday's ramp with only the seed minutes earned: 07:57.
-    expect(find.textContaining('Finish the morning by 09:27'), findsOneWidget);
-    expect(find.textContaining('PC rings at 07:59'), findsOneWidget);
+    final words = spoken(tester);
+    expect(words.where((w) => w.contains('Finish the morning by 09:27')), [
+      isNotEmpty,
+    ]);
+    expect(words.where((w) => w.contains('PC rings at 07:59')), hasLength(1));
+    expect(find.text('09:27'), findsOneWidget);
+    expect(find.text('07:59'), findsOneWidget);
   });
 
   testWidgets('the escape button is gone after the last day', (tester) async {
     native.state = nativeState(today: '2026-10-16');
     await pumpCard(tester, now: DateTime(2026, 10, 16, 6));
-    expect(find.text('That was a bug'), findsNothing);
+    expect(escapeButton, findsNothing);
   });
 
   testWidgets('the escape button is disabled while syncing', (tester) async {
     native.state = nativeState();
     await pumpCard(tester, busy: true);
-    final button = tester.widget<TextButton>(
-      find.ancestor(
-        of: find.text('That was a bug'),
-        matching: find.byWidgetPredicate((w) => w is TextButton),
-      ),
-    );
-    expect(button.onPressed, isNull);
+    expect(tester.widget<IconButton>(escapeButton).onPressed, isNull);
   });
 
   testWidgets('escaping needs a long reason, then lifts and publishes', (
@@ -123,39 +142,43 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.tap(find.text('That was a bug'));
+    await tester.tap(escapeButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     FilledButton confirm() =>
-        tester.widget<FilledButton>(find.byType(FilledButton));
+        tester.widget<FilledButton>(find.byKey(const Key('escape-confirm')));
     expect(confirm().onPressed, isNull);
     await tester.enterText(find.byType(TextField), 'too short');
     await tester.pump();
     expect(confirm().onPressed, isNull);
-    expect(find.text('9 / $escapeReasonMinChars characters'), findsOneWidget);
+    expect(find.text('9/$escapeReasonMinChars'), findsOneWidget);
 
     const reason = 'The tag on the bathroom wall fell off overnight.';
     await tester.enterText(find.byType(TextField), reason);
     await tester.pump();
     expect(confirm().onPressed, isNotNull);
-    await tester.tap(find.text('Excuse this morning'));
+    await tester.tap(find.byKey(const Key('escape-confirm')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(native.methods, contains('escapeToday'));
     expect((await EscapeLog.load()).single['reason'], reason);
     expect(escaped, 1);
-    expect(find.textContaining('Excused'), findsOneWidget);
+    expect(cueWords(tester), startsWith('Excused'));
+    expect(
+      tester.widget<StatusCue>(find.byType(StatusCue)).resolvedKind,
+      CueKind.ok,
+    );
   });
 
   testWidgets('cancelling the dialog changes nothing', (tester) async {
     native.state = nativeState();
     final escaped = await pumpCard(tester);
-    await tester.tap(find.text('That was a bug'));
+    await tester.tap(escapeButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byKey(const Key('escape-cancel')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(native.methods, isNot(contains('escapeToday')));
@@ -167,15 +190,19 @@ void main() {
       ..state = nativeState()
       ..escapeResult = false;
     await pumpCard(tester);
-    await tester.tap(find.text('That was a bug'));
+    await tester.tap(escapeButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.enterText(find.byType(TextField), 'y' * escapeReasonMinChars);
     await tester.pump();
-    await tester.tap(find.text('Excuse this morning'));
+    await tester.tap(find.byKey(const Key('escape-confirm')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.textContaining('refused'), findsOneWidget);
+    expect(cueWords(tester), contains('refused'));
+    expect(
+      tester.widget<StatusCue>(find.byType(StatusCue)).resolvedKind,
+      CueKind.error,
+    );
     expect(await EscapeLog.load(), isEmpty);
   });
 
@@ -211,8 +238,9 @@ void main() {
         home: Scaffold(body: StakesCard(emptyText: 'No stakes.')),
       ),
     );
-    expect(find.text('No stakes.'), findsNothing);
+    expect(find.byType(DashedSlot), findsNothing);
     await tester.pump();
-    expect(find.text('No stakes.'), findsOneWidget);
+    expect(find.byType(DashedSlot), findsOneWidget);
+    expect(spoken(tester).first, 'No stakes.');
   });
 }

@@ -34,50 +34,67 @@ class _EscapeDialogState extends State<EscapeDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final ready = _length >= escapeReasonMinChars;
+    const reasonWords = 'What went wrong?';
     return AlertDialog(
       // The keyboard covers half a small screen; scroll instead of overflow.
       scrollable: true,
-      title: const Text('That was a bug'),
+      icon: const Icon(
+        Icons.bug_report_outlined,
+        semanticLabel: 'That was a bug',
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Text(
-            'Lifts the app lockdown, clears the streak, cancels today’s PC '
-            'penalty and stops a ringing PC. Every use is listed in the '
-            'incident report.',
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _reason,
-            autofocus: true,
-            maxLines: 4,
-            minLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'What went wrong?',
-              border: OutlineInputBorder(),
+          MergeSemantics(
+            child: Semantics(
+              label: reasonWords,
+              child: TextField(
+                controller: _reason,
+                autofocus: true,
+                maxLines: 4,
+                minLines: 2,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.edit_note),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
             ),
-            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 8),
-          Text(
-            '$_length / $escapeReasonMinChars characters',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: LinearProgressIndicator(
+                  value: (_length / escapeReasonMinChars)
+                      .clamp(0, 1)
+                      .toDouble(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '$_length/$escapeReasonMinChars',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ],
       ),
       actions: <Widget>[
-        TextButton(
+        IconButton(
+          key: const Key('escape-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          icon: const Icon(Icons.close, semanticLabel: 'Cancel'),
         ),
         FilledButton(
+          key: const Key('escape-confirm'),
           onPressed: ready
               ? () => Navigator.of(context).pop(_reason.text.trim())
               : null,
-          child: const Text('Excuse this morning'),
+          child: const Icon(Icons.check, semanticLabel: 'Excuse this morning'),
         ),
       ],
     );

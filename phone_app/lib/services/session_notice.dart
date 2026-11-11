@@ -34,11 +34,20 @@ Future<void> pointNativeAtLeg(
   );
 }
 
-/// The notification's one line: the leg to satisfy, or what happens instead.
+/// The notification's one line: glyph + position count, with a running-clock
+/// marker when the re-ring was spent.
 String noticeLabel(MorningSession session) {
   final leg = session.currentLeg!;
+  final glyphs = <SessionLeg, String>{
+    SessionLeg.bathroomIn: '🛁',
+    SessionLeg.showerDone: '🚿',
+    SessionLeg.dressed: '👕',
+    SessionLeg.atDesk: '🪑',
+  };
+  final glyph = glyphs[leg] ?? '•';
+  var text = '$glyph ${leg.index + 1}/${SessionLeg.values.length}';
   if (session.deadlineRung.contains(leg)) {
-    return '${leg.label} — passes by itself soon';
+    text += ' ⏳';
   }
-  return leg.label;
+  return text;
 }

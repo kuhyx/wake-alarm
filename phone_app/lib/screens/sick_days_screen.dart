@@ -9,6 +9,7 @@ import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 import 'package:wake_alarm_sync/services/sick_day_sync.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// The phone's picker for the shared sick-day pool (`~/src/utils/sickdays`).
@@ -68,7 +69,8 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
   bool _refused = false;
 
   /// What the native ring-path cache holds, read back over the channel.
-  String _cache = '';
+  List<String>? _cache;
+  bool _cacheRead = false;
 
   late DateTime _month = DateTime(_today.year, _today.month);
 
@@ -112,12 +114,8 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _cache =
-          'Alarm cache: ${switch (dates) {
-            null => 'unreadable',
-            [] => 'none',
-            final d => d.join(', '),
-          }}';
+      _cache = dates;
+      _cacheRead = true;
     });
   }
 
@@ -189,23 +187,20 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
     final marks = Theme.of(context).extension<DayMarkColors>()!;
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.sick_outlined),
-            SizedBox(width: 8),
-            Text('Sick days'),
-          ],
-        ),
+        title: const Row(children: [Icon(Icons.sick_outlined)]),
         actions: [
           IconButton(
-            icon: const Icon(Icons.sync),
-            tooltip: 'Sync now',
+            icon: const Icon(Icons.sync, semanticLabel: 'Sync now'),
             onPressed: _busy ? null : () => unawaited(_sync()),
           ),
         ],
       ),
       body: pool == null
-          ? Center(child: Text(_status.isEmpty ? 'Loading…' : _status))
+          ? Center(
+              child: _status.isEmpty
+                  ? const CircularProgressIndicator()
+                  : StatusCue(semanticLabel: _status),
+            )
           : SickDaysBody(
               upcoming: [
                 for (final day in pool.sickDays())
@@ -214,6 +209,7 @@ class _SickDaysScreenState extends State<SickDaysScreen> {
               keptOf: pool.keptLockers,
               status: _status,
               cache: _cache,
+              cacheRead: _cacheRead,
               refused: _refused,
               calendar: DayCalendar(
                 month: _month,

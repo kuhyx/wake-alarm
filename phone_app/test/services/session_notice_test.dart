@@ -31,13 +31,13 @@ void main() {
     scheduler = AlarmScheduler(channel: channel);
   });
 
-  test('the label is the live leg', () {
-    expect(noticeLabel(fresh()), 'Tap the bathroom tag');
+  test('the label is the live leg glyph + position', () {
+    expect(noticeLabel(fresh()), '🛁 1/4');
   });
 
-  test('a leg whose re-ring is spent says it will pass by itself', () {
+  test('a leg whose re-ring is spent appends a running-clock marker', () {
     final s = fresh()..deadlineRung.add(SessionLeg.bathroomIn);
-    expect(noticeLabel(s), 'Tap the bathroom tag — passes by itself soon');
+    expect(noticeLabel(s), '🛁 1/4 ⏳');
   });
 
   test('a finished session drops the deadline and posts no notice', () async {
@@ -64,7 +64,7 @@ void main() {
     expect(calls[0].arguments, <String, int?>{'atMillis': deadline});
     expect(calls[1].arguments, <String, Object?>{
       'date': '2026-09-17',
-      'label': 'Tap the bathroom tag',
+      'label': '🛁 1/4',
       'deadlineMillis': deadline,
     });
   });

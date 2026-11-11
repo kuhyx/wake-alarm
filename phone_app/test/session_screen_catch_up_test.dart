@@ -69,7 +69,7 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, '3'));
     await tester.pump();
     await tester.enterText(find.byType(TextField), kg);
-    await tester.tap(find.text('Log weight'));
+    await tester.tap(find.byKey(const Key('session-log-weight')));
     await tester.pump();
   }
 

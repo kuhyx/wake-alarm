@@ -10,11 +10,19 @@ import 'package:wake_alarm_sync/services/free_day_pool.dart';
 import 'package:wake_alarm_sync/services/free_day_sync.dart';
 import 'package:wake_alarm_sync/services/sick_day_pool.dart';
 import 'package:wake_alarm_sync/services/sick_day_sync.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 import 'fake_day_pool_store.dart';
 
 final _today = DateTime(2026, 10, 16);
+
+Finder iconLabelled(String label) =>
+    find.byWidgetPredicate((w) => w is Icon && w.semanticLabel == label);
+
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue).first).semanticLabel;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -95,10 +103,10 @@ void main() {
   Future<void> viaSheet(
     WidgetTester tester,
     DateTime day,
-    String button,
+    String buttonKey,
   ) async {
     await tapDay(tester, day);
-    await tester.tap(find.text(button));
+    await tester.tap(find.byKey(Key(buttonKey)));
     await tester.pumpAndSettle();
   }
 
@@ -110,10 +118,10 @@ void main() {
 
   testWidgets('every day starts normal; syncs on open', (tester) async {
     await open(tester);
-    expect(find.text('Sick days'), findsOneWidget);
-    expect(find.byIcon(Icons.sick_outlined), findsOneWidget);
-    expect(find.text('October 2026'), findsOneWidget);
-    expect(find.text('None ahead.'), findsOneWidget);
+    expect(find.byType(SickDaysScreen), findsOneWidget);
+    expect(find.byIcon(Icons.sick_outlined), findsWidgets);
+    expect(find.text('10/2026'), findsOneWidget);
+    expect(find.byType(DashedSlot), findsOneWidget);
     expect(syncs, 1);
     expect(caches.last, isEmpty);
   });
@@ -121,13 +129,13 @@ void main() {
   testWidgets('today can be marked sick and cleared again', (tester) async {
     await open(tester);
 
-    await viaSheet(tester, _today, 'Mark sick');
+    await viaSheet(tester, _today, 'sick-mark');
     expect(sick.isSick(_today), isTrue);
-    expect(find.text('Fri 2026-10-16'), findsOneWidget);
+    expect(find.text('16.10.2026'), findsOneWidget);
     expect(caches.last, ['2026-10-16'], reason: 'native cache rewritten');
     expect(syncs, 2);
 
-    await viaSheet(tester, _today, 'Clear sick day');
+    await viaSheet(tester, _today, 'sick-clear');
     expect(sick.isSick(_today), isFalse);
     expect(caches.last, isEmpty);
     expect(syncs, 3);
@@ -135,21 +143,21 @@ void main() {
 
   testWidgets('the native cache is read back after a mark', (tester) async {
     await open(tester);
-    expect(find.text('Alarm cache: none'), findsOneWidget);
-    await viaSheet(tester, DateTime(2026, 10, 18), 'Mark sick');
-    await viaSheet(tester, DateTime(2026, 10, 17), 'Mark sick');
-    expect(find.text('Alarm cache: 2026-10-17, 2026-10-18'), findsOneWidget);
+    expect(iconLabelled('Alarm cache: none'), findsOneWidget);
+    await viaSheet(tester, DateTime(2026, 10, 18), 'sick-mark');
+    await viaSheet(tester, DateTime(2026, 10, 17), 'sick-mark');
+    expect(iconLabelled('Alarm cache: 2026-10-17, 2026-10-18'), findsOneWidget);
   });
 
   testWidgets('an unreadable native cache never reads as none', (tester) async {
     cacheUnreadable = true;
     await open(tester);
-    expect(find.text('Alarm cache: unreadable'), findsOneWidget);
+    expect(iconLabelled('Alarm cache: unreadable'), findsOneWidget);
   });
 
   testWidgets('a future day is marked in the sick colour', (tester) async {
     await open(tester);
-    await viaSheet(tester, DateTime(2026, 10, 20), 'Mark sick');
+    await viaSheet(tester, DateTime(2026, 10, 20), 'sick-mark');
     expect(sick.isSick(DateTime(2026, 10, 20)), isTrue);
     final box = tester.widget<DayCell>(cell(DateTime(2026, 10, 20)));
     expect(box.markColor, DayMarkColors.dark.sick);
@@ -175,8 +183,8 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, 3000));
     await tester.pumpAndSettle();
     expect(
-      find.text('2026-10-20 is a free day — release it in Free days first.'),
-      findsOneWidget,
+      statusOf(tester),
+      contains('2026-10-20 is a free day — release it in Free days first.'),
     );
     expect(syncs, 1);
   });
@@ -190,7 +198,7 @@ void main() {
     expect(sick.isSick(DateTime(2026, 10, 20)), isFalse);
     await tester.drag(find.byType(ListView), const Offset(0, 3000));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Free-day pool unavailable'), findsOneWidget);
+    expect(statusOf(tester), contains('Free-day pool unavailable'));
   });
 
   testWidgets('month arrows reach January and the end of next year', (
@@ -198,16 +206,16 @@ void main() {
   ) async {
     await open(tester);
     for (var i = 0; i < 9; i++) {
-      await tester.tap(find.byTooltip('Previous month'));
+      await tester.tap(find.byIcon(Icons.chevron_left));
       await tester.pumpAndSettle();
     }
-    expect(find.text('January 2026'), findsOneWidget);
+    expect(find.text('01/2026'), findsOneWidget);
     for (var i = 0; i < 23; i++) {
-      await tester.tap(find.byTooltip('Next month'));
+      await tester.tap(find.byIcon(Icons.chevron_right));
       await tester.pumpAndSettle();
     }
-    expect(find.text('December 2027'), findsOneWidget);
-    await tester.tap(find.byTooltip('Sync now'));
+    expect(find.text('12/2027'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.sync));
     await tester.pumpAndSettle();
     expect(syncs, 2);
   });
@@ -223,6 +231,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Error: pool unavailable'), findsOneWidget);
+    expect(statusOf(tester), contains('Error: pool unavailable'));
   });
 }

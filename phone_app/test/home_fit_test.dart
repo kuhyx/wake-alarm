@@ -36,11 +36,10 @@ void main() {
         theme: buildAppTheme(),
         home: Scaffold(
           appBar: AppBar(
-            title: const Text('Wake Alarm Sync'),
             actions: const [
-              Icon(Icons.event_available),
-              Icon(Icons.sick_outlined),
-              Icon(Icons.settings),
+              Icon(Icons.event_available, semanticLabel: 'Free days'),
+              Icon(Icons.sick_outlined, semanticLabel: 'Sick days'),
+              Icon(Icons.settings, semanticLabel: 'Settings'),
             ],
           ),
           body: HomeBody(
@@ -91,7 +90,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expectNoVerticalScroll(tester);
     const bottomChrome = 2400 / 2.625 - 63 / 2.625;
-    final button = find.text('Wake me earlier tomorrow');
+    final button = find.byIcon(Icons.arrow_upward);
     expect(tester.getRect(button).bottom, lessThan(bottomChrome));
     await tester.tap(button);
     expect(picked, 1);

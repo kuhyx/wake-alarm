@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/day_calendar.dart';
 import 'package:wake_alarm_sync/screens/sick_day_sheet.dart';
-import 'package:wake_alarm_sync/services/free_day_pool.dart';
-import 'package:wake_alarm_sync/ui/theme.dart';
+import 'package:wake_alarm_sync/services/sick_day_keep.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 
 /// The sick-day picker's body: what a sick day does, the status line, the
 /// month calendar and the sick days still ahead.
@@ -16,6 +17,7 @@ class SickDaysBody extends StatelessWidget {
     required this.upcoming,
     required this.status,
     required this.cache,
+    required this.cacheRead,
     required this.refused,
     required this.calendar,
     required this.keptOf,
@@ -34,74 +36,114 @@ class SickDaysBody extends StatelessWidget {
   /// The status line; may be a raw `Error: …`.
   final String status;
 
-  /// The native ring-path cache, read back (`Alarm cache: …`).
-  final String cache;
+  /// The native ring-path cache, read back (list of ISO
+/// dates or null for unreadable).
+  final List<String>? cache;
+
+  /// Whether the cache has been read at least once.
+  final bool cacheRead;
 
   /// Whether [status] is a refused tap, drawn like an error.
   final bool refused;
 
-  static const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  String _label(DateTime day) =>
-      '${_weekdays[day.weekday - 1]} ${FreeDayPool.toIso(day)}';
+  String _toDdMmYyyy(DateTime day) {
+    final d = day.day.toString().padLeft(2, '0');
+    final m = day.month.toString().padLeft(2, '0');
+    return '$d.$m.${day.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final statusColors = theme.extension<AppStatusColors>()!;
     final failed = refused || status.contains('Error');
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            'Tap a day to mark it sick and choose which lockers still '
-            'apply; tap a sick day to change them or clear it. Today or '
-            'later only. No limit and no reason needed.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'On a sick day every locker left off stands down: no alarm, no '
-            'lock, and work left undone is dropped rather than carried '
-            'forward. A locker switched on behaves as on a normal day; a dot '
-            'marks a sick day that keeps one.',
-            style: theme.textTheme.bodySmall?.copyWith(color: muted),
-          ),
           if (status.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text(
-              status,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: failed ? theme.colorScheme.error : statusColors.success,
-              ),
+            StatusCue(
+              semanticLabel: status,
+              kind: failed ? CueKind.error : null,
             ),
           ],
-          if (cache.isNotEmpty) ...[
+          if (cacheRead) ...[
             const SizedBox(height: 8),
-            Text(cache, style: TextStyle(color: muted)),
+            Row(
+              children: [
+                Icon(
+                  Icons.memory,
+                  size: 16,
+                  semanticLabel: _cacheSemanticLabel,
+                ),
+                const SizedBox(width: 8),
+                _buildCacheContent(theme),
+              ],
+            ),
           ],
           const SizedBox(height: 16),
           calendar,
           const SizedBox(height: 24),
-          Text('Marked sick', style: theme.textTheme.titleMedium),
+          const Row(
+            children: [
+              Icon(Icons.sick_outlined, semanticLabel: 'Marked sick'),
+            ],
+          ),
           const SizedBox(height: 8),
           if (upcoming.isEmpty)
-            Text('None ahead.', style: TextStyle(color: muted)),
+            const SpokenLabel(
+              semanticLabel: 'None ahead.',
+              child: DashedSlot(),
+            ),
           for (final day in upcoming)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(_label(day)),
-              subtitle: switch (keptLabel(keptOf(day))) {
-                '' => null,
-                final kept => Text('Kept: $kept'),
-              },
+              title: Text(_toDdMmYyyy(day)),
+              subtitle: _keptIcons(keptOf(day)),
             ),
         ],
       ),
+    );
+  }
+
+  String get _cacheSemanticLabel {
+    if (cache == null) return 'Alarm cache: unreadable';
+    if (cache!.isEmpty) return 'Alarm cache: none';
+    return 'Alarm cache: ${cache!.join(', ')}';
+  }
+
+  Widget _buildCacheContent(ThemeData theme) {
+    if (cache == null) {
+      return Icon(
+        Icons.error_outline,
+        color: theme.colorScheme.error,
+        size: 16,
+      );
+    }
+    if (cache!.isEmpty) {
+      return Icon(
+        Icons.check,
+        size: 16,
+        color: theme.colorScheme.onSurfaceVariant,
+      );
+    }
+    return Text(
+      cache!.join(', '),
+      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+    );
+  }
+
+  Widget? _keptIcons(Set<String> kept) {
+    if (kept.isEmpty) return null;
+    return Row(
+      children: [
+        for (final locker in SickLocker.all)
+          if (kept.contains(locker))
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(sickLockerIcons[locker], size: 16),
+            ),
+      ],
     );
   }
 }

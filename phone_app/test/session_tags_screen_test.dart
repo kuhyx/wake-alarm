@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wake_alarm_sync/screens/session_tags_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -45,20 +47,29 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SessionTagsScreen()));
     await tester.pump();
-    expect(find.textContaining('Bathroom (scale + shower): none'), findsOne);
-    expect(find.textContaining('Wardrobe: none'), findsOneWidget);
-    expect(find.textContaining('Desk: none'), findsOneWidget);
+    expect(find.byType(DashedSlot), findsNWidgets(3));
   });
 
   testWidgets('a scan registers the tag in its slot', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SessionTagsScreen()));
     await tester.pump();
-    await tester.tap(find.text('Register wardrobe tag'));
+    await tester.tap(find.byKey(const ValueKey<String>('register-wardrobe')));
     await tester.pump();
-    expect(find.text('Waiting for tag…'), findsOneWidget);
+
+    // Busy indicator in the button
+    final registerBtn = tester.widget<FilledButton>(
+      find.byKey(const ValueKey<String>('register-wardrobe')),
+    );
+    expect(registerBtn.child, isA<SizedBox>());
+
+    expect(find.byType(StatusCue), findsOneWidget);
+    final busyCue = tester.widget<StatusCue>(find.byType(StatusCue));
+    expect(busyCue.resolvedKind, CueKind.busy);
+
     await tapTag(tester, 'w1');
-    expect(find.textContaining('Wardrobe: w1'), findsOneWidget);
-    expect(find.text('The wardrobe tag is registered.'), findsOneWidget);
+    expect(find.text('w1'), findsOneWidget);
+    final okCue = tester.widget<StatusCue>(find.byType(StatusCue));
+    expect(okCue.semanticLabel, 'The wardrobe tag is registered.');
     expect(calls, contains('stopTagRegistration'));
     expect(
       (await SessionTagSettings.load()).tagAt(SessionTagSlot.wardrobe),
@@ -70,10 +81,11 @@ void main() {
     await SessionTagSettings.saveTagAt(SessionTagSlot.bathroom, 'b1');
     await tester.pumpWidget(const MaterialApp(home: SessionTagsScreen()));
     await tester.pump();
-    await tester.tap(find.text('Register desk tag'));
+    await tester.tap(find.byKey(const ValueKey<String>('register-desk')));
     await tester.pump();
     await tapTag(tester, 'b1');
-    expect(find.textContaining('already the bathroom tag'), findsOneWidget);
+    final errCue = tester.widget<StatusCue>(find.byType(StatusCue));
+    expect(errCue.semanticLabel, contains('already the bathroom tag'));
     expect(
       (await SessionTagSettings.load()).tagAt(SessionTagSlot.desk),
       isNull,
@@ -84,18 +96,20 @@ void main() {
     await SessionTagSettings.saveTagAt(SessionTagSlot.desk, 'd1');
     await tester.pumpWidget(const MaterialApp(home: SessionTagsScreen()));
     await tester.pump();
-    await tester.tap(find.text('Register desk tag again'));
+    await tester.tap(find.byKey(const ValueKey<String>('register-desk')));
     await tester.pump();
     await tapTag(tester, 'd1');
-    expect(find.text('The desk tag is registered.'), findsOneWidget);
+    final okCue = tester.widget<StatusCue>(find.byType(StatusCue));
+    expect(okCue.semanticLabel, 'The desk tag is registered.');
   });
 
   testWidgets('says so when NFC is off', (tester) async {
     nfcStarts = false;
     await tester.pumpWidget(const MaterialApp(home: SessionTagsScreen()));
     await tester.pump();
-    await tester.tap(find.text('Register bathroom tag'));
+    await tester.tap(find.byKey(const ValueKey<String>('register-bathroom')));
     await tester.pump();
-    expect(find.textContaining('NFC is unavailable'), findsOneWidget);
+    final errCue = tester.widget<StatusCue>(find.byType(StatusCue));
+    expect(errCue.semanticLabel, contains('NFC is unavailable'));
   });
 }

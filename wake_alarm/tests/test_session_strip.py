@@ -12,7 +12,8 @@ from gatelock.corner_strip import StripContent
 import pytest
 
 from wake_alarm import _session_strip
-from wake_alarm.tests.test_strip_support import NOW, STEP, signed
+from wake_alarm._session_legs import LEGS
+from wake_alarm.tests.test_strip_support import NOW, signed
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,25 +21,26 @@ if TYPE_CHECKING:
 # conftest replaces _popen for every test; the real one is captured at import.
 REAL_POPEN = _session_strip._popen
 
+_STEP_LABELS = [label for _, label in LEGS]
+
 
 class TestStripContent:
-    def test_in_progress_says_next_step_and_when_locks_return(self) -> None:
+    def test_in_progress_says_pips_and_when_locks_return(self) -> None:
+        # default signed() uses _STEP_LABELS[1], so first two pips are ● ◉ ○ ○
         assert _session_strip.strip_content(signed(), NOW) == StripContent(
-            "Morning session not finished",
-            (f"Next: {STEP}", "Locks return at 08:45"),
+            "● ◉ ○ ○",
+            ("◷ 08:45",),
         )
 
-    def test_next_step_null_drops_the_next_line(self) -> None:
+    def test_next_step_none_gives_empty_title(self) -> None:
         content = _session_strip.strip_content(signed(next_step=None), NOW)
-        assert content == StripContent(
-            "Morning session not finished", ("Locks return at 08:45",)
-        )
+        assert content == StripContent("", ("◷ 08:45",))
 
     def test_exempt_until_is_shown_in_local_time(self) -> None:
         utc = (NOW + timedelta(minutes=45)).astimezone(UTC).isoformat()
         content = _session_strip.strip_content(signed(exempt_until=utc), NOW)
         assert content is not None
-        assert content.lines[-1] == "Locks return at 08:45"
+        assert content.lines[-1] == "◷ 08:45"
 
     @pytest.mark.parametrize("outcome", ["completed", "failed", "none", "weird"])
     def test_other_outcomes_show_nothing(self, outcome: str) -> None:
@@ -69,10 +71,25 @@ class TestStripContent:
         assert _session_strip.strip_content(signed(exempt_until=until), NOW) is None
 
     @pytest.mark.parametrize("step", [5, ""])
-    def test_unusable_next_step_is_left_out(self, step: object) -> None:
+    def test_unusable_next_step_gives_empty_title(self, step: object) -> None:
         content = _session_strip.strip_content(signed(next_step=step), NOW)
         assert content is not None
-        assert content.lines == ("Locks return at 08:45",)
+        assert content.title == ""
+        assert content.lines == ("◷ 08:45",)
+
+
+class TestPips:
+    def test_first_leg(self) -> None:
+        assert _session_strip._pips(_STEP_LABELS[0]) == "◉ ○ ○ ○"
+
+    def test_last_leg(self) -> None:
+        assert _session_strip._pips(_STEP_LABELS[-1]) == "● ● ● ◉"
+
+    def test_unknown_label(self) -> None:
+        assert _session_strip._pips("bogus") == ""
+
+    def test_none_returns_empty(self) -> None:
+        assert _session_strip._pips(None) == ""
 
 
 class TestReadEntry:

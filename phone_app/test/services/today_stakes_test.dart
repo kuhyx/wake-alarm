@@ -171,6 +171,30 @@ void main() {
     });
   });
 
+  group('ringStakes', () {
+    test('an open stick-day ring returns deadline and lockdown', () {
+      final stakes = ringStakes(_state());
+      expect(stakes, isNotNull);
+      expect(stakes!.by, DateTime(2026, 10, 1, 7, 15));
+      expect(stakes.lockThrough, DateTime(2026, 10, 2));
+    });
+
+    test('a missing native lock date falls back to the next day', () {
+      final stakes = ringStakes(_state(lockIfMissToday: null));
+      expect(stakes, isNotNull);
+      expect(stakes!.lockThrough, DateTime(2026, 10, 2));
+    });
+
+    test('nothing on a carrot, free, settled or alarm-less day', () {
+      expect(ringStakes(_state(today: '2026-10-02')), isNull);
+      expect(ringStakes(_state(freeToday: true)), isNull);
+      expect(ringStakes(_state(dismissedToday: true)), isNull);
+      expect(ringStakes(_state(escapedToday: true)), isNull);
+      expect(ringStakes(_state(lastMiss: '2026-10-01')), isNull);
+      expect(ringStakes(_state(alarmHour: null)), isNull);
+    });
+  });
+
   group('carrotCutoff', () {
     test('is A + 90 min before the cap, the cap after it', () {
       expect(

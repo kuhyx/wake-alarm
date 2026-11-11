@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 
 /// Registers the three NFC tags the morning session walks through.
 ///
@@ -81,52 +83,70 @@ class _SessionTagsScreenState extends State<SessionTagsScreen> {
     });
   }
 
+  IconData _iconForSlot(SessionTagSlot slot) => switch (slot) {
+    SessionTagSlot.bathroom => Icons.shower,
+    SessionTagSlot.wardrobe => Icons.checkroom,
+    SessionTagSlot.desk => Icons.desk,
+  };
+
+  String _semanticLabelForSlot(SessionTagSlot slot) => switch (slot) {
+    SessionTagSlot.bathroom => 'Bathroom (scale + shower)',
+    SessionTagSlot.wardrobe => 'Wardrobe',
+    SessionTagSlot.desk => 'Desk',
+  };
+
   Widget _slotRow(SessionTagSlot slot) {
     final id = _settings.tagAt(slot);
     final scanning = _scanning == slot;
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: <Widget>[
-          Text('${_title(slot)}: ${id ?? "none registered"}'),
-          const SizedBox(height: 8),
+          Icon(
+            _iconForSlot(slot),
+            semanticLabel: _semanticLabelForSlot(slot),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: id != null
+                ? KeyedSubtree(
+                    key: ValueKey<String>('content:tag-${slot.name}'),
+                    child: Text(id),
+                  )
+                : const DashedSlot(),
+          ),
+          const SizedBox(width: 12),
           FilledButton(
+            key: ValueKey<String>('register-${slot.name}'),
             onPressed: _scanning != null ? null : () => _startScan(slot),
-            child: Text(
-              scanning
-                  ? 'Waiting for tag…'
-                  : 'Register ${slot.name} tag${id == null ? "" : " again"}',
-            ),
+            child: scanning
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    id == null ? Icons.add : Icons.refresh,
+                    semanticLabel: id == null
+                        ? 'Register ${slot.name} tag'
+                        : 'Register ${slot.name} tag again',
+                  ),
           ),
         ],
       ),
     );
   }
 
-  static String _title(SessionTagSlot slot) => switch (slot) {
-    SessionTagSlot.bathroom => 'Bathroom (scale + shower)',
-    SessionTagSlot.wardrobe => 'Wardrobe',
-    SessionTagSlot.desk => 'Desk',
-  };
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Morning session tags')),
+      appBar: AppBar(),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text(
-              'After the alarm is dismissed: weigh in and tap the bathroom '
-              'tag, shower and tap it again, tap the wardrobe tag dressed, '
-              'then the desk tag. A slot left empty is skipped.',
-            ),
-            const SizedBox(height: 24),
             for (final slot in SessionTagSlot.values) _slotRow(slot),
-            Text(_status),
+            StatusCue(semanticLabel: _status),
           ],
         ),
       ),

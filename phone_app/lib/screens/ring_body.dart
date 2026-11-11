@@ -4,6 +4,7 @@ import 'package:wake_alarm_sync/screens/ring_checklist.dart';
 import 'package:wake_alarm_sync/screens/ring_stakes_line.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 
 /// The ring screen's body: the checklist, or the live challenge, plus status.
 ///
@@ -38,7 +39,6 @@ class RingBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final inChallenges = gate.stage == DismissStage.challenges;
     return PopScope(
       // The alarm cannot be escaped with back; dismissing is the only way out.
@@ -50,7 +50,6 @@ class RingBody extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Text('Wake up', style: theme.textTheme.headlineMedium),
                 const SizedBox(height: 16),
                 const RingStakesLine(),
                 const SizedBox(height: 8),
@@ -65,12 +64,30 @@ class RingBody extends StatelessWidget {
                 else
                   RingChecklist(gate: gate),
                 const SizedBox(height: 16),
-                Text(status, style: theme.textTheme.bodyMedium),
+                _StatusRow(status: status),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final match = RegExp(r'\d+(/\d+)?').firstMatch(status);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        StatusCue(semanticLabel: status),
+        if (match != null) ...[const SizedBox(width: 8), Text(match.group(0)!)],
+      ],
     );
   }
 }

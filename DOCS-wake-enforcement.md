@@ -131,7 +131,8 @@ it as not the morning's ring.
 
 ### Escape hatch (until 2026-10-15 inclusive)
 
-Home screen button "That was a bug". Needs a typed reason ≥ 40 characters.
+Bug-glyph button on the stakes card (spoken label "That was a bug"; the
+app is text-free since 2026-11-10). Needs a typed reason ≥ 40 characters.
 It lifts the phone lockdown, clears the streak, cancels today's PC penalty,
 stops a ringing PC alarm, and writes everything into the incident report.
 Unlimited uses — every use is listed at the top of that day's report.

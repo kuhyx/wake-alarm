@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/escape_dialog.dart';
+import 'package:wake_alarm_sync/screens/stakes_marks.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/enforcement_bridge.dart';
 import 'package:wake_alarm_sync/services/enforcement_state.dart';
 import 'package:wake_alarm_sync/services/escape_hatch.dart';
 import 'package:wake_alarm_sync/services/today_stakes.dart';
-import 'package:wake_alarm_sync/ui/theme.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 
 /// Today's stakes in plain words, anything already in force, the streak,
 /// and the escape hatch while it lasts.
@@ -61,6 +63,7 @@ class _StakesCardState extends State<StakesCard> {
   EnforcementState? _state;
   AlarmTime? _next;
   String _message = '';
+  bool _excused = false;
   bool _loaded = false;
 
   DateTime _now() => (widget.now ?? DateTime.now)();
@@ -102,6 +105,7 @@ class _StakesCardState extends State<StakesCard> {
     if (reason == null) return;
     final ok = await _hatch.use(reason);
     if (!mounted) return;
+    _excused = ok;
     setState(
       () => _message = ok
           ? 'Excused — lockdown lifted, publishing to the PC.'
@@ -116,12 +120,12 @@ class _StakesCardState extends State<StakesCard> {
     final state = _state;
     final empty = widget.emptyText;
     if (state == null) {
-      return _loaded && empty != null ? Text(empty) : const SizedBox.shrink();
+      return _loaded && empty != null
+          ? SpokenLabel(semanticLabel: empty, child: const DashedSlot())
+          : const SizedBox.shrink();
     }
     final theme = Theme.of(context);
-    final warning = theme.extension<AppStatusColors>()?.warning;
     final view = describeStakes(now: _now(), state: state, nextAlarm: _next);
-    final body = theme.textTheme.bodyMedium;
     return Card(
       color: theme.colorScheme.surfaceContainerHigh,
       margin: EdgeInsets.zero,
@@ -130,37 +134,25 @@ class _StakesCardState extends State<StakesCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text(view.title, style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            for (final line in view.stakes)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text(line, style: body),
-              ),
-            for (final line in view.pending)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text(line, style: body?.copyWith(color: warning)),
-              ),
-            const SizedBox(height: 8),
-            Text(
-              view.streak,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+            StakesMarks(view: view),
             if (_message.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(_message, style: body),
+              StatusCue(
+                semanticLabel: _message,
+                kind: _excused ? CueKind.ok : CueKind.error,
+              ),
             ],
             if (_hatch.isOpen) ...[
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(
+                child: IconButton(
+                  key: const Key('stakes-escape'),
                   onPressed: widget.busy ? null : () => unawaited(_escape()),
-                  icon: const Icon(Icons.bug_report_outlined),
-                  label: const Text('That was a bug'),
+                  icon: const Icon(
+                    Icons.bug_report_outlined,
+                    semanticLabel: 'That was a bug',
+                  ),
                 ),
               ),
             ],

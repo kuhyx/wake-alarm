@@ -74,14 +74,23 @@ class DayCalendar extends StatelessWidget {
   /// Latest month the forward arrow reaches; null means no limit.
   final DateTime? lastMonth;
 
-  static const _labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June', 'July', //
-    'August', 'September', 'October', 'November', 'December',
-  ];
-
   bool _before(DateTime a, DateTime b) =>
       a.year < b.year || (a.year == b.year && a.month < b.month);
+
+  Widget _weekdayDot(BuildContext context, int index) {
+    final theme = Theme.of(context);
+    final isWeekend = index == 5 || index == 6;
+    return Container(
+      width: isWeekend ? 8 : 6,
+      height: isWeekend ? 8 : 6,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isWeekend
+            ? theme.colorScheme.primary
+            : theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,22 +106,26 @@ class DayCalendar extends StatelessWidget {
         Row(
           children: [
             IconButton(
-              icon: const Icon(Icons.chevron_left),
-              tooltip: 'Previous month',
+              icon: const Icon(
+                Icons.chevron_left,
+                semanticLabel: 'Previous month',
+              ),
               onPressed: canBack
                   ? () => onMonth(DateTime(month.year, month.month - 1))
                   : null,
             ),
             Expanded(
               child: Text(
-                '${_months[month.month - 1]} ${month.year}',
+                '${month.month.toString().padLeft(2, '0')}/${month.year}',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium,
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.chevron_right),
-              tooltip: 'Next month',
+              icon: const Icon(
+                Icons.chevron_right,
+                semanticLabel: 'Next month',
+              ),
               onPressed: canForward
                   ? () => onMonth(DateTime(month.year, month.month + 1))
                   : null,
@@ -121,17 +134,8 @@ class DayCalendar extends StatelessWidget {
         ),
         Row(
           children: [
-            for (final label in _labels)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    label,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
+            for (var i = 0; i < 7; i++)
+              Expanded(child: Center(child: _weekdayDot(context, i))),
           ],
         ),
         const SizedBox(height: 4),

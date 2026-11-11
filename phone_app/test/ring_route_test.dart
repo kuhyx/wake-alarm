@@ -10,9 +10,14 @@ import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 
 const String _tag1 = '04a2b3c4';
 const String _tag2 = '04ffee11';
+
+/// The ring's status sentence, now spoken only (StatusCue.semanticLabel).
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue)).semanticLabel;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -97,11 +102,14 @@ void main() {
 
   testWidgets('it opens on the checklist, not the challenge', (tester) async {
     await pumpRing(tester);
-    expect(find.text('Wake up'), findsOneWidget);
-    expect(find.text('Tap tag 1'), findsOneWidget);
-    expect(find.text('Walk 25 steps'), findsOneWidget);
-    expect(find.text('Tap tag 2'), findsOneWidget);
-    expect(find.text('Submit'), findsNothing);
+    expect(find.text('Wake up'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('ring-row-tag1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('ring-row-steps')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey<String>('ring-row-tag2')), findsOneWidget);
+    expect(find.byKey(const Key('ring-submit')), findsNothing);
   });
 
   testWidgets('tag 2 tapped first does nothing; tag 1 then works', (
@@ -109,10 +117,10 @@ void main() {
   ) async {
     await pumpRing(tester);
     await tapTag(tester, _tag2);
-    expect(find.textContaining('Not tag 1'), findsOneWidget);
+    expect(statusOf(tester), contains('Not tag 1'));
 
     await tapTag(tester, _tag1);
-    expect(find.textContaining('Tag 1 matched'), findsOneWidget);
+    expect(statusOf(tester), contains('Tag 1 matched'));
   });
 
   testWidgets('an unknown tag does not un-latch a passed stage', (
@@ -128,7 +136,7 @@ void main() {
     steps = 500;
     elapsed = const Duration(minutes: 3);
     await pollSteps(tester);
-    expect(find.text('Tap tag 2'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('ring-row-tag2')), findsOneWidget);
   });
 
   testWidgets('steps do not count before tag 1', (tester) async {
@@ -137,9 +145,9 @@ void main() {
     elapsed = const Duration(minutes: 3);
     await pollSteps(tester);
     // Still on tag 1 — walking first must not skip the first location.
-    expect(find.text('Submit'), findsNothing);
+    expect(find.byKey(const Key('ring-submit')), findsNothing);
     await tapTag(tester, _tag2);
-    expect(find.textContaining('Not tag 1'), findsOneWidget);
+    expect(statusOf(tester), contains('Not tag 1'));
   });
 
   testWidgets('after tag 1 the banked steps pass the walk at once', (
@@ -154,9 +162,9 @@ void main() {
     steps = 500;
     elapsed = const Duration(seconds: 5);
     await pollSteps(tester);
-    expect(find.textContaining('Keep moving'), findsNothing);
-    expect(find.textContaining('Walked far enough'), findsOneWidget);
-    expect(find.text('Tap tag 2'), findsOneWidget);
+    expect(statusOf(tester), isNot(contains('Keep moving')));
+    expect(statusOf(tester), contains('Walked far enough'));
+    expect(find.byKey(const ValueKey<String>('ring-row-tag2')), findsOneWidget);
   });
 
   testWidgets('the full sequence dismisses: tag 1, walk, tag 2, 3 answers', (
@@ -170,11 +178,11 @@ void main() {
     await pollSteps(tester);
     await tapTag(tester, _tag2);
 
-    expect(find.text('Question 1 of 3'), findsOneWidget);
+    expect(find.text('1/3'), findsOneWidget);
     for (var i = 1; i <= DismissGate.challengesNormal; i++) {
-      expect(find.text('Question $i of 3'), findsOneWidget);
+      expect(find.text('$i/3'), findsOneWidget);
       await tester.enterText(find.byType(TextField), expected.next().answer);
-      await tester.tap(find.text('Submit'));
+      await tester.tap(find.byKey(const Key('ring-submit')));
       await tester.pump();
     }
 
@@ -198,16 +206,16 @@ void main() {
     await tapTag(tester, _tag2);
 
     await tester.enterText(find.byType(TextField), expected.next().answer);
-    await tester.tap(find.text('Submit'));
+    await tester.tap(find.byKey(const Key('ring-submit')));
     await tester.pump();
-    expect(find.text('Question 2 of 3'), findsOneWidget);
+    expect(find.text('2/3'), findsOneWidget);
     expected.next(); // the screen regenerated after the correct answer
 
     await tester.enterText(find.byType(TextField), 'definitely wrong');
-    await tester.tap(find.text('Submit'));
+    await tester.tap(find.byKey(const Key('ring-submit')));
     await tester.pump();
     expect(
-      find.text('Question 2 of 3'),
+      find.text('2/3'),
       findsOneWidget,
       reason: 'cumulative: a wrong answer must not reset the count',
     );

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/morning_session.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
 import 'package:wake_alarm_sync/services/weight_entry.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
+import 'package:wake_alarm_sync/ui/spoken_label.dart';
+import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// How many mornings the home screen shows.
 const int kHistoryShown = 7;
@@ -52,20 +55,20 @@ class _HomeHistoryCardState extends State<HomeHistoryCard> {
   Widget build(BuildContext context) {
     if (_sessions.isEmpty) {
       final empty = widget.emptyText;
-      return _loaded && empty != null ? Text(empty) : const SizedBox.shrink();
+      return _loaded && empty != null
+          ? SpokenLabel(semanticLabel: empty, child: const DashedSlot())
+          : const SizedBox.shrink();
     }
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text('Last mornings', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 8),
         for (var i = 0; i < _sessions.length; i++)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(
-              describeMorning(_sessions[i], previousWeight: _previousWeight(i)),
-              style: theme.textTheme.bodyMedium,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: _MorningRow(
+              key: ValueKey<String>('history-${_sessions[i].date}'),
+              session: _sessions[i],
+              previousWeight: _previousWeight(i),
             ),
           ),
       ],
@@ -82,6 +85,67 @@ class _HomeHistoryCardState extends State<HomeHistoryCard> {
   }
 }
 
+/// One morning as glyphs and numbers; [describeMorning] is its spoken form.
+class _MorningRow extends StatelessWidget {
+  const _MorningRow({
+    required this.session,
+    required this.previousWeight,
+    super.key,
+  });
+
+  final MorningSession session;
+  final double? previousWeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final status = theme.extension<AppStatusColors>();
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final (IconData outcome, Color colour) = switch (session.outcome) {
+      SessionOutcome.completed => (
+        Icons.check_circle,
+        status?.success ?? Colors.green,
+      ),
+      SessionOutcome.failed => (Icons.cancel, theme.colorScheme.error),
+      SessionOutcome.active => (Icons.more_horiz, muted),
+    };
+    final kg = session.weightKg;
+    final previous = previousWeight;
+    final energy = session.energy;
+    return SpokenLabel(
+      semanticLabel: describeMorning(session, previousWeight: previous),
+      // Wrap, not Row: a long weight delta must not overflow a narrow sheet.
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: <Widget>[
+          Text(session.date.substring(5)),
+          const SizedBox(width: 8),
+          Icon(outcome, color: colour, size: 20),
+          const SizedBox(width: 12),
+          Icon(Icons.replay, size: 16, color: muted),
+          Text('${session.reRings}'),
+          if (kg != null) ...<Widget>[
+            const SizedBox(width: 12),
+            Icon(Icons.monitor_weight_outlined, size: 16, color: muted),
+            Text('$kg'),
+            if (previous != null) Text(' (${_signed(kg - previous)})'),
+          ],
+          if (energy != null) ...<Widget>[
+            const SizedBox(width: 12),
+            Icon(Icons.bolt, size: 16, color: muted),
+            Text('$energy/$maxEnergy'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _signed(double delta) {
+  final sign = delta > 0 ? '+' : (delta < 0 ? '−' : '±');
+  return '$sign${delta.abs().toStringAsFixed(1)}';
+}
+
 /// One line for [session]: `09-16 ✓ 0 re-rings · 72.4 kg (−0.3) · energy 3/5`.
 String describeMorning(MorningSession session, {double? previousWeight}) {
   final mark = switch (session.outcome) {
@@ -95,9 +159,7 @@ String describeMorning(MorningSession session, {double? previousWeight}) {
   if (kg != null) {
     weight = ' · $kg kg';
     if (previousWeight != null) {
-      final delta = kg - previousWeight;
-      final sign = delta > 0 ? '+' : (delta < 0 ? '−' : '±');
-      weight += ' ($sign${delta.abs().toStringAsFixed(1)})';
+      weight += ' (${_signed(kg - previousWeight)})';
     }
   }
   final energy = session.energy == null

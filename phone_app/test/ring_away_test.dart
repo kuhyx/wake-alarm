@@ -10,9 +10,14 @@ import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
 import 'package:wake_alarm_sync/services/home_location_settings.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 
 const String _tag1 = '04a2b3c4';
 const String _tag2 = '04ffee11';
+
+/// The ring's status sentence, now spoken only (StatusCue.semanticLabel).
+String statusOf(WidgetTester tester) =>
+    tester.widget<StatusCue>(find.byType(StatusCue)).semanticLabel;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -63,8 +68,8 @@ void main() {
     presence = <String, Object?>{'ssid': 'Orange_Home', 'reason': 'ok'};
     await pumpRing(tester);
 
-    expect(find.text('Tap tag 1'), findsOneWidget);
-    expect(find.text('Tap tag 2'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('ring-row-tag1')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('ring-row-tag2')), findsOneWidget);
   });
 
   testWidgets('away it skips the tags, keeps the walk, and asks 3', (
@@ -74,20 +79,23 @@ void main() {
     presence = <String, Object?>{'ssid': 'Hotel_Guest', 'reason': 'ok'};
     await pumpRing(tester);
 
-    expect(find.textContaining('Away from home'), findsWidgets);
+    expect(find.byKey(const Key('ring-bypass')), findsWidgets);
     // The persistent line, not the status that the step poll overwrites.
-    expect(find.textContaining('the tags are elsewhere'), findsOneWidget);
-    expect(find.textContaining('Tags unavailable'), findsNothing);
+    expect(statusOf(tester), contains('Away from home'));
+    expect(statusOf(tester), isNot(contains('Tags unavailable')));
     expect(find.text('Tap tag 1'), findsNothing);
     expect(find.text('Tap tag 2'), findsNothing);
     // The walk is never skipped: away is where the tags are, not the bed.
-    expect(find.text('Walk 25 steps'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('ring-row-steps')),
+      findsOneWidget,
+    );
 
     steps = 500;
     elapsed = const Duration(minutes: 3);
     await tester.pump(kStepPollInterval);
     await tester.pump();
-    expect(find.text('Question 1 of 3'), findsOneWidget);
+    expect(find.text('1/3'), findsOneWidget);
   });
 
   testWidgets('the five-minute timer does not bump an away morning to 6', (
@@ -101,13 +109,13 @@ void main() {
     elapsed = const Duration(minutes: 3);
     await tester.pump(kStepPollInterval);
     await tester.pump();
-    expect(find.text('Question 1 of 3'), findsOneWidget);
+    expect(find.text('1/3'), findsOneWidget);
 
     // An away morning routinely outlasts the bypass timer.
     await tester.pump(DismissGate.bypassAfter);
     await tester.pump();
-    expect(find.text('Question 1 of 3'), findsOneWidget);
-    expect(find.text('Question 1 of 6'), findsNothing);
+    expect(find.text('1/3'), findsOneWidget);
+    expect(find.text('1/6'), findsNothing);
   });
 
   testWidgets('unreadable presence is away, per the chosen fail mode', (
@@ -117,7 +125,7 @@ void main() {
     presence = <String, Object?>{'reason': 'no-permission'};
     await pumpRing(tester);
 
-    expect(find.textContaining('location permission denied'), findsOneWidget);
+    expect(statusOf(tester), contains('location permission denied'));
     expect(find.text('Tap tag 1'), findsNothing);
   });
 
@@ -139,6 +147,6 @@ void main() {
     elapsed = const Duration(minutes: 3);
     await tester.pump(kStepPollInterval);
     await tester.pump();
-    expect(find.text('Question 1 of 3'), findsOneWidget);
+    expect(find.text('1/3'), findsOneWidget);
   });
 }

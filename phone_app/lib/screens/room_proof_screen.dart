@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 
 /// Registers the two NFC tags the dismiss sequence walks between.
 ///
@@ -43,7 +45,17 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
   Future<void> _load() async {
     final settings = await RoomProofSettings.load();
     if (!mounted) return;
-    setState(() => _settings = settings);
+    var status = '';
+    for (var i = 0; i < RoomProofSettings.requiredTagCount; i++) {
+      if (settings.tagAt(i) != null) {
+        status = 'Tag ${i + 1} registered.';
+        break;
+      }
+    }
+    setState(() {
+      _settings = settings;
+      _status = status;
+    });
   }
 
   Future<void> _startScan(int slot) async {
@@ -89,18 +101,33 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
     final scanning = _scanningSlot == slot;
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text('Tag ${slot + 1}: ${id ?? "none registered"}'),
-          const SizedBox(height: 8),
+      child: Row(
+                children: <Widget>[
+          CircleAvatar(radius: 14, child: Text('${slot + 1}')),
+          const SizedBox(width: 12),
+          Expanded(
+            child: id != null
+                ? KeyedSubtree(
+                    key: ValueKey<String>('content:tag-$slot'),
+                    child: Text(id),
+                  )
+                : const DashedSlot(),
+          ),
+          const SizedBox(width: 12),
           FilledButton(
+            key: ValueKey<String>('register-$slot'),
             onPressed: _scanningSlot != null ? null : () => _startScan(slot),
-            child: Text(
-              scanning
-                  ? 'Waiting for tag…'
-                  : 'Register tag ${slot + 1}${id == null ? "" : " again"}',
-            ),
+            child: scanning
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    id == null ? Icons.add : Icons.refresh,
+                    semanticLabel: id == null
+                        ? 'Register tag ${slot + 1}'
+                        : 'Register tag ${slot + 1} again',
+                  ),
           ),
         ],
       ),
@@ -110,20 +137,15 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Room proof')),
+      appBar: AppBar(),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text(
-              'Put the two tags in different rooms. Dismissing the alarm '
-              'means tapping tag 1, walking, then tapping tag 2.',
-            ),
-            const SizedBox(height: 24),
             for (var i = 0; i < RoomProofSettings.requiredTagCount; i++)
               _slotRow(i),
-            Text(_status),
+            StatusCue(semanticLabel: _status),
           ],
         ),
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/services/challenge.dart';
 import 'package:wake_alarm_sync/services/dismiss_gate.dart';
+import 'package:wake_alarm_sync/ui/spoken_label.dart';
 
 /// The question half of the ring screen, shown once the walk is proven.
 class RingChallenge extends StatelessWidget {
@@ -32,34 +33,96 @@ class RingChallenge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    const answerWords = 'Answer';
     return Column(
       children: <Widget>[
-        Text(
-          'Question ${passed + 1} of $total',
-          style: theme.textTheme.labelLarge,
+        SpokenLabel(
+          semanticLabel: 'Question ${passed + 1} of $total',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text('${passed + 1}/$total', style: theme.textTheme.labelLarge),
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(total, (i) {
+                  final filled = i < passed;
+                  final current = i == passed;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Icon(
+                      filled
+                          ? Icons.circle
+                          : current
+                          ? Icons.circle_outlined
+                          : Icons.circle_outlined,
+                      size: 8,
+                      color: filled
+                          ? colorScheme.primary
+                          : current
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 8),
-        Text(challenge.hint, style: theme.textTheme.bodyLarge),
+        SpokenLabel(
+          semanticLabel: challenge.hint,
+          child: Icon(
+            _kindIcon(challenge.kind),
+            size: 40,
+            color: colorScheme.primary,
+          ),
+        ),
         const SizedBox(height: 12),
-        Text(
-          // Always visible: a challenge that hides itself is unsolvable when
-          // the user reaches the screen having walked in from another room.
-          challenge.display,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.displaySmall,
+        KeyedSubtree(
+          key: const ValueKey<String>('content:challenge'),
+          child: Text(
+            challenge.display,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.displaySmall,
+          ),
         ),
         const SizedBox(height: 16),
-        TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(labelText: 'Answer'),
-          onSubmitted: (_) => onSubmit(),
+        MergeSemantics(
+          child: Semantics(
+            label: answerWords,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(prefixIcon: Icon(Icons.edit)),
+              onSubmitted: (_) => onSubmit(),
+            ),
+          ),
         ),
         const SizedBox(height: 16),
-        FilledButton(onPressed: onSubmit, child: const Text('Submit')),
+        FilledButton(
+          key: const Key('ring-submit'),
+          style: FilledButton.styleFrom(minimumSize: const Size(160, 48)),
+          onPressed: onSubmit,
+          child: const Icon(Icons.check, semanticLabel: 'Submit'),
+        ),
       ],
     );
+  }
+}
+
+IconData _kindIcon(ChallengeKind kind) {
+  switch (kind) {
+    case ChallengeKind.math:
+      return Icons.calculate_outlined;
+    case ChallengeKind.sort:
+      return Icons.trending_up;
+    case ChallengeKind.sequence:
+      return Icons.more_horiz;
+    case ChallengeKind.reverse:
+      return Icons.swap_horiz;
   }
 }
 

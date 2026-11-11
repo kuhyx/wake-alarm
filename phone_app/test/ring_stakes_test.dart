@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wake_alarm_sync/screens/ring_screen.dart';
 import 'package:wake_alarm_sync/screens/ring_stakes_line.dart';
 import 'package:wake_alarm_sync/services/ring_start_recorder.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 
 import 'fake_enforcement_channel.dart';
 
@@ -40,12 +41,12 @@ void main() {
   ) async {
     native.state = nativeState();
     await pumpLine(tester);
-    expect(
-      find.text(
-        'Stick day: no dismiss by 07:15 → apps locked through Fri 2 Oct',
-      ),
-      findsOneWidget,
-    );
+    final cue = tester.widget<SpokenLabel>(find.byType(SpokenLabel));
+    const expected =
+        'Stick day: no dismiss by 07:15 → apps locked through Fri 2 Oct';
+    expect(cue.semanticLabel, expected);
+    expect(find.text('07:15'), findsOneWidget);
+    expect(find.text('02.10'), findsOneWidget);
   });
 
   testWidgets('nothing once today was dismissed', (tester) async {
@@ -74,7 +75,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: RingScreen(ringStart: recorder)));
     await tester.pump();
     expect(recorder.calls, 1);
-    expect(find.textContaining('Stick day:'), findsOneWidget);
+    expect(find.byType(StatusCue), findsOneWidget);
     // The ring screen's own timers (bypass, step poll) outlive the test.
     await tester.pumpWidget(const SizedBox.shrink());
   });

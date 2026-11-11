@@ -14,7 +14,6 @@ import pytest
 from wake_alarm import _session_strip
 from wake_alarm.tests.test_strip_support import (
     NOW,
-    STEP,
     Display,
     Procs,
     signed,
@@ -135,8 +134,8 @@ class TestMain:
         assert _session_strip.main() == 0
         assert display.built == [
             StripContent(
-                "Morning session not finished",
-                (f"Next: {STEP}", "Locks return at 08:45"),
+                "● ◉ ○ ○",
+                ("◷ 08:45",),
             )
         ]
         assert display.ticks == 3

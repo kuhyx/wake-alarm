@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/day_calendar.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';
-import 'package:wake_alarm_sync/ui/theme.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
+import 'package:wake_alarm_sync/ui/dashed_slot.dart';
 
 /// One upcoming free day, as the list shows it.
 typedef UpcomingFreeDay = ({DateTime day, String reason});
@@ -45,70 +46,78 @@ class FreeDaysBody extends StatelessWidget {
   /// Called when the user gives a day back.
   final void Function(DateTime day) onRelease;
 
-  static const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  String _label(DateTime day) =>
-      '${_weekdays[day.weekday - 1]} ${FreeDayPool.toIso(day)}';
+  String _toDdMmYyyy(DateTime day) {
+    final d = day.day.toString().padLeft(2, '0');
+    final m = day.month.toString().padLeft(2, '0');
+    return '$d.$m.${day.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColors = theme.extension<AppStatusColors>()!;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            '$remaining of ${FreeDayPool.annualBudget}',
-            style: theme.textTheme.displayMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              const Icon(Icons.event_available),
+              const SizedBox(width: 8),
+              Text(
+                '$remaining/${FreeDayPool.annualBudget}',
+                style: theme.textTheme.displayMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
           Text(
-            'free days left in $year',
+            '$year',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'On a free day nothing locks, nothing rings and nothing asks. '
-            'Every app, at once.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
           if (status.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text(
-              status,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: status.contains('Error')
-                    ? theme.colorScheme.error
-                    : statusColors.success,
-              ),
-            ),
+            StatusCue(semanticLabel: status),
           ],
           const SizedBox(height: 16),
           calendar,
           const SizedBox(height: 24),
-          Text('Booked ahead', style: theme.textTheme.titleMedium),
+          Row(
+            children: [
+              Icon(
+                Icons.upcoming,
+                color: theme.colorScheme.onSurfaceVariant,
+                semanticLabel: 'Booked ahead',
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           if (upcoming.isEmpty)
-            Text(
-              'None. Tap a date above to book one.',
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            const SpokenLabel(
+              semanticLabel: 'None. Tap a date above to book one.',
+              child: DashedSlot(),
             ),
           for (final entry in upcoming)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(_label(entry.day)),
-              subtitle: entry.reason.isEmpty ? null : Text(entry.reason),
-              trailing: TextButton(
+              title: Text(_toDdMmYyyy(entry.day)),
+              subtitle: entry.reason.isEmpty
+                  ? null
+                  : KeyedSubtree(
+                      key: ValueKey<String>(
+                        'content:reason-${FreeDayPool.toIso(entry.day)}',
+                      ),
+                      child: Text(entry.reason),
+                    ),
+              trailing: IconButton(
+                key: ValueKey<String>(
+                  'release-${FreeDayPool.toIso(entry.day)}',
+                ),
+                icon: const Icon(Icons.event_busy, semanticLabel: 'Release'),
                 onPressed: busy ? null : () => onRelease(entry.day),
-                child: const Text('Release'),
               ),
             ),
         ],

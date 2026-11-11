@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wake_alarm_sync/screens/home_presence_line.dart';
 import 'package:wake_alarm_sync/screens/home_tiles.dart';
+import 'package:wake_alarm_sync/ui/cues.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// The home screen's body: the armed time, the earlier-only control and the
@@ -53,6 +54,13 @@ class HomeBody extends StatelessWidget {
   /// Called after the escape hatch was used, so the screen publishes it.
   final VoidCallback? onEscaped;
 
+  IconData? _statusIcon(String status) {
+    if (status.startsWith('Connect a sync backend')) return Icons.cloud_off;
+    if (status.startsWith('Sync store unavailable')) return Icons.sync_problem;
+    if (status.contains('✓')) return Icons.cloud_done;
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -69,9 +77,11 @@ class HomeBody extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    'Alarm is armed for',
-                    style: TextStyle(fontSize: 16),
+                  Icon(
+                    Icons.alarm_on,
+                    size: 32,
+                    color: theme.colorScheme.primary,
+                    semanticLabel: 'Alarm is armed for',
                   ),
                   HomePresenceLine(key: ValueKey<int>(syncEpoch)),
                   const SizedBox(height: 16),
@@ -82,40 +92,46 @@ class HomeBody extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    isOverridden
-                        ? 'One-shot early start — back to $baseline '
-                              'after it rings'
-                        : 'Every day. It cannot be turned off.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  if (isOverridden)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.restore,
+                          size: 18,
+                          semanticLabel:
+                              'One-shot early start, back to $baseline '
+                              'after it rings',
+                        ),
+                        Text(baseline),
+                      ],
+                    )
+                  else
+                    Icon(
+                      Icons.all_inclusive,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                      semanticLabel: 'Every day. It cannot be turned off.',
+                    ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
+                    child: OutlinedButton(
                       onPressed: busy ? null : onPickEarlier,
-                      icon: const Icon(Icons.arrow_upward),
-                      label: const Text('Wake me earlier tomorrow'),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_upward,
+                        semanticLabel: 'Wake me earlier tomorrow',
                       ),
                     ),
                   ),
                   const SizedBox(height: 24),
                   if (status.isNotEmpty) ...[
-                    Text(
-                      status,
-                      textAlign: TextAlign.center,
-                      // Bounded: status can be a raw `'Error: $e'`, i.e. an
-                      // arbitrarily long exception toString().
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: status.contains('Error')
-                            ? theme.colorScheme.error
-                            : theme.extension<AppStatusColors>()!.success,
-                      ),
+                    StatusCue(
+                      semanticLabel: status,
+                      icon: _statusIcon(status),
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -126,12 +142,11 @@ class HomeBody extends StatelessWidget {
                   ),
                   if (!configured) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      'Open Settings (gear icon) to connect Firebase.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: theme.extension<AppStatusColors>()!.warning,
-                      ),
+                    Icon(
+                      Icons.cloud_off,
+                      size: 28,
+                      color: theme.extension<AppStatusColors>()!.warning,
+                      semanticLabel: 'Open Settings to connect Firebase',
                     ),
                   ],
                 ],

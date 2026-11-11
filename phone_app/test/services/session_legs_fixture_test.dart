@@ -13,7 +13,8 @@ void main() {
     final raw = File(
       '../wake_alarm/tests/fixtures/session_legs.json',
     ).readAsStringSync();
-    final legs = (jsonDecode(raw) as Map<String, Object?>)['legs']! as List;
+    final legs = ((jsonDecode(raw) as Map<String, Object?>)['legs']! as List)
+        .cast<Map<String, dynamic>>();
     expect(
       <(String, String)>[for (final l in SessionLeg.values) (l.name, l.label)],
       <(String, String)>[
