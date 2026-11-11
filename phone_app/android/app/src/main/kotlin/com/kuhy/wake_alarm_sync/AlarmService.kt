@@ -105,7 +105,7 @@ class AlarmService : Service() {
         // IMPORTANCE_HIGH is required for a full-screen intent to be honoured.
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "WakeAlarm",
+            APP_NAME,
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
             // The service owns sound and vibration, so the channel must not add

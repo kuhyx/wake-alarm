@@ -50,7 +50,7 @@ object SessionNotice {
             .apply()
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "WakeAlarm", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, APP_NAME, NotificationManager.IMPORTANCE_LOW),
         )
         manager.notify(NOTIFICATION_ID, build(context, label, deadlineMillis))
     }

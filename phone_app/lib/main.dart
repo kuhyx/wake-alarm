@@ -7,6 +7,7 @@ import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/day_pool_refresh.dart';
 import 'package:wake_alarm_sync/services/headless_ring_start.dart';
+import 'package:wake_alarm_sync/ui/app_name.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// Route the Kotlin `AlarmActivity` hands to the engine as its initial
@@ -63,7 +64,7 @@ class WakeAlarmSyncApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Wake Alarm Sync',
+      title: kAppName,
       theme: buildAppTheme(),
       navigatorKey: navigatorKey,
       // AlarmActivity sets its initial route to kRingRoute, so the ring screen
