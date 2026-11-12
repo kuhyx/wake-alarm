@@ -52,6 +52,8 @@ for f in "${CHANGED[@]}"; do
 done
 
 dart_run() {
+    # shellcheck source=pinned_flutter.sh
+    source scripts/pinned_flutter.sh && use_pinned_flutter "$PWD"
     if [[ $dfull -eq 1 || ${#dtests[@]} -eq 0 ]]; then (cd phone_app && flutter test --reporter=compact)
     else (cd phone_app && flutter test --reporter=compact "${dtests[@]}"); fi
 }

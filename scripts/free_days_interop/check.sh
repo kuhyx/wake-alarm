@@ -20,6 +20,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 readonly SCRIPT_DIR REPO_DIR
+# shellcheck source=../pinned_flutter.sh
+source "$REPO_DIR/scripts/pinned_flutter.sh"
 readonly FREEDAYS_PYTHON="${FREEDAYS_PYTHON:-$HOME/.local/share/freedays/venv/bin/python}"
 
 TEMP_DIR=""
@@ -39,6 +41,7 @@ validate_requirements() {
 }
 
 main() {
+    use_pinned_flutter "$REPO_DIR"
     validate_requirements
     TEMP_DIR="$(mktemp -d)"
     local pool="$TEMP_DIR/free_days.json"

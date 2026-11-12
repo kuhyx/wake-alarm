@@ -23,6 +23,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 readonly SCRIPT_DIR APP_DIR
+# shellcheck source=../../../scripts/pinned_flutter.sh
+source "$APP_DIR/../scripts/pinned_flutter.sh"
 readonly SICKDAYS_PYTHON="${SICKDAYS_PYTHON:-$HOME/.local/share/sickdays/venv/bin/python}"
 
 TEMP_DIR=""
@@ -34,6 +36,7 @@ cleanup() {
 trap cleanup EXIT
 
 validate_requirements() {
+    use_pinned_flutter "$APP_DIR/.."
     if [[ ! -x "$SICKDAYS_PYTHON" ]]; then
         echo "Error: no sickdays python at $SICKDAYS_PYTHON (set SICKDAYS_PYTHON)" >&2
         exit 1
