@@ -34,6 +34,7 @@ from contextlib import ExitStack
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+from crdt_sync import Argon2Params
 import freedays
 import pytest
 import sickdays
@@ -70,6 +71,67 @@ class FakeClock:
         """Advance the clock without waiting."""
         self.sleeps.append(seconds)
         self.elapsed += seconds
+
+
+#: The passphrase every test device shares.
+TEST_PHRASE = "test-passphrase"
+
+#: Argon2id at a cost a test suite can afford many times over.
+TEST_ARGON2 = Argon2Params(memory_kib=8, iterations=1, parallelism=1)
+
+
+def _passphrase(tmp_path: Path) -> Path:
+    path = tmp_path / "crdt-sync-password"
+    path.write_text(TEST_PHRASE)
+    return path
+
+
+class DictStore:
+    """In-memory ``RemoteStore``: paths are keys, directories are derived."""
+
+    def __init__(self, files: dict[str, str] | None = None) -> None:
+        """Start with ``files`` (path -> text)."""
+        self.files = dict(files or {})
+        self.puts: list[str] = []
+
+    def list_directory(self, path: str) -> list[str]:
+        """Immediate children of ``path``."""
+        prefix = f"{path}/"
+        return sorted(
+            {
+                k[len(prefix) :].split("/", 1)[0]
+                for k in self.files
+                if k.startswith(prefix)
+            }
+        )
+
+    def get_file_text(self, path: str) -> str | None:
+        """The stored text, or None."""
+        return self.files.get(path)
+
+    def put_file_text(self, path: str, text: str, *, message: str) -> None:
+        """Store ``text`` and record the write."""
+        del message
+        self.files[path] = text
+        self.puts.append(path)
+
+    def get_string_map(self, path: str) -> dict[str, str]:
+        """Leaf children of ``path`` with their text."""
+        prefix = f"{path}/"
+        return {
+            k[len(prefix) :]: v
+            for k, v in self.files.items()
+            if k.startswith(prefix) and "/" not in k[len(prefix) :]
+        }
+
+    def delete_file(self, path: str, *, message: str = "") -> None:
+        """Forget ``path``."""
+        del message
+        self.files.pop(path, None)
+
+    def can_access_remote(self) -> bool:
+        """Always reachable."""
+        return True
 
 
 @pytest.fixture
@@ -118,6 +180,11 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             tmp_path / "no-firebase.json",
             create=True,
         ),
+        # End-to-end encryption: never the real ~/.config/crdt-sync/password,
+        # a cheap Argon2id cost, and no per-process copy memo across tests.
+        patch("wake_alarm._sync_transport.PASSWORD_FILE", _passphrase(tmp_path)),
+        patch("wake_alarm._sync_transport.E2E_ARGON2_PARAMS", TEST_ARGON2),
+        patch.dict("crdt_sync._e2e_store._copied", clear=True),
         patch("wake_alarm._events.EVENT_STATE_FILE", tmp_path / "event_state.json"),
         patch(
             "wake_alarm._fallback_latch.FALLBACK_RING_FILE",

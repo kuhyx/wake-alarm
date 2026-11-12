@@ -60,21 +60,21 @@ LOG_JSONL_FILE: Path = LOG_STATE_DIR / "events.jsonl"
 # suppressed across separate per-minute trigger processes.
 LOG_DEDUPE_FILE: Path = LOG_STATE_DIR / "last_event.json"
 
-# The phone's path to its published alarm. Deliberately the *same* logical
-# path on both backends — Firebase's namespace mirrors the repo layout — so
+# Where the phone publishes, end-to-end encrypted under the shared crdt-sync
+# passphrase: the ``-e2e`` twin of the old plaintext prefix. The same logical
+# path on both backends (Firebase's namespace mirrors the repo layout), so
 # only the transport changes, never the parse.
-#
-# This is the *legacy* path: the phone used to be the sole writer under the
-# fixed device id "phone". It still is in practice, but the id is migrating
-# to a per-install uuid, so the reader discovers device directories under
-# SYNC_DEVICES_PREFIX and falls back to this path for a phone that has not
-# yet published under its uuid. Keep reading it until every install has
-# migrated; deleting it early means a stale phone's alarm silently stops
-# being seen, and the trigger falls back to FALLBACK_ALARM_HOUR.
-SYNC_ALARM_PATH: str = "wake-alarm-sync/devices/phone/alarm.json"
+SYNC_DEVICES_PREFIX: str = "wake-alarm-sync/devices-e2e"
 
-# The directory holding one subdirectory per publishing device.
-SYNC_DEVICES_PREFIX: str = "wake-alarm-sync/devices"
+# The old plaintext prefix. Never read for the alarm itself any more: only
+# the one-time E2E copy reads it, picking up a phone not yet updated.
+SYNC_LEGACY_PREFIX: str = "wake-alarm-sync/devices"
+
+# The *legacy device id* path: the phone used to be the sole writer under the
+# fixed id "phone"; it now publishes under a per-install uuid, so the reader
+# discovers device directories and falls back to this one only when nothing
+# lists. Copied over from the plaintext prefix like everything else.
+SYNC_ALARM_PATH: str = f"{SYNC_DEVICES_PREFIX}/phone/alarm.json"
 
 # The file each device publishes its alarm as, inside its own directory.
 SYNC_ALARM_FILENAME: str = "alarm.json"
@@ -84,8 +84,7 @@ SYNC_ALARM_FILENAME: str = "alarm.json"
 SYNC_APP_NAME: str = "wake_alarm"
 
 # The shared private repo, used only by the GitHub fallback path. Retiring the
-# mirror means deleting these three and _fetch_github_alarm() together.
-SYNC_API_BASE: str = "https://api.github.com"
+# mirror means deleting these two and _fetch_github_alarm() together.
 SYNC_REPO_OWNER: str = "kuhyx"
 SYNC_REPO_NAME: str = "syncs"
 

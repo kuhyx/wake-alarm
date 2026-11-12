@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:wake_alarm_sync/services/alarm_sync_e2e.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 
 /// The alarm time this device holds, as read from or written to the store.
@@ -17,7 +18,8 @@ typedef Alarm = ({int hour, int minute});
 ///
 /// The phone is the **sole writer**: it stores the chosen alarm locally in a
 /// [LogStore] (one HLC-stamped [Record], id [_recordId]) and pushes that log
-/// to `wake-alarm-sync/devices/<deviceId>/alarm.json` — Firebase first,
+/// to `wake-alarm-sync/devices-e2e/<deviceId>/alarm.json`, end-to-end
+/// encrypted (`alarm_sync_e2e.dart`) — Firebase first,
 /// mirrored to the private `kuhyx/syncs` repo during the cutover (see
 /// [syncBackend]). The path is deliberately identical on both backends, so
 /// only the transport differs.
@@ -162,11 +164,17 @@ class AlarmSyncService {
   /// The pull is what brings the tags and home location back to a fresh
   /// install. The alarm time itself is unaffected: [setLocal] runs first on
   /// every publish, so the local time is always the newest and wins.
+  ///
+  /// Everything goes through the end-to-end encrypted view of [client]
+  /// (`alarm_sync_e2e.dart`); a locked device throws [SyncLockedException]
+  /// before reading or writing anything.
   Future<void> pushWith(RemoteStore client) async {
+    final sealed = await openAlarmStore(client);
     final merged = await syncLog(
-      client: client,
+      client: sealed,
       deviceId: deviceId,
-      pathPrefix: 'wake-alarm-sync/devices',
+      pathPrefix: alarmLayout.prefix,
+      revsPath: alarmLayout.revsPath,
       filename: 'alarm.json',
       localLog: _store.snapshot(),
       encode: logToJson,

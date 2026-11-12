@@ -132,6 +132,10 @@ echo "[1/4] Installing wake_alarm for /usr/bin/python..."
 echo "  Installed. Verifying import..."
 /usr/bin/python3 -c "import wake_alarm; import gatelock"
 echo "  wake_alarm and gatelock import under /usr/bin/python."
+# The alarm is end-to-end encrypted: without crdt_sync (pynacl, argon2-cffi)
+# the trigger can only fall back to the cache and 08:00. Fail the install.
+/usr/bin/python3 -c "import crdt_sync, nacl, argon2"
+echo "  crdt_sync (E2E) imports under /usr/bin/python."
 
 echo "[2/4] Installing systemd user units..."
 mkdir -p "$SYSTEMD_USER_DIR"

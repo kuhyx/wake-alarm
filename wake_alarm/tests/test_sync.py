@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
-import urllib.error
 
+from crdt_sync import RemoteSyncError, open_encrypted_client
 import pytest
 
 from wake_alarm._constants import (
     FALLBACK_ALARM_HOUR,
+    SYNC_LEGACY_PREFIX,
 )
 from wake_alarm._sync import (
     Alarm,
@@ -19,6 +20,7 @@ from wake_alarm._sync import (
     _write_cache,
     get_alarm,
 )
+from wake_alarm.tests.conftest import TEST_ARGON2, TEST_PHRASE, DictStore
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -77,6 +79,28 @@ class TestAlarm:
         assert str(Alarm(7, 5, "remote")) == "07:05 (remote)"
 
 
+def _records(text: str) -> object:
+    """Serve ``text`` for every record path, beside a phone-made header."""
+    header = {}
+
+    def _get(path: str) -> str | None:
+        if path.endswith("/e2e"):
+            if not header:
+                header["h"] = _phone_header()
+            return header["h"]
+        return text
+
+    return _get
+
+
+def _phone_header() -> str:
+    store = DictStore()
+    open_encrypted_client(
+        store, SYNC_LEGACY_PREFIX, passphrase=TEST_PHRASE, params=TEST_ARGON2
+    )
+    return store.files["wake-alarm-sync/e2e"]
+
+
 class TestFetchRemoteAlarm:
     """Tests for the GitHub backend behind fetch_remote_alarm."""
 
@@ -87,63 +111,45 @@ class TestFetchRemoteAlarm:
     def _with_token(self, config_file: Path) -> None:
         config_file.write_text(json.dumps({"token": "ghp_x"}))
 
+    def _client(self, **methods: object) -> MagicMock:
+        """A Contents API client stand-in; never the network."""
+        client = MagicMock()
+        for name, value in methods.items():
+            setattr(client, name, value)
+        return client
+
     def test_success(self, config_file: Path) -> None:
-        """A 200 with a valid body yields the pair."""
+        """A published log through the (encrypting) client yields the pair."""
         self._with_token(config_file)
-        response = MagicMock()
-        response.read.return_value = _log(6, 15).encode()
-        response.__enter__.return_value = response
-        with patch("urllib.request.urlopen", return_value=response):
+        client = self._client(
+            list_directory=MagicMock(return_value=["phone"]),
+            get_file_text=MagicMock(side_effect=_records(_log(6, 15))),
+        )
+        del client.get_string_map
+        with patch("wake_alarm._sync_transport.GitHubSyncClient", return_value=client):
             fetched = _fetch_github_alarm()
             assert fetched is not None
             assert fetched[:2] == (6, 15)
 
     def test_unparseable_body_is_not_an_alarm(self, config_file: Path) -> None:
-        """A 200 whose body is not a usable log yields nothing, not a crash."""
+        """A body that is not a usable log yields nothing, not a crash."""
         self._with_token(config_file)
-        response = MagicMock()
-        response.read.return_value = b"{}"
-        response.__enter__.return_value = response
-        with patch("urllib.request.urlopen", return_value=response):
+        client = self._client(
+            list_directory=MagicMock(return_value=["phone"]),
+            get_file_text=MagicMock(side_effect=_records("{}")),
+        )
+        del client.get_string_map
+        with patch("wake_alarm._sync_transport.GitHubSyncClient", return_value=client):
             assert _fetch_github_alarm() is None
 
-    def test_sends_raw_media_type_and_auth(self, config_file: Path) -> None:
-        """The request carries the token and the raw Accept header."""
-        self._with_token(config_file)
-        response = MagicMock()
-        response.read.return_value = _log().encode()
-        response.__enter__.return_value = response
-        with patch("urllib.request.urlopen", return_value=response) as urlopen:
-            _fetch_github_alarm()
-        request = urlopen.call_args[0][0]
-        assert request.get_header("Authorization") == "token ghp_x"
-        assert request.get_header("Accept") == "application/vnd.github.raw"
-        assert "kuhyx/syncs" in request.full_url
-
-    def test_refuses_a_non_https_scheme(self, config_file: Path) -> None:
-        """The token is never sent over a plaintext or file:// URL."""
-        self._with_token(config_file)
-        with (
-            patch("wake_alarm._sync_transport.SYNC_API_BASE", "http://api.github.com"),
-            patch("urllib.request.urlopen") as urlopen,
-        ):
-            assert _fetch_github_alarm() is None
-        urlopen.assert_not_called()
-
-    @pytest.mark.parametrize(
-        "exc",
-        [
-            urllib.error.URLError("down"),
-            OSError("timeout"),
-            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad"),
-        ],
-    )
+    @pytest.mark.parametrize("exc", [RemoteSyncError("down"), OSError("timeout")])
     def test_network_failures_yield_none(
         self, config_file: Path, exc: Exception
     ) -> None:
         """Every transport failure degrades to None, never raises."""
         self._with_token(config_file)
-        with patch("urllib.request.urlopen", side_effect=exc):
+        client = self._client(get_file_text=MagicMock(side_effect=exc))
+        with patch("wake_alarm._sync_transport.GitHubSyncClient", return_value=client):
             assert _fetch_github_alarm() is None
 
 

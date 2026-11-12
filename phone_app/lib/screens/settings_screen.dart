@@ -1,5 +1,7 @@
 import 'dart:developer' as developer;
 
+import 'package:crdt_sync_flutter/crdt_sync_flutter.dart'
+    show E2ePassphraseButton;
 import 'package:material_ui/material_ui.dart';
 import 'package:sync_settings_ui/sync_settings_ui.dart';
 
@@ -7,6 +9,7 @@ import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
 import 'package:wake_alarm_sync/screens/home_location_screen.dart';
 import 'package:wake_alarm_sync/screens/room_proof_screen.dart';
 import 'package:wake_alarm_sync/screens/session_tags_screen.dart';
+import 'package:wake_alarm_sync/services/alarm_sync_e2e.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/data_transfer.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
@@ -79,6 +82,15 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         actions: [
+          // End-to-end encryption passphrase: a closed lock while the last
+          // sync found no usable key, so nothing reaches the PC until set.
+          ValueListenableBuilder<bool>(
+            valueListenable: alarmSyncLocked,
+            builder: (_, locked, _) => E2ePassphraseButton(
+              key: const Key('settings-e2e'),
+              locked: locked,
+            ),
+          ),
           IconButton(
             key: const Key('settings-export'),
             icon: const Icon(Icons.upload_file, semanticLabel: 'Export data'),

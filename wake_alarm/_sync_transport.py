@@ -3,8 +3,14 @@
 Split out of ``_sync.py`` for the 250-line cap, along the seam item 8 needs:
 this module is the **transport** (token discovery and the two backends), while
 ``_sync.py`` keeps **resolution** (cache, staleness, fallback) and the CLI.
-Item 8 adds a dismissal-record reader, which belongs here beside the alarm
-reader rather than inside the resolution chain.
+
+Both backends hold the same end-to-end encrypted layout
+(``wake-alarm-sync/devices-e2e``), sealed under the shared crdt-sync
+passphrase (``~/.config/crdt-sync/password``). Every read goes through
+``crdt_sync.open_encrypted_client``, which also copies the old plaintext
+prefix over once per process, so a phone not yet updated is still seen. A
+missing or wrong passphrase reads as "nothing published" (fail closed: the
+resolution chain falls to the cache, then 08:00), never as plaintext.
 
 ``ALARM_CACHE_FILE`` deliberately does NOT live here: the suite patches
 ``wake_alarm._sync.ALARM_CACHE_FILE`` to keep tests off
@@ -17,30 +23,42 @@ from __future__ import annotations
 
 import json
 import logging
-import urllib.error
-import urllib.request
+from typing import TYPE_CHECKING
 
-from wake_alarm._alarm_payload import newest_alarm, parse_log
+from wake_alarm._alarm_payload import newest_alarm
 from wake_alarm._constants import (
     SYNC_ALARM_FILENAME,
     SYNC_ALARM_PATH,
-    SYNC_API_BASE,
     SYNC_APP_NAME,
     SYNC_CONFIG_FILE,
-    SYNC_DEVICES_PREFIX,
     SYNC_HTTP_TIMEOUT_SECONDS,
+    SYNC_LEGACY_PREFIX,
     SYNC_REPO_NAME,
     SYNC_REPO_OWNER,
     SYNC_TOKEN_FALLBACK_FILES,
 )
 
+if TYPE_CHECKING:
+    from crdt_sync import Argon2Params, RemoteStore
+
 _logger = logging.getLogger(__name__)
 
 # Optional at runtime, exactly like python-kasa in _smart_plug.py: the trigger
 # runs every minute under /usr/bin/python, so a dependency that failed to
-# install must degrade this read to the GitHub path, not raise.
+# install must degrade this read to the cache, not raise. Without crdt_sync
+# (and its pynacl/argon2-cffi) nothing can be decrypted, so neither backend
+# is read.
 try:
-    from crdt_sync import ConfigError, firebase_client_for
+    from crdt_sync import (
+        PASSWORD_FILE,
+        ConfigError,
+        E2eDecryptError,
+        E2eLayout,
+        E2eLockedError,
+        GitHubSyncClient,
+        firebase_client_for,
+        open_encrypted_client,
+    )
     from crdt_sync._config import CONFIG_FILE as FIREBASE_CONFIG_FILE
     from crdt_sync._firebase_auth import FirebaseAuthError
     from crdt_sync._remote import RemoteSyncError
@@ -48,7 +66,61 @@ try:
     _FIREBASE_AVAILABLE = True
 except ImportError:
     _FIREBASE_AVAILABLE = False
-    _logger.info("crdt_sync is not installed; reading the alarm from GitHub")
+    _logger.info("crdt_sync is not installed; the alarm cannot be fetched")
+
+#: Argon2id cost for a header this machine creates; None is the library's
+#: default. Only tests lower it.
+E2E_ARGON2_PARAMS: Argon2Params | None = None
+
+
+def _read_passphrase() -> str:
+    """The shared crdt-sync passphrase, or "" (locked) when there is none."""
+    try:
+        return PASSWORD_FILE.read_text().strip()
+    except OSError:
+        return ""
+
+
+def _read_sealed(store: RemoteStore, path: str) -> str | None:
+    """One device's decrypted record; None when absent or undecryptable."""
+    try:
+        return store.get_file_text(path)
+    except E2eDecryptError as exc:
+        _logger.info("Skipping an unreadable alarm at %s: %s", path, exc)
+        return None
+
+
+def _read_published(client: RemoteStore) -> list[tuple[str, str]]:
+    """Every device's decrypted ``alarm.json`` through ``client``.
+
+    Discovers device directories rather than reading one fixed path: the
+    phone's device id is migrating from the constant "phone" to a per-install
+    uuid, and a reader pinned to the old path would stop seeing the alarm the
+    moment the phone migrated -- falling back to FALLBACK_ALARM_HOUR, i.e.
+    waking the user at the wrong time. Listing covers both ids, and
+    SYNC_ALARM_PATH remains as a last resort for a backend that cannot list.
+
+    Raises:
+        E2eLockedError: No usable key; the caller reads that as nothing.
+    """
+    store, layout = open_encrypted_client(
+        client,
+        SYNC_LEGACY_PREFIX,
+        passphrase=_read_passphrase(),
+        params=E2E_ARGON2_PARAMS,
+    )
+    published: list[tuple[str, str]] = []
+    for device_id in store.list_directory(layout.prefix):
+        raw = _read_sealed(store, f"{layout.prefix}/{device_id}/{SYNC_ALARM_FILENAME}")
+        if raw is not None:
+            published.append((device_id, raw))
+    if not published:
+        # No directories listed (or none held a file): still try the
+        # legacy fixed path, so a phone that has not migrated is read.
+        raw = _read_sealed(store, SYNC_ALARM_PATH)
+        if raw is not None:
+            published.append(("phone", raw))
+    return published
 
 
 def _read_token_config() -> str | None:
@@ -104,25 +176,19 @@ def _read_token() -> str | None:
 
 
 def fetch_firebase_logs() -> list[tuple[str, str]] | None:
-    """Fetch every device's raw ``alarm.json`` from Firebase.
-
-    Discovers device directories rather than reading one fixed path: the
-    phone's device id is migrating from the constant "phone" to a per-install
-    uuid, and a reader pinned to the old path would stop seeing the alarm the
-    moment the phone migrated — falling back to FALLBACK_ALARM_HOUR, i.e.
-    waking the user at the wrong time. Listing covers both ids, and
-    SYNC_ALARM_PATH remains as a last resort for a backend that cannot list.
+    """Fetch every device's decrypted ``alarm.json`` from Firebase.
 
     Shared by the alarm reader and ``_weight``: the morning session's
     weigh-in rides on the same record, so one fetch serves both.
 
     Returns None — never raises — for every failure mode, including
-    ``crdt_sync`` not being importable on this interpreter, so the caller can
-    fall back to GitHub and then to the cache.
+    ``crdt_sync`` not being importable on this interpreter and a locked
+    (no or wrong passphrase) store, so the caller can fall back to GitHub and
+    then to the cache.
 
     Returns:
-        ``(device_id, raw_json)`` per device, or None if unconfigured or
-        unreadable.
+        ``(device_id, raw_json)`` per device, or None if unconfigured,
+        locked or unreadable.
     """
     if not _FIREBASE_AVAILABLE:
         return None
@@ -134,24 +200,18 @@ def fetch_firebase_logs() -> list[tuple[str, str]] | None:
         return None
 
     try:
-        client = firebase_client_for(SYNC_APP_NAME)
-        published: list[tuple[str, str]] = []
-        for device_id in client.list_directory(SYNC_DEVICES_PREFIX):
-            raw = client.get_file_text(
-                f"{SYNC_DEVICES_PREFIX}/{device_id}/{SYNC_ALARM_FILENAME}"
-            )
-            if raw is not None:
-                published.append((device_id, raw))
-        if not published:
-            # No directories listed (or none held a file): still try the
-            # legacy fixed path, so a phone that has not migrated is read.
-            raw = client.get_file_text(SYNC_ALARM_PATH)
-            if raw is None:
-                _logger.info("No alarm published to Firebase yet")
-                return None
-            published.append(("phone", raw))
-    except (ConfigError, FirebaseAuthError, RemoteSyncError, OSError) as exc:
+        published = _read_published(firebase_client_for(SYNC_APP_NAME))
+    except (
+        ConfigError,
+        FirebaseAuthError,
+        RemoteSyncError,
+        OSError,
+        E2eLockedError,
+    ) as exc:
         _logger.info("Cannot fetch the alarm from Firebase: %s", exc)
+        return None
+    if not published:
+        _logger.info("No alarm published to Firebase yet")
         return None
     return published
 
@@ -163,17 +223,18 @@ def _fetch_firebase_alarm() -> tuple[int, int, float | None] | None:
 
 
 def _fetch_github_alarm() -> tuple[int, int, float | None] | None:
-    """Fetch the alarm the phone last pushed to GitHub.
+    """Fetch the alarm the phone last pushed to the GitHub mirror.
 
-    Uses the raw media type so the Contents API returns the file body directly
-    rather than base64-wrapped JSON.
+    The same encrypted layout as Firebase (the phone's mirror store writes
+    both), read through ``crdt_sync``'s Contents API client.
 
     Returns:
-        ``(hour, minute, published_at)`` -- age unknown on this path -- or
-        None if unconfigured, unreachable, or
-        malformed. Never raises — a failed read must degrade to the cache,
-        not crash the trigger.
+        ``(hour, minute, published_at)``, or None if unconfigured,
+        unreachable, locked or malformed. Never raises — a failed read must
+        degrade to the cache, not crash the trigger.
     """
+    if not _FIREBASE_AVAILABLE:
+        return None
     token = _read_token()
     if token is None:
         # INFO, not WARNING: get_alarm() runs on every one-minute trigger tick,
@@ -182,43 +243,26 @@ def _fetch_github_alarm() -> tuple[int, int, float | None] | None:
         # actually fires on a degraded source — that is the actionable event.
         _logger.info("No sync token configured at %s", SYNC_CONFIG_FILE)
         return None
-
-    url = (
-        f"{SYNC_API_BASE}/repos/{SYNC_REPO_OWNER}/{SYNC_REPO_NAME}"
-        f"/contents/{SYNC_ALARM_PATH}"
+    client = GitHubSyncClient(
+        SYNC_REPO_OWNER,
+        SYNC_REPO_NAME,
+        token,
+        timeout_seconds=SYNC_HTTP_TIMEOUT_SECONDS,
     )
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Authorization": f"token {token}",
-            "Accept": "application/vnd.github.raw",
-        },
-    )
-    # The URL is built from module constants, never from remote input, but
-    # assert the scheme anyway: this call carries a credential, and an http://
-    # or file:// target would leak it. Belt and braces for a bad edit above.
-    if request.type != "https":
-        _logger.error("Refusing to send the sync token over %s", request.type)
-        return None
     try:
-        with urllib.request.urlopen(
-            request, timeout=SYNC_HTTP_TIMEOUT_SECONDS
-        ) as response:
-            raw = response.read().decode("utf-8")
-    except (urllib.error.URLError, OSError, UnicodeDecodeError) as exc:
+        # Read-only on the mirror: only the phone may create its header. A
+        # PC-made one (fresh salt) would leave every blob the phone sealed
+        # unreadable there, and could mislead a phone opening offline.
+        if client.get_file_text(E2eLayout.of(SYNC_LEGACY_PREFIX).e2e_path) is None:
+            _logger.info("No encrypted alarm on the GitHub mirror yet")
+            return None
+        published = _read_published(client)
+    except (RemoteSyncError, OSError, E2eLockedError) as exc:
         # INFO for the same reason as the no-token path: a persistent failure
-        # (404 because the phone never pushed, an expired token, no network)
         # would otherwise be one WARNING per cache expiry, forever.
         _logger.info("Cannot fetch synced alarm: %s", exc)
         return None
-
-    parsed = parse_log(raw)
-    if parsed is None:
-        return None
-    # The mirror is a single fixed path with no per-field HLC to read, so its
-    # age is unknown rather than fresh. See hlc_instant on why that is treated
-    # as trustworthy.
-    return (*parsed, None)
+    return newest_alarm(published) if published else None
 
 
 def fetch_remote_alarm() -> tuple[int, int, float | None] | None:

@@ -10,6 +10,7 @@ import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+from crdt_sync import E2eLayout
 import pytest
 
 from wake_alarm._constants import (
@@ -70,6 +71,9 @@ class TestFetchFirebaseAlarm:
             firebase_client_for=MagicMock(
                 return_value=client if client is not None else MagicMock()
             ),
+            # Ranking and fallback are under test here, not encryption
+            # (test_sync_e2e.py): a pass-through open on the E2E layout.
+            open_encrypted_client=lambda store, old, **_: (store, E2eLayout.of(old)),
             ConfigError=_FakeConfigError,
             FirebaseAuthError=_FakeAuthError,
             RemoteSyncError=_FakeRemoteError,

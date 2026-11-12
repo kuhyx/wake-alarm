@@ -100,9 +100,16 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
 `_sync.py` is the only reader.
 
 - Source of truth: a `crdt_sync` log written by `phone_app/` under
-  `wake-alarm-sync/devices/<device-id>/alarm.json`, at
+  `wake-alarm-sync/devices-e2e/<device-id>/alarm.json`, at
   `.alarm.fields.alarm_hour[0]` / `.alarm_minute[0]`. Same logical path on both
   backends, so only the transport differs, never the parse.
+- **End-to-end encrypted** (since 2026-11-12): fields are sealed with a key
+  derived from the shared passphrase (`~/.config/crdt-sync/password` on the
+  PC, the keystore + lock icon in Settings on the phone). Both readers go
+  through `open_encrypted_client`, which copies the old plaintext
+  `wake-alarm-sync/devices` over once per process and never deletes it. No
+  or wrong passphrase reads as "nothing published" (cache, then 08:00) —
+  never plaintext. diet_guard reads the same prefix for weigh-ins.
 - **The Firebase reader discovers device directories; it is not pinned to
   `devices/phone/`.** The phone's device id is migrating from the fixed
   constant `phone` to a per-install uuid, and a pinned reader would silently
@@ -128,9 +135,9 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
   **404, not 403**.
 - `crdt_sync` is imported at module scope but **guarded by
   `try/except ImportError`**: the service runs `/usr/bin/python`, not a venv, so
-  a dependency that failed to install must degrade the read to the GitHub path
-  rather than crash the per-minute trigger. The GitHub path stays stdlib-only
-  for that reason. Verify with `/usr/bin/python3 -c "import crdt_sync"`, not the
+  a dependency that failed to install must degrade the read to the cache
+  rather than crash the per-minute trigger. Both backends need it now (the
+  GitHub mirror is read through `GitHubSyncClient`, encrypted too). Verify with `/usr/bin/python3 -c "import crdt_sync"`, not the
   dev venv.
 - Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch → stale
   cache → 08:00. The cache bounds remote reads to ~288/day

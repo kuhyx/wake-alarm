@@ -6,13 +6,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart' as http_testing;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:wake_alarm_sync/services/alarm_sync_e2e.dart';
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 
-const _deviceId = 'test-device-uuid';
-const _alarmPath = 'wake-alarm-sync/devices/$_deviceId/alarm.json';
+import '../e2e_support.dart';
 
-http.Response _response(int statusCode, [Object? jsonBody]) =>
-    http.Response(jsonEncode(jsonBody ?? {}), statusCode);
+const _deviceId = 'test-device-uuid';
+const _alarmPath = 'wake-alarm-sync/devices-e2e/$_deviceId/alarm.json';
 
 /// In-memory persistence so the store never touches the real documents dir.
 class _MemPersistence implements LogPersistence {
@@ -25,39 +25,12 @@ class _MemPersistence implements LogPersistence {
   Future<void> write(String value) async => text = value;
 }
 
-class _PutCall {
-  _PutCall(this.path, this.body);
-  final String path;
-  final Map<String, dynamic> body;
-}
-
-/// Mock GitHub Contents API: GET `.../contents/<key>` returns
-/// [contentResponses]`[key]` (404 if absent), the bare repo-existence GET
-/// always succeeds, and every PUT is recorded. Mirrors the workout_app test.
-({http.Client httpClient, List<_PutCall> putCalls}) _mockGitHub({
-  Map<String, http.Response> contentResponses = const {},
-}) {
-  final putCalls = <_PutCall>[];
-  final client = http_testing.MockClient((request) async {
-    final path = request.url.path;
-    if (!path.contains('/contents/')) return _response(200);
-    final key = path.split('/contents/').last;
-    if (request.method == 'PUT') {
-      putCalls.add(
-        _PutCall(key, jsonDecode(request.body) as Map<String, dynamic>),
-      );
-      return _response(200);
-    }
-    return contentResponses[key] ?? _response(404);
-  });
-  return (httpClient: client, putCalls: putCalls);
-}
-
-Map<String, dynamic> _decodePush(_PutCall call) =>
-    jsonDecode(utf8.decode(base64.decode(call.body['content'] as String)))
-        as Map<String, dynamic>;
-
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    installE2eTestStorage();
+  });
+
   test('currentAlarm is null before anything is set', () async {
     final service = await AlarmSyncService.open(
       persistence: _MemPersistence(),
@@ -89,18 +62,40 @@ void main() {
       deviceId: _deviceId,
     );
     await service.setLocal(7, 15);
-    final (:httpClient, :putCalls) = _mockGitHub();
+    final remote = MemGitHub();
 
-    await service.push('tok', httpClient: httpClient);
+    await service.push('tok', httpClient: remote.httpClient);
 
-    expect(putCalls, hasLength(1));
-    expect(putCalls.single.path, _alarmPath);
-    final pushed = _decodePush(putCalls.single);
+    expect(remote.putPaths, contains(_alarmPath));
+    expect(remote.files[_alarmPath], isNot(contains('alarm_hour')));
+    final pushed =
+        jsonDecode((await remote.opened(_alarmPath))!) as Map<String, dynamic>;
     final fields =
         (pushed['alarm'] as Map<String, dynamic>)['fields']
             as Map<String, dynamic>;
     expect((fields['alarm_hour'] as List).first, 7);
     expect((fields['alarm_minute'] as List).first, 15);
+  });
+
+  test('a device with no passphrase pushes nothing', () async {
+    installE2eTestStorage(initial: {'crdt_sync_e2e_passphrase': ''});
+    final service = await AlarmSyncService.open(
+      persistence: _MemPersistence(),
+      deviceId: _deviceId,
+    );
+    await service.setLocal(7, 15);
+    final remote = MemGitHub();
+
+    await expectLater(
+      service.push('tok', httpClient: remote.httpClient),
+      throwsA(isA<SyncLockedException>()),
+    );
+    expect(remote.putPaths, isEmpty);
+    expect(alarmSyncLocked.value, isTrue);
+    expect(
+      const SyncLockedException(E2eLockReason.wrongKey).toString(),
+      contains('wrongKey'),
+    );
   });
 
   test('push is a network round-trip that swallows a server error', () async {
@@ -161,19 +156,18 @@ void main() {
         deviceId: 'uuid-abc',
       );
       await service.setLocal(6, 30);
-      final paths = <String>[];
-      final client = http_testing.MockClient((request) async {
-        paths.add(request.url.path);
-        return _response(200);
-      });
+      final remote = MemGitHub();
 
-      await service.push('tok', httpClient: client);
+      await service.push('tok', httpClient: remote.httpClient);
 
-      expect(paths.any((path) => path.contains('devices/uuid-abc/')), isTrue);
+      final paths = remote.putPaths;
+      expect(
+        paths.any((path) => path.contains('devices-e2e/uuid-abc/')),
+        isTrue,
+      );
       expect(
         paths.any(
-          (path) =>
-              path.contains('devices/${AlarmSyncService.legacyDeviceId}/'),
+          (path) => path.contains('/${AlarmSyncService.legacyDeviceId}/'),
         ),
         isFalse,
       );
