@@ -208,6 +208,9 @@ PC (`events.jsonl` `event`): `fallback_tick` (only on decision change),
   next-alarm, headless `ring_started` on a heads-up ring, boot-path miss
   (phone off before the alarm) → lockdown through tomorrow, escape hatch.
   Not yet on the Pixel: the real focus-owner reaction and Firebase publish.
+- Item 13 (black screen): dropped by kuhy 2026-11-12
+- Two-tag dismiss on device: dropped by kuhy 2026-11-12
+- Locked-keyguard dismiss on device: dropped by kuhy 2026-11-12
 
 ## Evidence for Claude
 
