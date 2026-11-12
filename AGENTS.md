@@ -220,6 +220,7 @@ and the root ring unit's `systemctl start|stop` lines live there.
 - lint: `pre-commit run ruff --all-files && cd phone_app && flutter analyze --fatal-infos --fatal-warnings`
 - coverage: `python -m pytest -q wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-report=xml --cov-fail-under=100`
 - coverage-gaps: `coverage-gaps coverage.xml`
+- deploy: `git -C ~/src/wake-alarm pull --ff-only && ~/src/wake-alarm/scripts/deploy.sh` (editable install under /usr/bin/python3 + timers and `_trigger --dry-run` health check, then the release APK onto the Pixel via phone_deploy, health = installed base.apk equals the built one; `--build-only` for board sessions, `--check` for the health check alone; unit or root-file changes still need `bash install.sh`)
 
 Other: full lint gate `pre-commit run --all-files`; watch live
 `journalctl --user -fu wake-alarm-trigger.service`; `bash install.sh` /
