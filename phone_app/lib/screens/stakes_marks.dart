@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/services/today_stakes.dart';
 import 'package:wake_alarm_sync/ui/spoken_label.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';

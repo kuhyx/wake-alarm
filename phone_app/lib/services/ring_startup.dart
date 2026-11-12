@@ -76,9 +76,5 @@ Future<RingStartup> resolveRingStartup({
           : 'NFC is off or unavailable.',
     );
   }
-  return RingStartup(
-    settings: settings,
-    skip: RingSkip.none,
-    status: '',
-  );
+  return RingStartup(settings: settings, skip: RingSkip.none, status: '');
 }

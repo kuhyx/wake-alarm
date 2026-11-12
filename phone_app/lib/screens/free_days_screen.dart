@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/screens/day_calendar.dart';
 import 'package:wake_alarm_sync/screens/free_days_body.dart';
 import 'package:wake_alarm_sync/services/free_day_pool.dart';

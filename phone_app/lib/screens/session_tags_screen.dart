@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';
@@ -102,10 +102,7 @@ class _SessionTagsScreenState extends State<SessionTagsScreen> {
       padding: const EdgeInsets.only(bottom: 24),
       child: Row(
         children: <Widget>[
-          Icon(
-            _iconForSlot(slot),
-            semanticLabel: _semanticLabelForSlot(slot),
-          ),
+          Icon(_iconForSlot(slot), semanticLabel: _semanticLabelForSlot(slot)),
           const SizedBox(width: 12),
           Expanded(
             child: id != null

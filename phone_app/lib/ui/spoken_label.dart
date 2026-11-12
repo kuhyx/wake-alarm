@@ -4,7 +4,7 @@
 /// Use for icon-only controls whose wording must remain only for TalkBack.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A wrapper that provides a spoken label for accessibility without any
 /// visible text (no Tooltip).

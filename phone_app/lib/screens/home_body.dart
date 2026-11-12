@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/screens/home_presence_line.dart';
 import 'package:wake_alarm_sync/screens/home_tiles.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';
@@ -129,10 +129,7 @@ class HomeBody extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   if (status.isNotEmpty) ...[
-                    StatusCue(
-                      semanticLabel: status,
-                      icon: _statusIcon(status),
-                    ),
+                    StatusCue(semanticLabel: status, icon: _statusIcon(status)),
                     const SizedBox(height: 24),
                   ],
                   HomeTiles(

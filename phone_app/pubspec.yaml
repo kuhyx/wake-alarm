@@ -12,7 +12,7 @@ dependencies:
   crdt_sync:
     git:
       url: https://github.com/kuhyx/utils
-      ref: crdt_sync_dart-v0.12.1
+      ref: crdt_sync_dart-v0.13.1
       path: crdt_sync_dart
   cupertino_icons: 2.0.0
 
@@ -31,7 +31,7 @@ dependencies:
   github_device_auth:
     git:
       url: https://github.com/kuhyx/utils
-      ref: github_device_auth-v0.4.0
+      ref: github_device_auth-v0.5.0
       path: github_device_auth
   google_account_token:
     git:
@@ -39,6 +39,7 @@ dependencies:
       ref: google_account_token-v0.1.0
       path: google_account_token
   http: 1.6.0
+  material_ui: 1.11.0
   path: 1.9.1
   path_provider: 2.1.6
   shared_preferences: 2.5.6
@@ -49,7 +50,7 @@ dependencies:
   sync_settings_ui:
     git:
       url: https://github.com/kuhyx/utils
-      ref: sync_settings_ui-v0.7.0
+      ref: sync_settings_ui-v0.8.0
       path: sync_settings_ui
   url_launcher: 6.3.3
   uuid: 4.6.0

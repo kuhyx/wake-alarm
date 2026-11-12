@@ -5,9 +5,8 @@ library;
 import 'dart:async' show unawaited;
 import 'dart:math' show pi, sin;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/ui/theme.dart' show AppStatusColors;
 
 export 'package:wake_alarm_sync/ui/spoken_label.dart';
@@ -16,12 +15,16 @@ export 'package:wake_alarm_sync/ui/spoken_label.dart';
 enum CueKind {
   /// Busy/loading state.
   busy,
+
   /// Success/connected state.
   ok,
+
   /// Error/failed state.
   error,
+
   /// Warning/caution state.
   warning,
+
   /// Informational state (default).
   info,
 }
@@ -35,16 +38,34 @@ CueKind? cueKindOf(String status) {
   if (status.endsWith('…') || status.endsWith('...')) return CueKind.busy;
 
   const errorKeywords = [
-    'Error', 'Could not', 'unavailable', 'refused', 'Not ', 'Unknown',
-    'Too early', 'not earlier', 'Wrong', 'Failed', 'too short',
+    'Error',
+    'Could not',
+    'unavailable',
+    'refused',
+    'Not ',
+    'Unknown',
+    'Too early',
+    'not earlier',
+    'Wrong',
+    'Failed',
+    'too short',
   ];
   for (final kw in errorKeywords) {
     if (status.contains(kw)) return CueKind.error;
   }
 
   const okKeywords = [
-    '✓', 'Connected', 'registered', 'matched', 'Captured', 'Synced',
-    'Armed', 'Done', 'Correct', 'Dismissed', 'Excused',
+    '✓',
+    'Connected',
+    'registered',
+    'matched',
+    'Captured',
+    'Synced',
+    'Armed',
+    'Done',
+    'Correct',
+    'Dismissed',
+    'Excused',
   ];
   for (final kw in okKeywords) {
     if (status.contains(kw)) return CueKind.ok;
@@ -109,9 +130,10 @@ class _StatusCueState extends State<StatusCue>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _shakeAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _shakeCtrl, curve: Curves.easeOut),
-    );
+    _shakeAnim = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _shakeCtrl, curve: Curves.easeOut));
     _prevKind = widget.resolvedKind;
   }
 
@@ -173,7 +195,8 @@ class _StatusCueState extends State<StatusCue>
     final statusColors = theme.extension<AppStatusColors>();
     final colorScheme = theme.colorScheme;
 
-    final iconData = widget.icon ??
+    final iconData =
+        widget.icon ??
         switch (kind) {
           CueKind.ok => Icons.check_circle,
           CueKind.error => Icons.error_outline,

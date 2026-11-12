@@ -72,8 +72,7 @@ void main() {
       final c = ChallengeGenerator(random: _FixedRandom(<int>[2, 3, 4])).math();
       expect(c.display, contains('*'));
       final parts = RegExp(r'(\d+) \* (\d+)').firstMatch(c.display)!;
-      final product =
-          int.parse(parts.group(1)!) * int.parse(parts.group(2)!);
+      final product = int.parse(parts.group(1)!) * int.parse(parts.group(2)!);
       expect(c.answer, '$product');
     });
 

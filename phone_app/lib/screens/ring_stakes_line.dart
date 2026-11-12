@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/services/enforcement_bridge.dart';
 import 'package:wake_alarm_sync/services/today_stakes.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';

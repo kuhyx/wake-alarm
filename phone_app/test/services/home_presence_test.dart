@@ -122,8 +122,7 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
             const MethodChannel(AlarmScheduler.channelName),
-            (call) async =>
-                call.method == 'readPresence' ? reading() : null,
+            (call) async => call.method == 'readPresence' ? reading() : null,
           );
     }
 

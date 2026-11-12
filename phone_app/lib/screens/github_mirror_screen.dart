@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:github_device_auth/github_device_auth.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';
 

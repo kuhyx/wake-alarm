@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';
@@ -102,7 +102,7 @@ class _RoomProofScreenState extends State<RoomProofScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Row(
-                children: <Widget>[
+        children: <Widget>[
           CircleAvatar(radius: 14, child: Text('${slot + 1}')),
           const SizedBox(width: 12),
           Expanded(

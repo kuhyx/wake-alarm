@@ -115,9 +115,8 @@ class HomePresence {
     );
   }
 
-  static String _readableDistance(double metres) => metres >= 1000
-      ? '${(metres / 1000).round()} km'
-      : '${metres.round()} m';
+  static String _readableDistance(double metres) =>
+      metres >= 1000 ? '${(metres / 1000).round()} km' : '${metres.round()} m';
 
   static String _reasonText(String? reason) => switch (reason) {
     'no-permission' => 'location permission denied',

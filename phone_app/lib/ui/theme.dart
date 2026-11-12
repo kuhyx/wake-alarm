@@ -6,7 +6,7 @@
 /// hand-picked, not algorithmically derived from one seed color.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Builds the app's single dark `ThemeData` from the shared token set.
 ThemeData buildAppTheme() {

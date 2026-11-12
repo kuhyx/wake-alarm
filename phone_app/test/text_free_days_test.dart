@@ -1,7 +1,7 @@
 import 'package:crdt_sync/crdt_sync.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/screens/free_days_screen.dart';
 import 'package:wake_alarm_sync/screens/sick_day_sheet.dart';
 import 'package:wake_alarm_sync/screens/sick_days_screen.dart';

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/main.dart';
 import 'package:wake_alarm_sync/screens/session_body.dart';
 import 'package:wake_alarm_sync/screens/session_checkin.dart';

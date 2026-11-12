@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/services/home_presence.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';
 

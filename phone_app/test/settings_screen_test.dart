@@ -1,13 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 void main() {
-  testWidgets('shows the two sync links and navigates to each', (
-    tester,
-  ) async {
+  testWidgets('shows the two sync links and navigates to each', (tester) async {
     await tester.pumpWidget(
       MaterialApp(theme: buildAppTheme(), home: const SettingsScreen()),
     );

@@ -96,8 +96,9 @@ void main() {
     expect(putCalls, hasLength(1));
     expect(putCalls.single.path, _alarmPath);
     final pushed = _decodePush(putCalls.single);
-    final fields = (pushed['alarm'] as Map<String, dynamic>)['fields']
-        as Map<String, dynamic>;
+    final fields =
+        (pushed['alarm'] as Map<String, dynamic>)['fields']
+            as Map<String, dynamic>;
     expect((fields['alarm_hour'] as List).first, 7);
     expect((fields['alarm_minute'] as List).first, 15);
   });

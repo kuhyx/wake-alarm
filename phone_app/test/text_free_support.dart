@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Every word painted on screen: text of each RenderParagraph (covers Text,
 /// Text.rich, button/chip labels and InputDecoration labels/hints), minus

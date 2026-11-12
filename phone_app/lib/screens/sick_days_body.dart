@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/screens/day_calendar.dart';
 import 'package:wake_alarm_sync/screens/sick_day_sheet.dart';
 import 'package:wake_alarm_sync/services/sick_day_keep.dart';
@@ -37,7 +37,7 @@ class SickDaysBody extends StatelessWidget {
   final String status;
 
   /// The native ring-path cache, read back (list of ISO
-/// dates or null for unreadable).
+  /// dates or null for unreadable).
   final List<String>? cache;
 
   /// Whether the cache has been read at least once.
@@ -85,9 +85,7 @@ class SickDaysBody extends StatelessWidget {
           calendar,
           const SizedBox(height: 24),
           const Row(
-            children: [
-              Icon(Icons.sick_outlined, semanticLabel: 'Marked sick'),
-            ],
+            children: [Icon(Icons.sick_outlined, semanticLabel: 'Marked sick')],
           ),
           const SizedBox(height: 8),
           if (upcoming.isEmpty)

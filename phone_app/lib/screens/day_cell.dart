@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 Widget _dot(Color color) => Container(
   key: const ValueKey<String>('day-badge'),

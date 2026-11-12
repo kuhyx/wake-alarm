@@ -1,8 +1,8 @@
 /// Tests for cues.dart: CueKind classifier and StatusCue rendering.
 library;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';
 
 void main() {

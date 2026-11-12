@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'package:wake_alarm_sync/screens/free_days_screen.dart';
 import 'package:wake_alarm_sync/screens/home_body.dart';

@@ -1,6 +1,6 @@
 import 'dart:math' show pi;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/ui/spoken_label.dart';
 
 /// A dashed outline slot for an empty/unregistered value.

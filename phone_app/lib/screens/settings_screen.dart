@@ -1,6 +1,6 @@
 import 'dart:developer' as developer;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:sync_settings_ui/sync_settings_ui.dart';
 
 import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
@@ -103,8 +103,10 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             key: const Key('settings-sync'),
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.cloud_sync_outlined,
-                semanticLabel: 'Sync settings'),
+            leading: const Icon(
+              Icons.cloud_sync_outlined,
+              semanticLabel: 'Sync settings',
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute(
