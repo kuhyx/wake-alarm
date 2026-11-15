@@ -75,12 +75,15 @@ cleanup() {
 trap cleanup EXIT
 
 install_ring_audio() {
+    # fuser (psmisc): the ring script's last resort frees a held card with it.
+    command -v fuser >/dev/null 2>&1 || sudo pacman -S --needed --noconfirm psmisc
     # Generated, never committed: the binary hook forbids WAVs in the repo.
     /usr/bin/python3 -m wake_alarm._ring_wav --write "$TEMP_DIR/wav" >/dev/null
     sudo install -D -m 0644 "$TEMP_DIR/wav/ring.wav" "$WAV_DIR/ring.wav"
     sudo install -D -m 0644 "$TEMP_DIR/wav/ring_loop.wav" "$WAV_DIR/ring_loop.wav"
     sudo install -D -m 0755 "$PC_DIR/ring_alsa.sh" "$RING_SCRIPT_DST"
-    sudo install -m 0644 "$PC_DIR/$ALSA_UNIT" "/etc/systemd/system/$ALSA_UNIT"
+    sed "s/@USER@/$INSTALL_USER/" "$PC_DIR/$ALSA_UNIT" >"$TEMP_DIR/$ALSA_UNIT"
+    sudo install -m 0644 "$TEMP_DIR/$ALSA_UNIT" "/etc/systemd/system/$ALSA_UNIT"
     sudo systemctl daemon-reload
     echo "  Ring WAVs, $RING_SCRIPT_DST and $ALSA_UNIT installed."
 }

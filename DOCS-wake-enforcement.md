@@ -231,8 +231,15 @@ PC (`events.jsonl` `event`): `fallback_tick` (only on decision change),
   root ALSA ring got `Device or resource busy` while PipeWire still held the
   card seconds after a PipeWire ring — at night the card is idle and opens
   (a silent root `aplay` passed), but a stream left open overnight would
-  keep it busy. **Open:** what the root ring does about a held card is
-  kuhy's call (killing the holder was refused by the auto-mode classifier).
+  keep it busy. **Decided 2026-11-15:** on the *first* busy open (no retries)
+  `ring_alsa.sh` rings through the user's PipeWire (`runuser`, then
+  `python -m wake_alarm._ring_main`); only if that fails does it `fuser -k
+  -TERM` the card's playback nodes once, retry ALSA once and exit non-zero.
+  Fallback before kill, because the holder is PipeWire itself. The fallback's
+  `ring_backend` event says `FAILED` (`started=false`) when PipeWire cannot
+  play, and the unit's non-zero exit is the loud failure; the user-level
+  fallback ring is the last line. Gate: vmbox `ring-alsa-busy-fallback`
+  (10 repetitions) and `ring-alsa-busy-fails-loudly`.
 - Emulator (`wake_alarm_api36`): exact A+15 check hidden from the system
   next-alarm, headless `ring_started` on a heads-up ring, boot-path miss
   (phone off before the alarm) → lockdown through tomorrow, escape hatch.
@@ -243,8 +250,11 @@ PC (`events.jsonl` `event`): `fallback_tick` (only on decision change),
 
 ## Evidence for Claude
 
-`python -m wake_alarm._audit [YYYY-MM-DD]` and the 11:05 timer write
+`python -m wake_alarm._audit [YYYY-MM-DD] [--stdout | --force]` and the 11:05 timer write
 `~/data/wake-alarm/incidents/<date>.md` (outside the repo: personal data): a merged
 phone + PC timeline, then expected-vs-observed checks (alarm known, RTC armed, PC up
 by `A`, ring/fallback, penalty, lockdown, phone pushed within `PHONE_PUSH_STALE_SECONDS`
 = 24 h by newest dated HLC; n/a when Firebase is unreachable), mismatches and escapes first.
+An existing report is never overwritten silently: exit 2 `refusing to overwrite <path>`
+unless `--force`; `--stdout` (alias `--dry-run`) prints and writes nothing, not even
+`audit_written`.

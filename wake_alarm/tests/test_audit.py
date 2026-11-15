@@ -18,6 +18,7 @@ from wake_alarm._sync import Alarm
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from pathlib import Path
 from dataclasses import replace
 
 DAY = date(2026, 10, 1)
@@ -150,6 +151,35 @@ class TestCli:
         ):
             assert main(["2026-10-01"]) == 1
         assert "could not write" in capsys.readouterr().err
+
+    def _existing(self) -> Path:
+        _audit.INCIDENTS_DIR.mkdir(parents=True)
+        path = _audit.INCIDENTS_DIR / "2026-10-01.md"
+        path.write_text("keep me")
+        return path
+
+    def test_refuses_to_overwrite(self, capsys: pytest.CaptureFixture[str]) -> None:
+        path = self._existing()
+        assert main(["2026-10-01"]) == 2
+        err = capsys.readouterr().err
+        assert f"refusing to overwrite {path}; use --stdout or --force" in err
+        assert path.read_text() == "keep me"
+
+    def test_stdout_prints_and_writes_nothing(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        path = self._existing()
+        with patch.object(_audit, "emit") as emitted:
+            assert main(["2026-10-01", "--stdout"]) == 0
+        assert "# Wake audit 2026-10-01" in capsys.readouterr().out
+        assert path.read_text() == "keep me"
+        emitted.assert_not_called()
+
+    def test_force_overwrites(self) -> None:
+        path = self._existing()
+        with patch.object(_audit, "configure_logging"):
+            assert main(["2026-10-01", "--force"]) == 0
+        assert path.read_text().startswith("# Wake audit 2026-10-01")
 
 
 def test_timeline_skips_an_unparsable_phone_stamp() -> None:

@@ -34,7 +34,7 @@ readonly SCRIPT_NAME
 # dies with "libtk8.6.so: cannot open shared object file" without it. Measured
 # in the guest, not guessed -- dropping this package is what broke the harness
 # when the alarm window was deleted.
-readonly GUEST_PACKAGES="tk alsa-utils"
+readonly GUEST_PACKAGES="tk alsa-utils psmisc"
 
 # Printed by guest_cases.sh only when every case passed. See run_cases().
 readonly GUEST_OK_SENTINEL="ALL-CASES-PASSED"

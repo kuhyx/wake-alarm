@@ -2,13 +2,15 @@
 
 ``wake-alarm-audit.timer`` runs it at 11:05; by hand::
 
-    python -m wake_alarm._audit [YYYY-MM-DD] [--dry-run]
+    python -m wake_alarm._audit [YYYY-MM-DD] [--stdout | --force]
 
 It merges the phone's ``phone_events`` with the PC's named ``events.jsonl``
 lines, boots and resumes into one timeline, runs the expected-vs-observed
 checks (``_audit_checks``) and writes ``INCIDENTS_DIR/<date>.md`` with every
 escape and mismatch first, under ``## Flags``. Read-only everywhere except
-that one file (and ``audit_written``); ``--dry-run`` prints without writing.
+that one file (and ``audit_written``). An existing report is never
+overwritten silently: exit 2 unless ``--force``; ``--stdout`` (alias
+``--dry-run``) prints and writes nothing.
 Outside the repo on purpose: the report holds personal data.
 """
 
@@ -166,17 +168,30 @@ def write_report(day: date, text: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point; exit 1 when the report could not be written."""
+    """Entry point; exit 1 if unwritable, 2 if a report exists and no flag."""
     parser = argparse.ArgumentParser(description="Audit one wake-up")
     parser.add_argument("day", nargs="?", type=date.fromisoformat, default=None)
-    parser.add_argument("--dry-run", action="store_true", help="print, write nothing")
+    parser.add_argument(
+        "--stdout",
+        "--dry-run",
+        dest="stdout",
+        action="store_true",
+        help="print, write nothing",
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="overwrite an existing report"
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     day = args.day or datetime.now().astimezone().date()
+    existing = INCIDENTS_DIR / f"{day.isoformat()}.md"
+    if existing.exists() and not (args.stdout or args.force):
+        sys.stderr.write(f"refusing to overwrite {existing}; use --stdout or --force\n")
+        return 2
     evidence, reachable = gather(day)
     checks = run_checks(evidence)
     text = render(evidence, checks, reachable=reachable)
     sys.stdout.write(text)
-    if args.dry_run:
+    if args.stdout:
         return 0
     configure_logging(component="audit")
     try:

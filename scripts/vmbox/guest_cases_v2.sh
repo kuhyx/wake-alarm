@@ -57,6 +57,86 @@ case_ring_script_plays() {
     fi
 }
 
+# --- card held busy (PipeWire holds it on the real PC) ----------------------
+readonly BUSY_REPS=10
+readonly BUSY_DIR=/tmp/ring-busy
+readonly EVENTS="$HOME/.local/state/wake_alarm/events.jsonl"
+
+# Stub wpctl/pw-play: the guest has no user PipeWire. $1 = "ok" or "broken".
+busy_stubs() {
+    mkdir -p "$BUSY_DIR/bin"
+    printf '#!/bin/sh\nexit 0\n' >"$BUSY_DIR/bin/wpctl"
+    if [[ "$1" == ok ]]; then
+        printf '#!/bin/sh\nexec sleep 30\n' >"$BUSY_DIR/bin/pw-play"
+    else
+        printf '#!/bin/sh\nexit 1\n' >"$BUSY_DIR/bin/pw-play"
+    fi
+    chmod +x "$BUSY_DIR/bin/"*
+}
+
+# Hold the Dummy card's only playback substream, ignoring TERM.
+busy_hold() {
+    sudo modprobe -r snd-dummy >/dev/null 2>&1 || true
+    sudo modprobe snd-dummy pcm_substreams=1
+    setsid bash -c 'trap "" TERM; exec aplay -q -D plughw:CARD=Dummy,DEV=0 /dev/zero -f S16_LE -r 8000 -c 1' \
+        >/dev/null 2>&1 &
+    sleep 1
+}
+
+busy_release() {
+    sudo pkill -KILL -x aplay >/dev/null 2>&1 || true
+}
+
+# A ring_backend event in the user's log carrying $1 (started true/false).
+busy_event() {
+    grep '"event": "ring_backend"' "$EVENTS" 2>/dev/null | grep -q "$1"
+}
+
+# Run the ring script against the held card; $1 = seconds to let it run.
+busy_run() {
+    sudo WAKE_ALARM_CARD=Dummy WAKE_ALARM_USER="$USER" PATH="$BUSY_DIR/bin:$PATH" \
+        timeout "$1" "$RING_SCRIPT" "$RING_WAV_DIR/ring.wav" "$RING_WAV_DIR/ring_loop.wav" 2>&1
+}
+
+# The first busy open hands the ring to PipeWire, N times over, with the
+# holder alive and ignoring TERM (so a kill-first design would fail here).
+case_ring_busy_fallback() {
+    local name="ring-alsa-busy-fallback" i ok=0 out
+    busy_stubs ok
+    busy_hold
+    for ((i = 1; i <= BUSY_REPS; i++)); do
+        : >"$EVENTS" 2>/dev/null || true
+        out="$(busy_run 4)" || true
+        if grep -q '^fallback-started' <<<"$out" &&
+            ! grep -q 'kill-holder' <<<"$out" &&
+            busy_event '"started": true'; then
+            ok=$((ok + 1))
+        fi
+    done
+    busy_release
+    if [[ $ok -eq $BUSY_REPS ]]; then
+        pass "$name"
+    else
+        fail "$name" "$ok of $BUSY_REPS repetitions fell back on the first busy open"
+    fi
+}
+
+# Holder present AND fallback broken: never a silent success.
+case_ring_busy_fails_loudly() {
+    local name="ring-alsa-busy-fails-loudly" out rc=0
+    busy_stubs broken
+    busy_hold
+    : >"$EVENTS" 2>/dev/null || true
+    out="$(busy_run 15)" || rc=$?
+    busy_release
+    if [[ $rc -ne 0 && $rc -ne 124 ]] && grep -q 'kill-holder' <<<"$out" &&
+        busy_event '"started": false'; then
+        pass "$name"
+    else
+        fail "$name" "rc=$rc, expected non-zero exit, kill-holder and a FAILED event"
+    fi
+}
+
 case_sudoers() {
     local name="sudoers-merged"
     if ! sudo visudo -cf "$SUDOERS" >/dev/null 2>&1; then
@@ -123,6 +203,8 @@ run_v2_cases() {
     case_v2_timers
     case_ring_unit_installed
     case_ring_script_plays
+    case_ring_busy_fallback
+    case_ring_busy_fails_loudly
     case_sudoers
     case_powerkey_dropin
     case_rtc_arm
