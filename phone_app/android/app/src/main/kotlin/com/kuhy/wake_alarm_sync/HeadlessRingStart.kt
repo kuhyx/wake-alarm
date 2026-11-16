@@ -37,7 +37,10 @@ object HeadlessRingStart {
 
     /** Starts the engine unless one is already running. Main thread only. */
     fun start(context: Context) {
-        if (engine != null) return
+        if (engine != null) {
+            Log.w(TAG, "headless ring_started engine already running; start ignored")
+            return
+        }
         try {
             val app = context.applicationContext
             val created = FlutterEngine(app)

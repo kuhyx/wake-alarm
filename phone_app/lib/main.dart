@@ -1,3 +1,8 @@
+// Framework material, for its MaterialLocalizations delegate only: material_ui
+// ships its own MaterialLocalizations type, so crdt_sync_flutter's dialogs
+// (framework `showDialog`) found none and threw a null check.
+// ignore: deprecated_member_use, the only source of the framework delegate.
+import 'package:flutter/material.dart' as fw show DefaultMaterialLocalizations;
 import 'package:material_ui/material_ui.dart';
 
 import 'package:wake_alarm_sync/screens/home_screen.dart';
@@ -67,6 +72,10 @@ class WakeAlarmSyncApp extends StatelessWidget {
       title: kAppName,
       theme: buildAppTheme(),
       navigatorKey: navigatorKey,
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        fw.DefaultMaterialLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
       // AlarmActivity sets its initial route to kRingRoute, so the ring screen
       // is what comes up over the lockscreen; the launcher still gets home.
       routes: <String, WidgetBuilder>{

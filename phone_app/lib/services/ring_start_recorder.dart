@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/enforcement_bridge.dart';
 import 'package:wake_alarm_sync/services/enforcement_sync.dart';
@@ -60,7 +61,10 @@ class RingStartRecorder {
       if (await RingStartedStore.publishedOn(entry['date'])) return true;
       final settings = await SyncSettings.load();
       final hasFirebase = await loadAccount() != null;
-      if (!settings.isConfigured && !hasFirebase) return false;
+      if (!settings.isConfigured && !hasFirebase) {
+        _log('ring_started not published: no sync backend');
+        return false;
+      }
       final service = await _open();
       // Only the enforcement fields: the ring is no time to restage tags
       // and history, and the push carries the whole log regardless.
@@ -79,5 +83,9 @@ class RingStartRecorder {
     }
   }
 
-  void _log(String message) => developer.log(message, name: 'WakeAlarmRing');
+  // developer.log is invisible in a release build; logcat needs debugPrint.
+  void _log(String message) {
+    debugPrint('WakeAlarmRing: $message');
+    developer.log(message, name: 'WakeAlarmRing');
+  }
 }

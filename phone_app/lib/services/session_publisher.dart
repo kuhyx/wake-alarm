@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/settings_sync.dart';
@@ -32,6 +33,8 @@ class SessionPublisher {
       await applySyncedSettings(service);
       return 'Session synced to PC ✓';
     } on Exception catch (e, stack) {
+      // developer.log is invisible in a release build; logcat needs print.
+      debugPrint('WakeAlarmSession: session publish failed: $e');
       developer.log(
         'session publish failed: $e',
         name: 'WakeAlarmSession',
