@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ============================================================================
-# Fail if `textgate scan` reports any text item not covered by keep.md.
+# Fail if `textgate scan` reports any text item not covered by DOCS-textgate-keep.md.
 #
 # textgate has no path exclusion and its config is a gate control, so the
-# repo's deliberate exceptions live in keep.md instead. This script reads the
+# repo's deliberate exceptions live in DOCS-textgate-keep.md instead. This script reads the
 # "## Scan exceptions" table there (first cell: a backticked file, or a
 # directory ending in "/"; second cell: the backticked exact text, or * for
 # any text) and prints every scan hit no row covers.
@@ -20,7 +20,7 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 readonly REPO_ROOT
-readonly KEEP_FILE="$REPO_ROOT/keep.md"
+readonly KEEP_FILE="$REPO_ROOT/DOCS-textgate-keep.md"
 readonly SECTION="## Scan exceptions"
 
 die() {
@@ -28,7 +28,7 @@ die() {
     exit 2
 }
 
-# Print the exception rows of keep.md as "path<TAB>text" (empty text = any).
+# Print the exception rows of DOCS-textgate-keep.md as "path<TAB>text" (empty text = any).
 keep_rows() {
     awk -v section="$SECTION" '/^## /{on = ($0 == section)} on && /^\| `/' "$KEEP_FILE" |
         sed -E 's/^\| `([^`]+)` \| (`([^`]*)`|\*) \|.*$/\1\t\3/'
@@ -56,10 +56,10 @@ main() {
 
     if [[ -n "$unmatched" ]]; then
         echo "$unmatched"
-        echo "textgate keep: $(wc -l <<<"$unmatched") hit(s) not in keep.md" >&2
+        echo "textgate keep: $(wc -l <<<"$unmatched") hit(s) not in DOCS-textgate-keep.md" >&2
         exit 1
     fi
-    echo "textgate keep: all $(jq length <<<"$scan") hit(s) covered by keep.md"
+    echo "textgate keep: all $(jq length <<<"$scan") hit(s) covered by DOCS-textgate-keep.md"
 }
 
 main "$@"
