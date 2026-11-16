@@ -1,13 +1,11 @@
-// ignore: deprecated_member_use, the dialog under test is framework material.
-import 'package:flutter/material.dart' as fw show AlertDialog;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/main.dart';
 import 'package:wake_alarm_sync/screens/settings_screen.dart';
 
-/// crdt_sync_flutter's passphrase dialog uses the framework's material
-/// `showDialog`, which needs the framework's MaterialLocalizations. The
-/// app's MaterialApp comes from material_ui and does not supply them.
+/// crdt_sync_flutter's passphrase dialog (0.8.2 imports material_ui, so it is
+/// material_ui's `AlertDialog`) must open from the settings lock icon without
+/// a localization exception.
 void main() {
   testWidgets('the settings lock icon opens the passphrase dialog', (
     tester,
@@ -22,7 +20,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(fw.AlertDialog), findsOneWidget);
+    expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.byType(EditableText), findsOneWidget);
   });
 }
