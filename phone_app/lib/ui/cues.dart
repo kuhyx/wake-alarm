@@ -7,7 +7,8 @@ import 'dart:math' show pi, sin;
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:wake_alarm_sync/ui/theme.dart' show AppStatusColors;
+import 'package:wake_alarm_sync/ui/theme.dart'
+    show AppStatusColors, MotionDuration;
 
 export 'package:wake_alarm_sync/ui/spoken_label.dart';
 
@@ -127,7 +128,7 @@ class _StatusCueState extends State<StatusCue>
   void initState() {
     super.initState();
     _shakeCtrl = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: MotionDuration.slow,
       vsync: this,
     );
     _shakeAnim = Tween<double>(

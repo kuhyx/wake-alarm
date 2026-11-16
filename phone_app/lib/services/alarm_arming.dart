@@ -37,7 +37,9 @@ class AlarmArming {
   ///
   /// android_intent_plus v5 uses startActivityForResult and the Clock app
   /// never sends a result, so this times out after 3s rather than hang.
-  Future<void> registerWithClockApp(int hour, int minute) async {
+  ///
+  /// Returns true only if the launch completed before the timeout.
+  Future<bool> registerWithClockApp(int hour, int minute) async {
     final intent = AndroidIntent(
       action: 'android.intent.action.SET_ALARM',
       arguments: <String, Object>{
@@ -47,6 +49,11 @@ class AlarmArming {
         'android.intent.extra.alarm.MESSAGE': 'Wake Alarm',
       },
     );
-    await intent.launch().timeout(const Duration(seconds: 3), onTimeout: () {});
+    var completed = true;
+    await intent.launch().timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => completed = false,
+    );
+    return completed;
   }
 }

@@ -14,6 +14,7 @@ import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/data_transfer.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
+import 'package:wake_alarm_sync/ui/motion_route.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 /// Settings screen: links to the two sync surfaces.
@@ -121,8 +122,9 @@ class SettingsScreen extends StatelessWidget {
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => SyncSettingsScreen(
+              appRoute<void>(
+                context,
+                (_) => SyncSettingsScreen(
                   accountLoader: loadAccount,
                   accountSaver: saveAccount,
                   accountClearer: clearAccount,
@@ -140,7 +142,7 @@ class SettingsScreen extends StatelessWidget {
             leading: const Icon(Icons.nfc, semanticLabel: 'Room proof'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const RoomProofScreen()),
+              appRoute<void>(context, (_) => const RoomProofScreen()),
             ),
           ),
           ListTile(
@@ -152,7 +154,7 @@ class SettingsScreen extends StatelessWidget {
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const SessionTagsScreen()),
+              appRoute<void>(context, (_) => const SessionTagsScreen()),
             ),
           ),
           ListTile(
@@ -164,7 +166,7 @@ class SettingsScreen extends StatelessWidget {
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const HomeLocationScreen()),
+              appRoute<void>(context, (_) => const HomeLocationScreen()),
             ),
           ),
           ListTile(
@@ -187,7 +189,7 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
             onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const GitHubMirrorScreen()),
+              appRoute<void>(context, (_) => const GitHubMirrorScreen()),
             ),
           ),
         ],

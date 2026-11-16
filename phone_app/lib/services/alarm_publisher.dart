@@ -53,10 +53,19 @@ class AlarmPublisher {
       await applySyncedSettings(service);
       final problem = await arming.arm(hour, minute);
       if (problem != null) return problem;
-      await arming.registerWithClockApp(hour, minute);
-      return 'Synced to PC ✓';
+      final inClock = await arming.registerWithClockApp(hour, minute);
+      return syncedStatus(hour, minute, inClock: inClock);
     } on Exception catch (e) {
       return 'Error: $e';
     }
   }
+}
+
+/// The success line; names the Clock app only when the handoff to it
+/// completed before its timeout, so a silent timeout never claims it.
+String syncedStatus(int hour, int minute, {required bool inClock}) {
+  final time =
+      '${hour.toString().padLeft(2, '0')}:'
+      '${minute.toString().padLeft(2, '0')}';
+  return inClock ? 'Synced to PC ✓ Clock app set $time ✓' : 'Synced to PC ✓';
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:wake_alarm_sync/screens/free_days_screen.dart';
@@ -14,6 +15,7 @@ import 'package:wake_alarm_sync/services/alarm_sync_service.dart';
 import 'package:wake_alarm_sync/services/day_pool_refresh.dart';
 import 'package:wake_alarm_sync/services/firebase_backend.dart';
 import 'package:wake_alarm_sync/services/sync_settings.dart';
+import 'package:wake_alarm_sync/ui/motion_route.dart';
 
 /// Main screen: displays the current alarm time and syncs it to the PC via
 /// the shared crdt_sync transport.
@@ -117,9 +119,12 @@ class _HomeScreenState extends State<HomeScreen> {
       helpText: '',
     );
     if (picked == null) return;
+    // The tap that sets the alarm: felt now, before any await or intent.
+    unawaited(HapticFeedback.mediumImpact());
     final accepted = await AlarmPolicy.setEarlier(picked.hour, picked.minute);
     if (!mounted) return;
     if (!accepted) {
+      unawaited(HapticFeedback.heavyImpact());
       setState(
         () => _status =
             'That is not earlier than $current. The alarm can only be '
@@ -134,6 +139,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // publish attempt was the one at startup, so an alarm moved earlier here
     // never reached the PC at all.
     await _syncToPc();
+    if (!mounted) return;
+    // Keep the armed time in the confirmation; the sync result follows it.
+    setState(() => _status = 'Armed for ${_fmt(_hour, _minute)}. $_status');
   }
 
   /// Re-reads the policy and arms the alarm to match it.
@@ -180,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             onPressed: () => Navigator.push<void>(
               context,
-              MaterialPageRoute<void>(builder: (_) => const FreeDaysScreen()),
+              appRoute<void>(context, (_) => const FreeDaysScreen()),
             ),
           ),
           IconButton(
@@ -191,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             onPressed: () => Navigator.push<void>(
               context,
-              MaterialPageRoute<void>(builder: (_) => const SickDaysScreen()),
+              appRoute<void>(context, (_) => const SickDaysScreen()),
             ),
           ),
           IconButton(
@@ -204,8 +212,9 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () async {
               await Navigator.push<void>(
                 context,
-                MaterialPageRoute<void>(
-                  builder: (_) => SettingsScreen(alarmService: _service),
+                appRoute<void>(
+                  context,
+                  (_) => SettingsScreen(alarmService: _service),
                 ),
               );
               // Publish too, not just reload: a tag registered in Settings

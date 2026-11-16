@@ -38,4 +38,12 @@ void main() {
     expect(message, isNot(contains('Connect a sync backend')));
     expect(message, contains('Sync store unavailable'));
   });
+
+  test('the Clock line names the time only when the handoff completed', () {
+    expect(
+      syncedStatus(6, 5, inClock: true),
+      'Synced to PC ✓ Clock app set 06:05 ✓',
+    );
+    expect(syncedStatus(6, 5, inClock: false), 'Synced to PC ✓');
+  });
 }

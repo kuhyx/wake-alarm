@@ -121,3 +121,36 @@ class DayMarkColors extends ThemeExtension<DayMarkColors> {
     );
   }
 }
+
+/// Motion durations, hand-copied from the shared `DOCS-motion.md`.
+abstract final class MotionDuration {
+  /// No animation; the reduced-motion target.
+  static const Duration instant = Duration.zero;
+
+  /// State on an element already under the finger.
+  static const fast = Duration(milliseconds: 120);
+
+  /// Default: anything entering or leaving within the current view.
+  static const base = Duration(milliseconds: 200);
+
+  /// Full-surface change: page transitions. The ceiling.
+  static const slow = Duration(milliseconds: 320);
+}
+
+/// Motion curves, hand-copied from the shared `DOCS-motion.md`.
+abstract final class MotionCurve {
+  /// Default start-and-end-on-screen curve.
+  static const standard = Cubic(0.2, 0, 0, 1);
+
+  /// Entering the screen.
+  static const decelerate = Cubic(0, 0, 0, 1);
+
+  /// Leaving the screen.
+  static const accelerate = Cubic(0.3, 0, 1, 1);
+}
+
+/// [token], or zero when the OS "Remove animations" setting is on.
+Duration motionDuration(BuildContext context, Duration token) =>
+    (MediaQuery.maybeDisableAnimationsOf(context) ?? false)
+    ? MotionDuration.instant
+    : token;
