@@ -1,8 +1,9 @@
 """Fetching the alarm the phone pushed — Firebase first, GitHub as mirror.
 
 Split out of ``_sync.py`` for the 250-line cap, along the seam item 8 needs:
-this module is the **transport** (token discovery and the two backends), while
-``_sync.py`` keeps **resolution** (cache, staleness, fallback) and the CLI.
+this module is the **transport** (the two backends; the GitHub token lives in
+``_sync_token.py``), while ``_sync.py`` keeps **resolution** (cache, staleness,
+fallback) and the CLI.
 
 Both backends hold the same end-to-end encrypted layout
 (``wake-alarm-sync/devices-e2e``), sealed under the shared crdt-sync
@@ -21,21 +22,19 @@ real file.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
+from wake_alarm import _sync_token
 from wake_alarm._alarm_payload import newest_alarm
 from wake_alarm._constants import (
     SYNC_ALARM_FILENAME,
     SYNC_ALARM_PATH,
     SYNC_APP_NAME,
-    SYNC_CONFIG_FILE,
     SYNC_HTTP_TIMEOUT_SECONDS,
     SYNC_LEGACY_PREFIX,
     SYNC_REPO_NAME,
     SYNC_REPO_OWNER,
-    SYNC_TOKEN_FALLBACK_FILES,
 )
 
 if TYPE_CHECKING:
@@ -123,58 +122,6 @@ def _read_published(client: RemoteStore) -> list[tuple[str, str]]:
     return published
 
 
-def _read_token_config() -> str | None:
-    """Read the token from this package's own JSON config.
-
-    Returns:
-        The token, or None if the file is missing, unreadable, malformed, or
-        holds no usable token.
-    """
-    try:
-        with SYNC_CONFIG_FILE.open() as handle:
-            config = json.load(handle)
-    except OSError, json.JSONDecodeError:
-        return None
-    if not isinstance(config, dict):
-        return None
-    token = config.get("token")
-    if not isinstance(token, str) or not token:
-        return None
-    return token
-
-
-def _read_token_fallback() -> str | None:
-    """Read the token from a sibling app's raw single-line token file.
-
-    Returns:
-        The first usable token found, or None if none of the fallback files
-        exists or holds one.
-    """
-    for path in SYNC_TOKEN_FALLBACK_FILES:
-        try:
-            token = path.read_text().strip()
-        except OSError:
-            continue
-        if token:
-            _logger.debug("Using sync token from %s", path)
-            return token
-    return None
-
-
-def _read_token() -> str | None:
-    """Read the GitHub token, preferring this package's own config.
-
-    Falls back to diet_guard's token file so one repo-scoped PAT covers
-    every app syncing through ``kuhyx/syncs``.
-
-    Returns:
-        The token, or None if no configured source holds one.
-    """
-    # No warning on a miss here: the caller reports "no token" once. Logging
-    # twice for one unconfigured file makes every tick noisy in the journal.
-    return _read_token_config() or _read_token_fallback()
-
-
 def fetch_firebase_logs() -> list[tuple[str, str]] | None:
     """Fetch every device's decrypted ``alarm.json`` from Firebase.
 
@@ -235,13 +182,13 @@ def _fetch_github_alarm() -> tuple[int, int, float | None] | None:
     """
     if not _FIREBASE_AVAILABLE:
         return None
-    token = _read_token()
+    token = _sync_token.read_token()
     if token is None:
         # INFO, not WARNING: get_alarm() runs on every one-minute trigger tick,
         # so a persistent condition logged loudly here is 1440 identical
         # journal lines a day. The trigger warns once, at the moment it
         # actually fires on a degraded source — that is the actionable event.
-        _logger.info("No sync token configured at %s", SYNC_CONFIG_FILE)
+        _logger.info("No sync token configured at %s", _sync_token.SYNC_CONFIG_FILE)
         return None
     client = GitHubSyncClient(
         SYNC_REPO_OWNER,

@@ -41,8 +41,6 @@ from wake_alarm._sync_transport import (
     _FIREBASE_AVAILABLE,
     _fetch_firebase_alarm,
     _fetch_github_alarm,
-    _read_token,
-    _read_token_fallback,
     fetch_remote_alarm,
 )
 
@@ -55,8 +53,6 @@ __all__ = [
     "Alarm",
     "_fetch_firebase_alarm",
     "_fetch_github_alarm",
-    "_read_token",
-    "_read_token_fallback",
     "fetch_remote_alarm",
     "get_alarm",
 ]
@@ -201,7 +197,7 @@ def get_alarm(*, max_cache_age_seconds: float = ALARM_CACHE_MAX_AGE_SECONDS) -> 
         return Alarm(remote[0], remote[1], "remote")
 
     # Both degraded paths log at INFO for the same per-minute-tick reason as
-    # _read_token above; _trigger warns when it fires on a degraded source.
+    # the transport; _trigger warns when it fires on a degraded source.
     if cached is not None:
         _logger.info("Using stale cached alarm — sync read failed")
         return Alarm(cached[0], cached[1], "stale-cache")

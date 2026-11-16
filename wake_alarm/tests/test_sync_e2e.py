@@ -14,7 +14,7 @@ from unittest.mock import patch
 from crdt_sync import open_encrypted_client
 import pytest
 
-from wake_alarm import _sync_transport
+from wake_alarm import _sync_token, _sync_transport
 from wake_alarm._constants import SYNC_DEVICES_PREFIX, SYNC_LEGACY_PREFIX
 from wake_alarm.tests.conftest import TEST_ARGON2, TEST_PHRASE, DictStore
 
@@ -30,8 +30,8 @@ def config_file(tmp_path: Path) -> Iterator[Path]:
     """This app's GitHub token config, redirected; no sibling fallbacks."""
     path = tmp_path / "sync.json"
     with (
-        patch.object(_sync_transport, "SYNC_CONFIG_FILE", path),
-        patch.object(_sync_transport, "SYNC_TOKEN_FALLBACK_FILES", ()),
+        patch.object(_sync_token, "SYNC_CONFIG_FILE", path),
+        patch.object(_sync_token, "SYNC_TOKEN_FALLBACK_FILES", ()),
     ):
         yield path
 

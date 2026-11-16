@@ -1,4 +1,4 @@
-"""Tests for _sync.py's GitHub token discovery and its sibling fallbacks.
+"""Tests for _sync_token.py's GitHub token discovery and its sibling fallbacks.
 
 Split out of test_sync.py to hold both files under the 250-line gate.
 """
@@ -11,9 +11,9 @@ from unittest.mock import patch
 
 import pytest
 
-from wake_alarm._sync import (
-    _read_token,
+from wake_alarm._sync_token import (
     _read_token_fallback,
+    read_token,
 )
 
 if TYPE_CHECKING:
@@ -58,40 +58,40 @@ def _patch_paths(
 ) -> None:
     """Redirect every on-disk path into tmp_path for every test."""
     with (
-        patch("wake_alarm._sync_transport.SYNC_CONFIG_FILE", config_file),
+        patch("wake_alarm._sync_token.SYNC_CONFIG_FILE", config_file),
         patch("wake_alarm._sync.ALARM_CACHE_FILE", cache_file),
-        patch("wake_alarm._sync_transport.SYNC_TOKEN_FALLBACK_FILES", fallback_files),
+        patch("wake_alarm._sync_token.SYNC_TOKEN_FALLBACK_FILES", fallback_files),
     ):
         yield
 
 
 class TestReadToken:
-    """Tests for _read_token."""
+    """Tests for read_token."""
 
     def test_missing_file(self) -> None:
         """A missing config file yields no token."""
-        assert _read_token() is None
+        assert read_token() is None
 
     def test_malformed_json(self, config_file: Path) -> None:
         """Unparsable JSON yields no token."""
         config_file.write_text("{not json")
-        assert _read_token() is None
+        assert read_token() is None
 
     def test_not_a_dict(self, config_file: Path) -> None:
         """A JSON array is not a config object."""
         config_file.write_text("[]")
-        assert _read_token() is None
+        assert read_token() is None
 
     @pytest.mark.parametrize("value", [None, "", 42])
     def test_unusable_token_values(self, config_file: Path, value: object) -> None:
         """Absent, empty and non-string tokens are all rejected."""
         config_file.write_text(json.dumps({"token": value}))
-        assert _read_token() is None
+        assert read_token() is None
 
     def test_valid_token(self, config_file: Path) -> None:
         """A non-empty string token is returned."""
         config_file.write_text(json.dumps({"token": "ghp_x"}))
-        assert _read_token() == "ghp_x"
+        assert read_token() == "ghp_x"
 
 
 class TestTokenFallback:
@@ -100,7 +100,7 @@ class TestTokenFallback:
     def test_no_fallback_files(self) -> None:
         """With nothing on disk anywhere there is no token."""
         assert _read_token_fallback() is None
-        assert _read_token() is None
+        assert read_token() is None
 
     def test_reads_raw_single_line_token(
         self, fallback_files: tuple[Path, Path]
@@ -130,11 +130,11 @@ class TestTokenFallback:
         """wake_alarm's own config takes precedence over a sibling's."""
         config_file.write_text(json.dumps({"token": "ghp_own"}))
         fallback_files[0].write_text("ghp_sibling")
-        assert _read_token() == "ghp_own"
+        assert read_token() == "ghp_own"
 
     def test_falls_back_when_config_absent(
         self, fallback_files: tuple[Path, Path]
     ) -> None:
         """With no own config, the sibling token is used."""
         fallback_files[0].write_text("ghp_sibling")
-        assert _read_token() == "ghp_sibling"
+        assert read_token() == "ghp_sibling"

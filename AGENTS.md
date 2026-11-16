@@ -39,8 +39,8 @@ passing sent the user back to the start.
   re-baselined at tag 1, so walking to tag 1 already banks them and the stage
   passes on its first poll. The 2-minute elapsed floor (`requiredElapsed`)
   applies **only under bypass/away**, where no tag proved the walk and a
-  shaken phone would count; on the normal path it was two minutes of ringing
-  nothing could shorten (dropped 2026-09-16).
+  shaken phone would count; on the normal path it only added two minutes of
+  ringing (dropped 2026-09-16).
 - **Answers are cumulative, not consecutive.** A wrong one costs the attempt
   and nothing else.
 - **The bypass skips the tags, never the walk.** After
@@ -50,8 +50,7 @@ passing sent the user back to the start.
   bed for five minutes and answer questions without standing up — weaker than
   the gate this replaced. Do not "simplify" it into that.
 - **No challenge may hide its prompt.** The memorise-then-hide kind was
-  deleted, not merely unrouted: the ring screen is reached by walking in from
-  another room.
+  deleted, not merely unrouted: the ring screen is reached by walking in.
 
 **The dismiss does not end the morning.** Since 2026-09-16 it hands over, in
 the same activity, to the silent **morning session**: weigh in → bathroom tag
@@ -69,10 +68,10 @@ clock, and everything that is a hard crash or a silent no-ring:
 **`DOCS-phone-alarm.md`**.
 
 **Free days.** On a day in the shared pool (`~/src/utils/freedays`) the phone
-does not ring at all: `AlarmReceiver` checks a native cache Dart rewrites
-after every mark/release/sync. Picker, cache and its fail-closed contract:
-**`DOCS-free-days.md`**. Sick days (`~/src/utils/sickdays`, never a free day):
-phone + pre-alarm sync **`DOCS-sick-days.md`**, PC **`DOCS-wake-enforcement.md`**.
+does not ring: `AlarmReceiver` checks a native cache Dart rewrites after every
+mark/release/sync. Picker, cache, fail-closed contract: **`DOCS-free-days.md`**.
+Sick days (`~/src/utils/sickdays`, never a free day): phone + pre-alarm sync
+**`DOCS-sick-days.md`**, PC **`DOCS-wake-enforcement.md`**.
 
 ## Scheduling — a per-minute timer
 
@@ -88,16 +87,17 @@ today's fire instant in **local** time, and fires iff `now` is in
 `was_trigger_fired_today()`. Without it the routine restarts on every tick for
 the rest of the 60-minute window: the unit is `Type=simple`, so a start while
 it runs is a no-op, but the moment the workout lock finishes the next tick
-relaunches it on top of the user. This latch replaced the alarm's own
-dismissal record when `_alarm.py` was deleted — deleting one without adding the
-other is a silent regression, and that is exactly the trap.
+relaunches it on top of the user. The latch replaced the alarm's own dismissal
+record when `_alarm.py` was deleted; deleting one without adding the other is
+a silent regression.
 
-`Persistent=true` plus the 60-minute window is also what replaced the deleted
+`Persistent=true` plus the 60-minute window also replaced the deleted
 systemd-sleep hook: a suspended or just-booted machine still fires.
 
 ## Reading the phone's alarm
 
-`_sync.py` is the only reader.
+`_sync.py` is the only reader; `_sync_transport.py` fetches, `_sync_token.py`
+holds the GitHub-token lookup (stdlib-only).
 
 - Source of truth: a `crdt_sync` log written by `phone_app/` under
   `wake-alarm-sync/devices-e2e/<device-id>/alarm.json`, at
@@ -111,50 +111,45 @@ systemd-sleep hook: a suspended or just-booted machine still fires.
   or wrong passphrase reads as "nothing published" (cache, then 08:00) —
   never plaintext. diet_guard reads the same prefix for weigh-ins.
 - **The Firebase reader discovers device directories; it is not pinned to
-  `devices/phone/`.** The phone's device id is migrating from the fixed
-  constant `phone` to a per-install uuid, and a pinned reader would silently
-  stop seeing the alarm and fall back to 08:00 — i.e. the wrong
-  time. `_fetch_firebase_alarm()` lists `SYNC_DEVICES_PREFIX`, reads every
-  device's `alarm.json`, and picks the newest by the hour field's **HLC**, with
-  `device_id` breaking exact ties. A payload that does not parse is skipped
-  rather than allowed to win. `SYNC_ALARM_PATH` remains as a last-resort read
-  for a backend that lists nothing.
-- Payload parsing/ranking lives in `_alarm_payload.py`: `_sync.py` owns
-  fetching, caching and fallback; `_alarm_payload.py` owns "what did the phone
-  actually say".
+  `devices/phone/`.** The phone's device id is migrating from the constant
+  `phone` to a per-install uuid; a pinned reader would silently stop seeing
+  the alarm and fall back to 08:00, the wrong time. `_fetch_firebase_alarm()`
+  lists `SYNC_DEVICES_PREFIX`, reads every device's `alarm.json`, and picks the
+  newest by the hour field's **HLC** (`device_id` breaks exact ties). A payload
+  that does not parse is skipped, never allowed to win. `SYNC_ALARM_PATH`
+  stays as a last-resort read for a backend that lists nothing.
+- Payload parsing/ranking lives in `_alarm_payload.py` ("what did the phone
+  say"); `_sync.py` owns fetching, caching and fallback.
 - **Firebase first, GitHub as the cutover mirror.** Retiring the mirror is
   deleting the GitHub branch plus `SYNC_API_BASE`/`SYNC_REPO_*`.
 - Firebase config: shared `~/.config/crdt-sync/firebase.json`; the refresh
-  token is cached per app under `SYNC_APP_NAME` (`wake_alarm`). The config file
-  is checked **before** anything is constructed, so an unconfigured machine
-  never touches the network.
+  token is cached per app under `SYNC_APP_NAME` (`wake_alarm`). The config is
+  checked **before** anything is constructed, so an unconfigured machine never
+  touches the network.
 - GitHub token (fallback only): `~/.config/wake_alarm/sync.json` key `token`,
-  else diet_guard's raw `~/.config/diet_guard/sync_token` (screen-locker is
-  Firebase-only since 2026-10-09; its `sync_token` is no longer read).
-  Needs `repo` scope — the repo is private, so a token without access returns
-  **404, not 403**.
+  else diet_guard's raw `~/.config/diet_guard/sync_token` (screen-locker's is no
+  longer read: Firebase-only since 2026-10-09). Needs `repo` scope; the repo is
+  private, so a token without access returns **404, not 403**.
 - `crdt_sync` is imported at module scope but **guarded by
   `try/except ImportError`**: the service runs `/usr/bin/python`, not a venv, so
   a dependency that failed to install must degrade the read to the cache
-  rather than crash the per-minute trigger. Both backends need it now (the
-  GitHub mirror is read through `GitHubSyncClient`, encrypted too). Verify with `/usr/bin/python3 -c "import crdt_sync"`, not the
-  dev venv.
+  rather than crash the per-minute trigger. Both backends need it (the GitHub
+  mirror is read through `GitHubSyncClient`, encrypted too). Verify with
+  `/usr/bin/python3 -c "import crdt_sync"`, not the dev venv.
 - Resolution chain in `get_alarm()`: fresh cache (< 5 min) → live fetch → stale
-  cache → 08:00. The cache bounds remote reads to ~288/day
-  despite the per-minute tick.
+  cache → 08:00. The cache bounds remote reads to ~288/day.
 - **A record older than `PUBLISHED_ALARM_MAX_AGE_SECONDS` (14 days) is skipped
   at every step, including the cache.** The check is on when the *phone
-  stamped it*, never on when we fetched — checking the fetch is trivially
-  defeated, because the cache is rewritten from the same stale record every few
-  minutes, so `fetched_at` is always fresh however old the record behind it is.
-  That is why the winning HLC's instant is carried through `_alarm_payload` →
+  stamped it*, never on when we fetched: the cache is rewritten from the same
+  stale record every few minutes, so `fetched_at` is always fresh. That is why
+  the winning HLC's instant is carried through `_alarm_payload` →
   `_sync_transport` → the cache's `published_at`. Expiring is safe because
   08:00 is the latest the phone can ever arm. An **undated** record is
-  trusted, not expired: the GitHub mirror has no per-field HLC, so treating
-  "cannot tell" as "too old" would break that backend entirely.
+  trusted: the GitHub mirror has no per-field HLC, so treating "cannot tell"
+  as "too old" would break that backend entirely.
 - **Degraded reads log at INFO, not WARNING.** `get_alarm()` runs every minute;
-  a persistent condition logged loudly is 1440 journal lines a day. `_trigger`
-  emits the single WARNING that matters: firing *now* on a non-phone time.
+  a loud persistent condition is 1440 journal lines a day. `_trigger` emits the
+  one WARNING that matters: firing *now* on a non-phone time.
 - **The morning session is the carrot** (`_session.py`, `wake-alarm-session.timer`,
   **`DOCS-morning-session-pc.md`**): a completed-in-time morning defers the
   workout and LeetCode locks to 11:00 via one signed file both consumers read.
@@ -167,11 +162,10 @@ is what `_trigger` starts, and it now runs one leg: `screen_locker.screen_lock`.
 Its alarm leg was removed in the same change that deleted `_alarm.py`.
 
 **When this package's module paths change, the orchestrator must change in the
-same commit.** Leaving it pointing at a module that no longer exists caused a
-month-long silent production failure once already (2026-05-28, orchestrator
-still on `python_pkg.screen_locker.screen_lock` after screen-locker's
-extraction): the alarm fired and dismissed correctly while the workout lock
-crashed with `ModuleNotFoundError` on every run.
+same commit.** A stale path caused a month-long silent production failure
+(2026-05-28, orchestrator still on `python_pkg.screen_locker.screen_lock` after
+screen-locker's extraction): the alarm fired and dismissed correctly while the
+workout lock crashed with `ModuleNotFoundError` on every run.
 
 ## Production dependency installation
 
@@ -183,26 +177,26 @@ site-packages:
 /usr/bin/python3 -m pip install --user --break-system-packages -e .
 ```
 
-**Run `install.sh` (or `pip install -e`) from a durable clone**, not a scratch
-directory — it is editable, so a later `git pull` in that clone updates the
-running production code. From `/tmp` or via `pip install "wake_alarm @ git+..."`
-you get a snapshot frozen at that commit, and the next push silently does not
-reach the running service. Convention: `~/src/wake-alarm`, mirroring
-`~/src/screen-locker`.
+**Run `install.sh` (or `pip install -e`) from a durable clone**
+(`~/src/wake-alarm`, mirroring `~/src/screen-locker`), not a scratch directory:
+it is editable, so a later `git pull` there updates the running production
+code. From `/tmp` or via `pip install "wake_alarm @ git+..."` you get a
+snapshot frozen at that commit, and the next push silently does not reach the
+service.
 
-If you add a dependency and only install it into a dev venv, the service fails
-with `ModuleNotFoundError` on its next run — this exact gap caused a 3-day
-diet_guard outage. Verify against `/usr/bin/python3 -c "import <dep>"`.
+A dependency installed only into a dev venv makes the service fail with
+`ModuleNotFoundError` on its next run (this gap caused a 3-day diet_guard
+outage). Verify against `/usr/bin/python3 -c "import <dep>"`.
 
 ## Uninstalling
 
 `uninstall.sh`, never `rm -rf` on the repo: it also removes the root ring
 unit, the logind power-key drop-in and an RTC alarm we armed, and retires the
-old `/usr/local/bin/shutdown` wrapper wherever one survives. `install.sh` calls `uninstall.sh --retired-only` as its last step, so
-**`uninstall.sh` is load-bearing for installing**, not just for removing —
-renaming or deleting it breaks a fresh install. That call is non-fatal and
-gated on `sudo -n`: the cleanup needs root, and a hard failure there would
-abort an install that had already placed the package and enabled the timer.
+old `/usr/local/bin/shutdown` wrapper wherever one survives. `install.sh` calls
+`uninstall.sh --retired-only` last, so **`uninstall.sh` is load-bearing for
+installing** — renaming or deleting it breaks a fresh install. That call is
+non-fatal and gated on `sudo -n`: the cleanup needs root, and a hard failure
+would abort an install that had already placed the package and the timer.
 
 **`/etc/sudoers.d/wake-alarm` is deliberately left in place** even by a full
 uninstall. Since 2026-10-01 it is live again: the RTC self-wake's `rtcwake`
@@ -213,11 +207,9 @@ and the root ring unit's `systemctl start|stop` lines live there.
 - **`wake_state.json` is runtime state, not tracked.** It holds the
   HMAC-signed once-per-day latch. It was accidentally committed in the
   monorepo and must stay gitignored here.
-- **`WAKE_STATE_FILE` is redirected in `tests/conftest.py`, not per-file.**
-  `_trigger` writes it now, and the trigger tests never redirected it — a
-  per-file redirect is exactly the kind that gets forgotten when a new writer
-  appears, and the failure is silent: a green suite that quietly stamped the
-  live state file.
+- **`WAKE_STATE_FILE` is redirected in `tests/conftest.py`, not per-file.** A
+  per-file redirect gets forgotten when a new writer appears (`_trigger` was
+  one), and the failure is silent: a green suite that stamped the live file.
 
 ## Commands
 
@@ -229,12 +221,12 @@ and the root ring unit's `systemctl start|stop` lines live there.
 - coverage-gaps: `coverage-gaps coverage.xml`
 - deploy: `git -C ~/src/wake-alarm pull --ff-only && ~/src/wake-alarm/scripts/deploy.sh` (editable install under /usr/bin/python3 + timers and `_trigger --dry-run` health check, then the release APK onto the Pixel via phone_deploy, health = installed base.apk equals the built one; `--build-only` for board sessions, `--check` for the health check alone; unit or root-file changes still need `bash install.sh`)
 
-Other: full lint gate `pre-commit run --all-files`; watch live
+Other: full lint gate `pre-commit run --all-files`; live log
 `journalctl --user -fu wake-alarm-trigger.service`; `bash install.sh` /
 `bash uninstall.sh`; shell/system scripts gate `bash scripts/vmbox/harness.sh`
 (disposable Arch VM, **`DOCS-vmbox.md`**); emulator morning
 `phone_app/scripts/emu_morning.py` (`DOCS-morning-session.md`); ring the phone
-via `lib/main_ring_probe.dart` (`DOCS-phone-alarm.md` — starts a **real**
+via `lib/main_ring_probe.dart` (`DOCS-phone-alarm.md`, starts a **real**
 alarm). The dev venv lacks `gatelock`: anything importing `_state` (incl.
 `_trigger`) needs `/usr/bin/python3`, not `.venv/bin/python`.
 
