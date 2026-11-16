@@ -46,6 +46,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         while not stopping:
             if not backend.pump():
+                # Dying mid-ring must reach the log as loudly as never starting.
+                emit(
+                    "ring_backend",
+                    "pipewire for root unit (FAILED)",
+                    backend=backend.name,
+                    why="pw-play stopped mid-ring",
+                    started=False,
+                    detail="pump failed",
+                )
                 return 1
             time.sleep(_PUMP_SECONDS)
     finally:

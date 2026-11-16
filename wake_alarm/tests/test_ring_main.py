@@ -50,6 +50,9 @@ def test_pump_failure_exits_1_and_stops() -> None:
     code, emitted = _run(backend)
     assert code == 1
     assert "started" in emitted.call_args_list[0].args[1]
+    # pw-play dying mid-ring is a failure the audit must see, not silence.
+    assert "FAILED" in emitted.call_args.args[1]
+    assert emitted.call_args.kwargs["started"] is False
     backend.stop.assert_called_once()
 
 

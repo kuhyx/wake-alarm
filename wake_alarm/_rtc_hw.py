@@ -8,7 +8,10 @@ setting and clearing go through the NOPASSWD ``sudo -n /usr/sbin/rtcwake``.
 armed, so :func:`disarm_ours` only ever clears that one: an alarm someone
 else set (a manual ``rtcwake``) is not ours to remove. The comparison is on
 the sysfs value, which is epoch seconds when the RTC keeps UTC (this host:
-no ``/etc/adjtime``). An RTC on local time would never match, which fails
+no ``/etc/adjtime``). ``rtcwake -t`` shifts the alarm by the RTC/system clock
+offset (vmbox: +1 s), so "ours" means within ``_MATCH_SLACK_SECONDS``, never
+exact equality: an exact compare forgot the record and left the alarm armed.
+An RTC on local time is off by whole hours and never matches, which fails
 safe -- the alarm is left in place, never cleared by mistake.
 
 Every process goes through ``_run``, the seam the suite replaces.
@@ -28,6 +31,8 @@ _logger = logging.getLogger(__name__)
 
 RTCWAKE = "/usr/sbin/rtcwake"
 WAKEALARM_FILE = Path("/sys/class/rtc/rtc0/wakealarm")
+# Clock offset rtcwake may add; far below the 1 h of a local-time RTC.
+_MATCH_SLACK_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,11 @@ def current_alarm() -> int | None:
     return int(text) if text.isdigit() else None
 
 
+def matches(pending: int | None, epoch: int) -> bool:
+    """Whether the pending sysfs alarm is the one armed for ``epoch``."""
+    return pending is not None and abs(pending - epoch) <= _MATCH_SLACK_SECONDS
+
+
 def read_record() -> ArmedRecord | None:
     """What we last armed, or None."""
     try:
@@ -91,7 +101,7 @@ def _write_record(record: ArmedRecord | None) -> None:
 
 def arm(epoch: int, target_date: str) -> tuple[bool, str]:
     """Set the RTC alarm (unless it already is exactly this) and record it."""
-    if current_alarm() == epoch:
+    if matches(current_alarm(), epoch):
         ok, detail = True, "already set"
     else:
         ok, detail = _rtcwake("-m", "no", "-t", str(epoch))
@@ -113,7 +123,7 @@ def disarm_ours() -> tuple[ArmedRecord | None, bool, str]:
     record = read_record()
     if record is None:
         return None, False, "nothing of ours armed"
-    if current_alarm() != record.epoch:
+    if not matches(current_alarm(), record.epoch):
         _write_record(None)
         return record, False, "no longer pending"
     ok, detail = _rtcwake("-m", "disable")

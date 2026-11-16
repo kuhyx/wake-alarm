@@ -67,7 +67,13 @@ lives in CMOS, so it survives however the PC goes down.
   29–44 s after the alarm (FADT: "RTC can wake system from S4 = 1").
   A typed `shutdown` stays a real poweroff.
 - `poweroff`: no logind change; relies on the firmware waking from S5.
-  Unverified until the host S5 test runs.
+  vmbox only, 2026-11-15 (`vm new --uefi`, OVMF): `rtcwake -m no -s 120`
+  then `systemctl poweroff` left AIE and `RTC_EN` set in CMOS, and the
+  guest cold-booted 12 s (guest clock) after the alarm (`result=woke`).
+  QEMU has no S5 wake path, so `vm wake` emulates the firmware half: this
+  proves the arming survives a poweroff, not that this board wakes from S5.
+  Host S5 firmware check dropped by kuhy 2026-11-15 (needs a physical
+  power-on).
 
 ### Phone stick (Tue/Wed/Thu, not free days)
 

@@ -14,6 +14,10 @@ readonly RING_WAV_DIR=/usr/local/share/wake-alarm
 readonly SUDOERS=/etc/sudoers.d/wake-alarm
 readonly POWERKEY_DROPIN=/etc/systemd/logind.conf.d/wake-alarm-powerkey.conf
 readonly WAKEALARM=/sys/class/rtc/rtc0/wakealarm
+# The repo root in the guest: `vm repo` names it after the host basename
+# (~/wake-alarm, or ~/wt from a worktree), so derive it, never hard-code it.
+GUEST_REPO="$(readlink -f "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../..")"
+readonly GUEST_REPO
 
 # A timer present but disabled fails silently every morning.
 case_v2_timers() {
@@ -74,17 +78,38 @@ busy_stubs() {
     chmod +x "$BUSY_DIR/bin/"*
 }
 
-# Hold the Dummy card's only playback substream, ignoring TERM.
+# Hold the Dummy card's only playback substream as root (the ssh user has no
+# ACL on a freshly loaded card), from a process that really ignores TERM:
+# aplay installs its own TERM handler, so `fuser -k -TERM` would free the
+# card. Returns non-zero when nothing holds it: a dead fixture must fail the
+# case as a fixture, never pass for a product result.
 busy_hold() {
+    busy_release
     sudo modprobe -r snd-dummy >/dev/null 2>&1 || true
     sudo modprobe snd-dummy pcm_substreams=1
-    setsid bash -c 'trap "" TERM; exec aplay -q -D plughw:CARD=Dummy,DEV=0 /dev/zero -f S16_LE -r 8000 -c 1' \
+    sudo udevadm settle
+    local node
+    node="$(busy_node)" || return 1
+    sudo setsid bash -c "trap '' TERM; exec 3>$node; exec sleep 600" \
         >/dev/null 2>&1 &
     sleep 1
+    # Captured, not piped: under pipefail aplay's own exit 1 fails the pipe.
+    local probe
+    probe="$(sudo aplay -q -D plughw:CARD=Dummy,DEV=0 "$RING_WAV_DIR/ring.wav" 2>&1)" || true
+    grep -qi busy <<<"$probe"
+}
+
+# The Dummy card's playback node, e.g. /dev/snd/pcmC0D0p.
+busy_node() {
+    local card
+    card="$(readlink /proc/asound/Dummy)" || return 1
+    echo "/dev/snd/pcmC${card#card}D0p"
 }
 
 busy_release() {
-    sudo pkill -KILL -x aplay >/dev/null 2>&1 || true
+    local node
+    node="$(busy_node)" || return 0
+    sudo fuser -s -k -KILL "$node" >/dev/null 2>&1 || true
 }
 
 # A ring_backend event in the user's log carrying $1 (started true/false).
@@ -103,7 +128,10 @@ busy_run() {
 case_ring_busy_fallback() {
     local name="ring-alsa-busy-fallback" i ok=0 out
     busy_stubs ok
-    busy_hold
+    if ! busy_hold; then
+        fail "$name" "fixture: nothing holds the Dummy card"
+        return
+    fi
     for ((i = 1; i <= BUSY_REPS; i++)); do
         : >"$EVENTS" 2>/dev/null || true
         out="$(busy_run 4)" || true
@@ -125,7 +153,10 @@ case_ring_busy_fallback() {
 case_ring_busy_fails_loudly() {
     local name="ring-alsa-busy-fails-loudly" out rc=0
     busy_stubs broken
-    busy_hold
+    if ! busy_hold; then
+        fail "$name" "fixture: nothing holds the Dummy card"
+        return
+    fi
     : >"$EVENTS" 2>/dev/null || true
     out="$(busy_run 15)" || rc=$?
     busy_release
@@ -183,7 +214,7 @@ case_rtc_arm() {
 # Last: uninstall must remove everything except the sudoers file.
 case_uninstall() {
     local name="uninstall-cleans" leftovers=()
-    (cd ~/wake-alarm && bash uninstall.sh >/dev/null 2>&1) || true
+    (cd "$GUEST_REPO" && bash uninstall.sh >/dev/null 2>&1) || true
     [[ -e "$RING_UNIT" ]] && leftovers+=("$RING_UNIT")
     [[ -e "$RING_SCRIPT" ]] && leftovers+=("$RING_SCRIPT")
     [[ -e "$POWERKEY_DROPIN" ]] && leftovers+=("$POWERKEY_DROPIN")

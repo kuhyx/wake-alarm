@@ -108,3 +108,27 @@ def test_real_seam() -> None:
     with patch.object(subprocess, "run", return_value=_done()) as run:
         REAL_RUN(["true"])
     assert run.call_args.args[0] == ["true"]
+
+
+def test_rtc_offset_still_matches_our_alarm() -> None:
+    """rtcwake shifts -t by the RTC/system clock offset (seen: +1 s)."""
+    with patch.object(_rtc_hw, "_run", return_value=_done()):
+        arm(EPOCH, "2026-10-06")
+    _rtc_hw.WAKEALARM_FILE.write_text(str(EPOCH + 1))
+    run = MagicMock(return_value=_done())
+    with patch.object(_rtc_hw, "_run", run):
+        assert arm(EPOCH, "2026-10-06") == (True, "already set")
+        record, disarmed, _ = disarm_ours()
+    assert (record, disarmed) == (ArmedRecord(EPOCH, "2026-10-06"), True)
+    assert run.call_args.args[0][-2:] == ["-m", "disable"]
+
+
+def test_alarm_an_hour_away_is_not_ours() -> None:
+    with patch.object(_rtc_hw, "_run", return_value=_done()):
+        arm(EPOCH, "2026-10-06")
+    _rtc_hw.WAKEALARM_FILE.write_text(str(EPOCH + 3600))
+    assert disarm_ours() == (
+        ArmedRecord(EPOCH, "2026-10-06"),
+        False,
+        "no longer pending",
+    )

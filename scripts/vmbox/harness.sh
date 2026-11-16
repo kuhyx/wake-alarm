@@ -25,6 +25,11 @@ readonly SCRIPT_DIR
 # directory in the guest and rsync writes into /home instead of the repo.
 REPO_DIR="$(readlink -f "${SCRIPT_DIR}/../..")"
 readonly REPO_DIR
+# Where `vm repo` lands the tree: ~/<basename>, so a worktree named "wt" is
+# ~/wt, not ~/wake-alarm. Hard-coding the name broke every worktree run.
+# shellcheck disable=SC2088  # the guest shell expands ~, not this one
+GUEST_REPO="~/$(basename "$REPO_DIR")"
+readonly GUEST_REPO
 SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_NAME
 
@@ -119,7 +124,7 @@ run_install() {
     # sentinel grep below matched vm's echo of the command line itself.
     # Hence -x: only a line that IS the sentinel counts.
     vm run "$VM_NAME" \
-        'cd ~/wake-alarm && bash install.sh && echo INSTALL-OK' \
+        "cd $GUEST_REPO && bash install.sh && echo INSTALL-OK" \
         >/tmp/wa-install.log 2>&1 || true
     if ! grep -qx 'INSTALL-OK' /tmp/wa-install.log; then
         tail -20 /tmp/wa-install.log >&2
@@ -135,7 +140,7 @@ run_cases() {
     step "Running the guest cases"
     local output
     output="$(vm run "$VM_NAME" \
-        'bash ~/wake-alarm/scripts/vmbox/guest_cases.sh all' 2>&1)"
+        "bash $GUEST_REPO/scripts/vmbox/guest_cases.sh all" 2>&1)"
     echo "$output"
     grep -q "$GUEST_OK_SENTINEL" <<<"$output"
 }

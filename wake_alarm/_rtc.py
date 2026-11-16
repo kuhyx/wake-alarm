@@ -46,7 +46,7 @@ from wake_alarm._events import emit, emit_on_change
 from wake_alarm._fallback_policy import alarm_instant
 from wake_alarm._logging_setup import configure_logging
 from wake_alarm._pc_wake_mode import read_mode
-from wake_alarm._rtc_hw import arm, current_alarm, disarm_ours, read_record
+from wake_alarm._rtc_hw import arm, current_alarm, disarm_ours, matches, read_record
 from wake_alarm._sick import alarm_stands_down, alarm_stands_down_synced
 from wake_alarm._sync import Alarm, get_alarm
 from wake_alarm._workday_penalty import cancel_for_sick_day
@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     chosen = plan(now, get_alarm())
     sys.stdout.write(describe(chosen))
     record = read_record()
-    if not chosen.arm and record is not None and current_alarm() == record.epoch:
+    if not chosen.arm and record is not None and matches(current_alarm(), record.epoch):
         sys.stdout.write(
             f"would disarm ours: {record.epoch} for {record.target_date}\n"
         )
