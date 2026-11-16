@@ -42,8 +42,11 @@ void main() {
   test('the Clock line names the time only when the handoff completed', () {
     expect(
       syncedStatus(6, 5, inClock: true),
-      'Synced to PC ✓ Clock app set 06:05 ✓',
+      'Armed for 06:05. Synced to PC ✓ Clock app set ✓',
     );
-    expect(syncedStatus(6, 5, inClock: false), 'Synced to PC ✓');
+    expect(
+      syncedStatus(6, 5, inClock: false),
+      'Armed for 06:05. Synced to PC ✓',
+    );
   });
 }

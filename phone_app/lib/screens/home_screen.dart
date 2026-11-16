@@ -139,9 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
     // publish attempt was the one at startup, so an alarm moved earlier here
     // never reached the PC at all.
     await _syncToPc();
-    if (!mounted) return;
-    // Keep the armed time in the confirmation; the sync result follows it.
-    setState(() => _status = 'Armed for ${_fmt(_hour, _minute)}. $_status');
   }
 
   /// Re-reads the policy and arms the alarm to match it.

@@ -61,11 +61,13 @@ class AlarmPublisher {
   }
 }
 
-/// The success line; names the Clock app only when the handoff to it
-/// completed before its timeout, so a silent timeout never claims it.
+/// The success line, naming the armed time; names the Clock app only when
+/// the handoff to it completed before its timeout, so a silent timeout
+/// never claims it. Only reached after `arm()` succeeded.
 String syncedStatus(int hour, int minute, {required bool inClock}) {
   final time =
       '${hour.toString().padLeft(2, '0')}:'
       '${minute.toString().padLeft(2, '0')}';
-  return inClock ? 'Synced to PC ✓ Clock app set $time ✓' : 'Synced to PC ✓';
+  final synced = 'Armed for $time. Synced to PC ✓';
+  return inClock ? '$synced Clock app set ✓' : synced;
 }
