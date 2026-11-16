@@ -74,7 +74,12 @@ case_session_refresh() {
 # --- Case: the trigger decides without crashing ------------------------------
 case_trigger_dry_run() {
     local name="trigger-dry-run"
-    if "$PY" -m wake_alarm._trigger --dry-run 2>/dev/null | grep -q "firing"; then
+    # Either verdict is a decision: inside the fire window (08:00-09:00 on
+    # the fallback alarm) it prints "WOULD FIRE", which a case-sensitive
+    # "firing" grep missed, so the case went red whenever the harness ran
+    # in that hour.
+    if "$PY" -m wake_alarm._trigger --dry-run 2>/dev/null |
+        grep -qE -- "— (WOULD FIRE|not firing): "; then
         pass "$name"
     else
         fail "$name" "--dry-run produced no decision line"
