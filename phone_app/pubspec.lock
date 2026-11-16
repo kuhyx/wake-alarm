@@ -110,11 +110,11 @@ packages:
     dependency: "direct main"
     description:
       path: crdt_sync_flutter
-      ref: "crdt_sync_flutter-v0.8.1"
-      resolved-ref: "3225af8365481677d61a8cabec0c0ad4d0407567"
+      ref: "crdt_sync_flutter-v0.8.2"
+      resolved-ref: "1962d303336dfe260850466b8ee841033b9ad1ce"
       url: "https://github.com/kuhyx/utils"
     source: git
-    version: "0.8.1"
+    version: "0.8.2"
   cross_file:
     dependency: transitive
     description:
