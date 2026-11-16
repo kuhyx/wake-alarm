@@ -35,6 +35,19 @@ unreachable counts as "no ping, no session" (fail toward ringing) and is
 logged as `firebase_unreachable`. While ringing, stop conditions are polled
 every 20 s.
 
+**A `no_session` ring after a phone ring is correct, not a missed read
+(traced 2026-11-16).** On 2026-10-26 and 2026-11-01 the PC went
+`waiting` → `no_session` at A+15. It never logged `phone_silent`, so it did
+see `ring_started`. What it never saw was a session for today: the
+session tick logged "Newest morning is 2026-10-25" and "2026-10-29" all
+morning. Firebase agrees. On 11-01 the phone fired, opened the ring screen
+at 07:43 and then logged nothing until a boot at 11:27: no `dismissed`
+event, no session. On 10-26 the session started at 11:01. So the PC was
+right on both days. A ringing phone that nobody dismisses is the case the
+`no_session` row exists for. `test_fallback_policy.py`
+(`test_ring_started_waits_for_the_session_grace`) pins it. Why the phone
+went quiet after 07:43 on 11-01 is a separate phone question.
+
 **Sound.** 100 %, unmuted, a tone that rises over the first 60 s.
 - Active graphical session on seat0 → user PipeWire (`wpctl` + `pw-play`).
 - Otherwise (night lockdown: lightdm masked, nobody logged in; kuhy is not in
@@ -128,6 +141,22 @@ retracted) and audit behave exactly as on a normal stick day.
 **Phone, assumed name:** the phone's `alarm_fired` on a sick day carries
 `data.reason = "sick_day"` (by analogy with `free_day`); the audit treats
 it as not the morning's ring.
+
+**A stand-down latches at ring time (fixed 2026-11-16).** On 2026-11-11 the
+07:40 ring stood down for a sick day (`alarm_fired reason=sick_day`), the
+phone cleared the mark at 11:38, and the 19:31 stick check re-read the cache,
+found a normal Wednesday with no dismissal and sent a lockdown. That punished
+a day whose alarm never rang, so no dismiss was possible. `AlarmReceiver` now
+records the skip (`RingWatch.markSkipped`, a `DateHistory` per reason), and
+`StickCheck.decideDay` returns `sick_day`/`free_day` for a latched day even
+after a clear. The streak look-back skips it too. A phone that was off at A
+latches nothing, so a clear still makes that day a stick day (hole 1).
+Tests: `StickCheckSickTest`.
+
+**Still open: on-device check.** At the next real miss (Tue/Wed/Thu), right
+after 09:30 run `adb -s 23181JEGR08034 logcat -d | grep -E
+"LOCKDOWN_ACTIVATED|WORKDAY_LOCKDOWN"` (read-only) and confirm
+`LOCKDOWN_ACTIVATED` is followed by `WORKDAY_LOCKDOWN`.
 
 ### Escape hatch (until 2026-10-15 inclusive)
 

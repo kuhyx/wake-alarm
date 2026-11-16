@@ -35,6 +35,7 @@ object StickRunner {
                 isSick = { SickDays.isSick(context, it) },
                 state = before,
                 checkedThrough = StickStore.checkedThrough(context),
+                ringSkippedOn = { RingWatch.skippedOn(context, it) },
             ),
         )
         for ((day, verdict) in run.verdicts) {
@@ -69,7 +70,7 @@ object StickRunner {
     fun onDismissed(context: Context) {
         val today = LocalDate.now()
         if (!StickCheck.isStickDay(today) || FreeDays.isFree(context, today) ||
-            SickDays.isSick(context, today)
+            SickDays.isSick(context, today) || RingWatch.skippedOn(context, today) != null
         ) {
             return
         }

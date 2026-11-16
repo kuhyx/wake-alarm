@@ -32,6 +32,7 @@ object RingWatch {
     private const val KEY_FIRED_DATE = "fired_date"
     private const val KEY_DISMISSED_DATE = "dismissed_date"
     private const val KEY_DISMISSED_DATES = "dismissed_dates"
+    private const val KEY_SKIPPED_PREFIX = "skipped_dates_"
 
     fun markFired(context: Context) {
         prefs(context).edit().putString(KEY_FIRED_DATE, today()).apply()
@@ -41,6 +42,21 @@ object RingWatch {
         prefs(context).edit().putString(KEY_DISMISSED_DATE, today()).apply()
         DateHistory.add(prefs(context), KEY_DISMISSED_DATES, LocalDate.now())
     }
+
+    /**
+     * Latches that today's ring stood down for [skip]; called from
+     * [AlarmReceiver]. The stick reads it back via [skippedOn], so clearing
+     * the mark later that day cannot make the silenced day a miss.
+     */
+    fun markSkipped(context: Context, skip: RingSkip) {
+        DateHistory.add(prefs(context), KEY_SKIPPED_PREFIX + skip.wire, LocalDate.now())
+    }
+
+    /** Why the ring stood down on [day], or null when it was not skipped. */
+    fun skippedOn(context: Context, day: LocalDate): RingSkip? =
+        RingSkip.entries.firstOrNull {
+            DateHistory.contains(prefs(context), KEY_SKIPPED_PREFIX + it.wire, day)
+        }
 
     /**
      * Whether the dismiss gate completed on [day]; read by [StickRunner],

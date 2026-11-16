@@ -20,6 +20,7 @@ class StickCheckSickTest {
         free: Set<LocalDate> = emptySet(),
         state: StickState = StickState(),
         checkedThrough: LocalDate? = null,
+        skipped: Map<LocalDate, RingSkip> = emptyMap(),
     ) = StickInputs(
         now = now,
         alarm = LocalTime.of(7, 30),
@@ -29,6 +30,7 @@ class StickCheckSickTest {
         isSick = { it in sick },
         state = state,
         checkedThrough = checkedThrough,
+        ringSkippedOn = { skipped[it] },
     )
 
     @Test
@@ -71,6 +73,40 @@ class StickCheckSickTest {
             listOf(StickVerdict.SICK_DAY, StickVerdict.TOO_EARLY),
             run.verdicts.map { it.verdict },
         )
+    }
+
+    @Test
+    fun aSickMarkClearedAfterTheSkippedRingIsStillSick() {
+        // 2026-11-11: the ring stood down for a sick day at A, the mark was
+        // cleared at 11:38, and the 19:31 run must not call the day a miss.
+        val run = StickCheck.run(
+            inputs(wed.atTime(19, 31), skipped = mapOf(wed to RingSkip.SICK_DAY)),
+        )
+        assertEquals(StickVerdict.SICK_DAY, run.verdicts.single().verdict)
+        assertEquals(StickState(), run.state)
+        assertNull(run.signalUntil)
+    }
+
+    @Test
+    fun aFreeMarkClearedAfterTheSkippedRingIsStillFree() {
+        val run = StickCheck.run(
+            inputs(wed.atTime(19, 31), skipped = mapOf(wed to RingSkip.FREE_DAY)),
+        )
+        assertEquals(StickVerdict.FREE_DAY, run.verdicts.single().verdict)
+    }
+
+    @Test
+    fun aSkippedRingDayIsSkippedWhenTheStreakLooksBack() {
+        val before = StickState(streak = 1, lockedThrough = wed, lastMiss = tue)
+        val run = StickCheck.run(
+            inputs(
+                thu.atTime(9, 0),
+                state = before,
+                checkedThrough = tue,
+                skipped = mapOf(wed to RingSkip.SICK_DAY),
+            ),
+        )
+        assertEquals(2, run.state.streak)
     }
 
     @Test

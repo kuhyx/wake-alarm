@@ -27,13 +27,15 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         // A shared free or sick day means the alarm does not ring -- not
         // later, not quieter, not at all -- and nothing ring-related is
-        // recorded: no markFired (the stick's own check skips the day too)
-        // and no ring_started for the PC. Re-arm for tomorrow (the armed
+        // recorded: no markFired and no ring_started for the PC. Only the
+        // skip itself is latched, so the stick still stands the day down if
+        // the mark is cleared after the ring time. Re-arm for tomorrow (the armed
         // instant has passed, so it rolls over) so the day after is normal.
         // Both caches fail closed: unreadable means ring.
         val skip = RingDecision.skip(FreeDays.isToday(context), SickDays.isToday(context))
         if (skip != null) {
             Log.i(TAG, "${skip.label}: not ringing; re-armed for tomorrow")
+            RingWatch.markSkipped(context, skip)
             EventLog.append(context, "alarm_fired", mapOf("reason" to skip.wire))
             AlarmScheduler.rearmFromStorage(context)
             return

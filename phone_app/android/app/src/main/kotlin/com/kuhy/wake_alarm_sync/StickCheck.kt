@@ -38,6 +38,14 @@ data class StickInputs(
     val state: StickState,
     /** The last day whose verdict was final, or null before the first run. */
     val checkedThrough: LocalDate?,
+    /**
+     * Why the daily ring stood down on a day, latched by [AlarmReceiver] at
+     * ring time, or null when it rang (or the phone was off). Outlives a
+     * later clear of the mark: the ring was silenced, so no dismiss was
+     * possible, and a clear at 11:38 must not turn the day into a miss
+     * (2026-11-11).
+     */
+    val ringSkippedOn: (LocalDate) -> RingSkip? = { null },
 )
 
 /** One day's verdict within a run. */
@@ -60,7 +68,7 @@ data class StickRun(
  * so every rule here is checkable in isolation.
  *
  * A **miss** is a stick day (Tue/Wed/Thu, [WorkdayStick.STICK_DAYS]) that is
- * neither a free day nor a sick day, whose alarm passed by at least [Stakes.STICK_GRACE_MINUTES]
+ * neither a free day nor a sick day (now, or when its ring stood down), whose alarm passed by at least [Stakes.STICK_GRACE_MINUTES]
  * with no dismiss and no escape, and that has not already been penalised.
  * Nothing here needs the ring to have *fired*: a phone switched off before
  * the alarm misses exactly like one left ringing (hole 1 of the contract).
@@ -121,6 +129,11 @@ object StickCheck {
         // A sick day stands the stick down like a free day: no miss, no
         // streak change, no lockdown -- and nothing carried to tomorrow.
         if (inputs.isSick(day)) return StickVerdict.SICK_DAY to state
+        when (inputs.ringSkippedOn(day)) {
+            RingSkip.FREE_DAY -> return StickVerdict.FREE_DAY to state
+            RingSkip.SICK_DAY -> return StickVerdict.SICK_DAY to state
+            null -> Unit
+        }
         // A dismissed or escaped stick day breaks the chain: the streak
         // shown and synced drops to 0 (a lockdown already sent stays).
         if (inputs.escapedOn(day)) return StickVerdict.ESCAPED to state.copy(streak = 0)
@@ -173,6 +186,6 @@ object StickCheck {
     fun isStickDay(day: LocalDate): Boolean = day.dayOfWeek in WorkdayStick.STICK_DAYS
 }
 
-/** A day the stick skips entirely: free or sick. */
+/** A day the stick skips entirely: free or sick, now or at ring time. */
 val StickInputs.standsDown: (LocalDate) -> Boolean
-    get() = { isFree(it) || isSick(it) }
+    get() = { isFree(it) || isSick(it) || ringSkippedOn(it) != null }

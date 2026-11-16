@@ -23,7 +23,7 @@ screen, and every log line and event says `sick_day`.
 | Per-locker sheet | `phone_app/lib/screens/sick_day_sheet.dart` (+ the dot in `day_cell.dart`) |
 | Sync | `phone_app/lib/services/sick_day_sync.dart` (shared tick: `day_pool_sync.dart`), Firebase only |
 | Ring path | `android/.../SickDays.kt` (+ `DayCache.kt`), read in `AlarmReceiver` through `RingDecision.kt` |
-| Stick | `StickCheck.kt`: verdict `sick_day`; the streak skips sick days like free days |
+| Stick | `StickCheck.kt`: verdict `sick_day`; the streak skips sick days like free days; a ring skipped for a sick day stays `sick_day` after a later clear (`RingWatch.markSkipped`) |
 | Pre-alarm sync | `PoolSyncAlarm.kt`, `PoolSyncSchedule.kt`, `PoolSyncEngine.kt` → `poolSyncMain` → `day_pool_refresh.dart` |
 
 ## The picker
