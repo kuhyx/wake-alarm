@@ -9,12 +9,13 @@ ring screen and the stick streak), plus the day and its alarm.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from wake_alarm._enforcement_records import parse_instant
 
 if TYPE_CHECKING:
-    from datetime import date, datetime
+    from datetime import date
 
     from wake_alarm._audit_sources import PcEvent, Up
     from wake_alarm._enforcement_records import Escape, PhoneEvent, StickState
@@ -38,6 +39,13 @@ class PhoneSide:
     escapes: list[Escape] = field(default_factory=list)
     ring_started: bool = False
     stick_state: StickState | None = None
+    # Newest dated write to Firebase by any phone; None = unreadable/undated.
+    last_push: datetime | None = None
+
+
+def _now() -> datetime:
+    """The audit's clock: an aware local instant."""
+    return datetime.now().astimezone()
 
 
 @dataclass(frozen=True)
@@ -52,6 +60,7 @@ class Evidence:
     pc_side: PcSide = field(default_factory=PcSide)
     phone_side: PhoneSide = field(default_factory=PhoneSide)
     sick_day: bool = False
+    now: datetime = field(default_factory=_now)
 
     @property
     def pc(self) -> list[PcEvent]:
@@ -92,6 +101,11 @@ class Evidence:
     def stick_state(self) -> StickState | None:
         """The phone's streak, as published now."""
         return self.phone_side.stick_state
+
+    @property
+    def last_push(self) -> datetime | None:
+        """When the phone last wrote anything to Firebase, if readable."""
+        return self.phone_side.last_push
 
 
 @dataclass(frozen=True)

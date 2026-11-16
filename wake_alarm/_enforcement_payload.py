@@ -20,7 +20,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from wake_alarm._alarm_payload import extract_hlc
+from wake_alarm._alarm_payload import extract_hlc, hlc_instant
 from wake_alarm._constants import (
     ESCAPE_HATCH_LAST_DAY,
     ESCAPE_REASON_MIN_CHARS,
@@ -54,6 +54,8 @@ class EnforcementView:
     escapes: tuple[Escape, ...] = ()
     stick_state: StickState | None = None
     phone_events: tuple[PhoneEvent, ...] = ()
+    # Epoch seconds of the newest dated write on any device; None = undatable.
+    last_push: float | None = None
 
     def ring_started_on(self, day: str) -> bool:
         """Whether the phone's ring screen opened on ``day``."""
@@ -152,10 +154,29 @@ def parse_logs(published: list[tuple[str, str]]) -> list[tuple[str, dict[str, An
     return logs
 
 
+def newest_push(logs: list[tuple[str, dict[str, Any]]]) -> float | None:
+    """Epoch seconds of the newest dated HLC of any field on any device.
+
+    Every phone write stamps the field it changed, so the largest instant is
+    when the phone last uploaded anything. A stamp that cannot be dated is
+    skipped: None means "cannot tell", never "old".
+    """
+    stamps: list[float] = []
+    for _, log in logs:
+        record = log.get("alarm")
+        fields = record.get("fields") if isinstance(record, dict) else None
+        for name in fields if isinstance(fields, dict) else ():
+            at = hlc_instant(extract_hlc(log, name))
+            if at is not None:
+                stamps.append(at)
+    return max(stamps, default=None)
+
+
 def enforcement_view(published: list[tuple[str, str]]) -> EnforcementView:
     """Merge every device's v2 fields into one view."""
     logs = parse_logs(published)
     return EnforcementView(
+        last_push=newest_push(logs),
         ring_started=_newest(logs, RING_STARTED_FIELD, ring_started_from),
         escapes=_union(logs, ESCAPES_FIELD, escape_from, lambda e: e.id),
         stick_state=_newest(logs, STICK_STATE_FIELD, stick_state_from),

@@ -20,7 +20,7 @@ from wake_alarm._audit_evidence import (
     phone_on_day,
 )
 from wake_alarm._audit_stick import check_lockdown, check_penalty
-from wake_alarm._constants import RTC_WAKE_LEAD
+from wake_alarm._constants import PHONE_PUSH_STALE_SECONDS, RTC_WAKE_LEAD
 from wake_alarm._enforcement_payload import is_honoured
 from wake_alarm._enforcement_records import parse_instant
 
@@ -127,8 +127,26 @@ def check_fallback_stop(ev: Evidence) -> Check:
     return ok("fallback stopped correctly", ", ".join(reasons))
 
 
+def check_phone_push(ev: Evidence) -> Check:
+    """The phone wrote to Firebase within the last day.
+
+    Not applicable (could not check) when no dated record is readable --
+    Firebase unreachable, locked, or nothing stamped -- which is not the
+    phone's silence.
+    """
+    name = "phone pushed to Firebase"
+    if ev.last_push is None:
+        return na(name, "could not check: no dated phone write readable")
+    age = (ev.now - ev.last_push).total_seconds()
+    detail = f"last write {ev.last_push:%Y-%m-%d %H:%M}, {age / 3600:.0f} h ago"
+    if age > PHONE_PUSH_STALE_SECONDS:
+        return bad(name, detail)
+    return ok(name, detail)
+
+
 CHECKS = (
     check_alarm,
+    check_phone_push,
     check_rtc,
     check_up_by_alarm,
     check_ring,

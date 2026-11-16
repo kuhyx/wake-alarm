@@ -15,7 +15,7 @@ Outside the repo on purpose: the report holds personal data.
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 import sys
 from typing import TYPE_CHECKING
 
@@ -79,6 +79,11 @@ def gather(day: date) -> tuple[Evidence, bool]:
             escapes=[e for e in view.escapes if e.date == day.isoformat()],
             ring_started=view.ring_started_on(day.isoformat()),
             stick_state=view.stick_state,
+            last_push=(
+                None
+                if view.last_push is None
+                else datetime.fromtimestamp(view.last_push, tz=UTC).astimezone()
+            ),
         ),
     )
     return evidence, published is not None

@@ -119,6 +119,12 @@ PUBLISHED_ALARM_MAX_AGE_SECONDS: float = 14 * 24 * 60 * 60
 
 ALARM_CACHE_MAX_AGE_SECONDS: float = 300.0
 
+# The daily audit flags a phone whose newest Firebase write is older than
+# this. A phone that stopped uploading (2026-11-13) was only noticed when the
+# PC fallback rang three days later; a day of silence is the evening-before
+# catch for a morning that would otherwise ring as ``phone_silent``.
+PHONE_PUSH_STALE_SECONDS: float = 24 * 60 * 60
+
 # How long after the alarm instant the trigger will still fire. Covers a
 # suspended PC, a missed timer tick, and a machine booted mid-window. Also the
 # reason a phone alarm moved *earlier* mid-window still fires promptly.

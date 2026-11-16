@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 
 from wake_alarm._enforcement_payload import (
@@ -85,3 +86,19 @@ def test_only_honoured_escapes_count() -> None:
 def test_is_honoured_rejects_a_bad_date() -> None:
     assert not is_honoured(Escape("x", "someday", "", REASON))
     assert not is_honoured(Escape("x", "2026-10-01", "", " " * 50))
+
+
+def test_last_push_is_the_newest_dated_hlc_of_any_field_on_any_device() -> None:
+    old = _log(alarm_hour=(7, "2026-11-12T08:00:00.000Z-0000-a"))
+    new = _log(
+        alarm_hour=(7, "2026-11-01T08:00:00.000Z-0000-b"),
+        phone_events=([], "2026-11-13T17:38:00.000Z-0001-b"),
+        stick_state=({"streak": 0}, "garbled"),
+    )
+    view = enforcement_view([("a", old), ("b", new), ("c", "{bad")])
+    assert view.last_push == datetime(2026, 11, 13, 17, 38, tzinfo=UTC).timestamp()
+
+
+def test_last_push_is_none_without_a_dated_stamp() -> None:
+    assert enforcement_view([("a", _log(alarm_hour=(7, "h")))]).last_push is None
+    assert enforcement_view([]).last_push is None

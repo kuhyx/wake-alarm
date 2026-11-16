@@ -244,7 +244,7 @@ PC (`events.jsonl` `event`): `fallback_tick` (only on decision change),
 ## Evidence for Claude
 
 `python -m wake_alarm._audit [YYYY-MM-DD]` and the 11:05 timer write
-`~/data/wake-alarm/incidents/<date>.md`: a merged phone + PC timeline, then
-expected-vs-observed checks (alarm known, RTC armed the night before, PC up
-by `A`, ring/fallback, penalty, lockdown), mismatches and escape uses first.
-Outside the repo on purpose: it holds personal data.
+`~/data/wake-alarm/incidents/<date>.md` (outside the repo: personal data): a merged
+phone + PC timeline, then expected-vs-observed checks (alarm known, RTC armed, PC up
+by `A`, ring/fallback, penalty, lockdown, phone pushed within `PHONE_PUSH_STALE_SECONDS`
+= 24 h by newest dated HLC; n/a when Firebase is unreachable), mismatches and escapes first.
