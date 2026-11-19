@@ -16,5 +16,5 @@ pytest-cov==7.1.0
 pytest-randomly==5.1.0
 pytest-sugar==1.1.1
 pytest-xdist==3.8.0
-ruff==0.17.5
+ruff==0.17.6
 sickdays @ git+https://github.com/kuhyx/utils@sickdays-v0.5.5#subdirectory=sickdays

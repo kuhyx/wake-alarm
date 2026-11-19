@@ -27,7 +27,7 @@ jobs:
           # fail-open.
           - group: rest
             hooks: ""
-            skip: mypy,pylint,free-days-interop
+            skip: mypy,pylint,free-days-interop,dependency-freshness
     name: pre-commit (${{ matrix.group }})
     steps:
       - uses: actions/checkout@v4
