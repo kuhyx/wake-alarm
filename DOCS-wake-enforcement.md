@@ -240,7 +240,9 @@ a morning trigger that finds state UNLOCKED with lightdm down starts it again,
 after `reset-failed`. On a driver mismatch it reloads the NVIDIA modules. When
 the running kernel has no modules left, it reboots once that day. Boot units
 that raced DNS (`reflector`, `periodic-system-startup`) now retry
-(system-maintenance). Nothing in this repo changed: the morning session and
+(system-maintenance). The cause of that race: testsAndMisc's Arch performance
+fixers had disabled `NetworkManager-wait-online`, so `network-online.target`
+was reached before the LAN existed; they now keep it enabled. Nothing in this repo changed: the morning session and
 its 11:00 deferral were fine; only the desktop was missing.
 
 ## Verification status (2026-10-01)
