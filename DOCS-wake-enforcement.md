@@ -227,6 +227,22 @@ PC (`events.jsonl` `event`): `fallback_tick` (only on decision change),
 `rtc_skip`, `firebase_unreachable`, `escape_seen`, `penalty_written`,
 `penalty_cancelled` (field `cause`: `escape` | `sick_day`), `audit_written`.
 
+## The desktop must come back after lockdown (2026-11-20)
+
+The carrot assumes the PC has a desktop in the morning. On 2026-11-20 it did
+not: the nightly `auto-system-update` installed NVIDIA 620.73 and kernel 7.3.5
+while the PC sat in night lockdown. At 05:00 the unlock started lightdm, Xorg
+died on `NVRM: API mismatch`, lightdm hit `start-limit-hit`, and every later
+trigger logged "already UNLOCKED". kuhy saw only the text console.
+
+The fix lives in digital-wellbeing (`lib/payloads/night-lockdown-gui-recover.sh`):
+a morning trigger that finds state UNLOCKED with lightdm down starts it again,
+after `reset-failed`. On a driver mismatch it reloads the NVIDIA modules. When
+the running kernel has no modules left, it reboots once that day. Boot units
+that raced DNS (`reflector`, `periodic-system-startup`) now retry
+(system-maintenance). Nothing in this repo changed: the morning session and
+its 11:00 deferral were fine; only the desktop was missing.
+
 ## Verification status (2026-10-01)
 
 - vmbox gate (`scripts/vmbox/harness.sh`, `guest_cases_v2.sh`): install,
