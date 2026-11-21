@@ -22,6 +22,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import freedays
+from kuhy_credit import credit_line
 
 from wake_alarm._audit_checks import alarm_from_events, flags, run_checks
 from wake_alarm._audit_evidence import Check, Evidence, PcSide, PhoneSide
@@ -169,7 +170,10 @@ def write_report(day: date, text: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point; exit 1 if unwritable, 2 if a report exists and no flag."""
-    parser = argparse.ArgumentParser(description="Audit one wake-up")
+    parser = argparse.ArgumentParser(
+        description="Audit one wake-up",
+        epilog=credit_line(),
+    )
     parser.add_argument("day", nargs="?", type=date.fromisoformat, default=None)
     parser.add_argument(
         "--stdout",

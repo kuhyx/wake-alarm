@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 
 import 'package:crdt_sync_flutter/crdt_sync_flutter.dart'
     show E2ePassphraseButton;
+import 'package:kuhy_credit/kuhy_credit.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:sync_settings_ui/sync_settings_ui.dart';
 
@@ -192,6 +193,8 @@ class SettingsScreen extends StatelessWidget {
               appRoute<void>(context, (_) => const GitHubMirrorScreen()),
             ),
           ),
+          const SizedBox(height: 24),
+          const Center(child: KuhyCredit()),
         ],
       ),
     );

@@ -35,6 +35,7 @@ import time
 from typing import TYPE_CHECKING
 
 from gatelock.log_integrity import compute_entry_hmac, verify_entry_hmac
+from kuhy_credit import credit_line
 
 from wake_alarm._constants import (
     FALLBACK_ALARM_HOUR,
@@ -173,7 +174,8 @@ def describe(entry: dict[str, object], now: datetime) -> str:
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="PC copy of the phone's morning session"
+        description="PC copy of the phone's morning session",
+        epilog=credit_line(),
     )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument(

@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kuhy_credit/kuhy_credit.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:wake_alarm_sync/screens/github_mirror_screen.dart';
-import 'package:wake_alarm_sync/screens/settings_screen.dart';
+import 'package:wake_alarm_sync/screens/settings_screen.dart'
+    show SettingsScreen;
 import 'package:wake_alarm_sync/ui/theme.dart';
 
 void main() {
@@ -103,5 +105,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byIcon(Icons.error_outline), findsOneWidget);
     expect(find.byIcon(Icons.check_circle), findsNothing);
+  });
+
+  testWidgets('shows exactly one KuhyCredit at the bottom', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: buildAppTheme(), home: const SettingsScreen()),
+    );
+
+    final creditFinder = find.byType(KuhyCredit);
+    await tester.scrollUntilVisible(creditFinder, 500);
+    expect(creditFinder, findsOneWidget);
   });
 }

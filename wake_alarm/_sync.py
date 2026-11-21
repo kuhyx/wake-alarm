@@ -29,6 +29,8 @@ import logging
 import sys
 import time
 
+from kuhy_credit import credit_line
+
 from wake_alarm._alarm_payload import in_range
 from wake_alarm._constants import (
     ALARM_CACHE_FILE,
@@ -212,7 +214,8 @@ def get_alarm(*, max_cache_age_seconds: float = ALARM_CACHE_MAX_AGE_SECONDS) -> 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     """Parse CLI arguments for the sync reader."""
     parser = argparse.ArgumentParser(
-        description="Show the alarm time the phone last synced."
+        description="Show the alarm time the phone last synced.",
+        epilog=credit_line(),
     )
     parser.add_argument(
         "--show",

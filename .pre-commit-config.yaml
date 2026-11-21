@@ -96,6 +96,8 @@ repos:
     rev: v3.3.2
     hooks:
       - id: pylint
+        # dill (pylint --jobs) crashes on 3.15 (co_lnotab gone); 3.14 until it catches up.
+        language_version: python3.14
         args:
           - --rcfile=pyproject.toml
           - --fail-under=10
@@ -108,6 +110,7 @@ repos:
           # than merely an old one.
           - gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.12.0#subdirectory=gatelock
           - crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.11.1#subdirectory=crdt-sync
+          - kuhy-credit @ git+https://github.com/kuhyx/utils@kuhy-credit-v0.3.1#subdirectory=kuhy_credit
           - freedays @ git+https://github.com/kuhyx/utils@freedays-v0.4.3#subdirectory=freedays
           - sickdays @ git+https://github.com/kuhyx/utils@sickdays-v0.5.4#subdirectory=sickdays
         # Test suites intentionally use patterns (protected-access, magic-value

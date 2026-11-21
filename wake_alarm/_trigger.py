@@ -27,6 +27,7 @@ import subprocess
 import sys
 
 import freedays
+from kuhy_credit import credit_line
 
 from wake_alarm._constants import (
     ALARM_DAYS,
@@ -164,7 +165,8 @@ def _decide(now: datetime, alarm: Alarm) -> tuple[bool, str]:
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     """Parse CLI arguments for the trigger."""
     parser = argparse.ArgumentParser(
-        description="Fire the morning routine at the phone's alarm time."
+        description="Fire the morning routine at the phone's alarm time.",
+        epilog=credit_line(),
     )
     parser.add_argument(
         "--dry-run",

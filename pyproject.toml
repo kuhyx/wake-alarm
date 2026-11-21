@@ -17,6 +17,7 @@ dependencies = [
     # Sick days stand the PC's enforcement down (_sick.py). Imported behind
     # a guard: missing means "not sick", never a crashed tick.
     "sickdays @ git+https://github.com/kuhyx/utils@sickdays-v0.5.6#subdirectory=sickdays",
+    "kuhy-credit @ git+https://github.com/kuhyx/utils@kuhy-credit-v0.3.1#subdirectory=kuhy_credit",
 ]
 
 # Package discovery must be explicit: phone_app/ is a Flutter app, not a Python

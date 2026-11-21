@@ -24,6 +24,8 @@ import struct
 import sys
 import wave
 
+from kuhy_credit import credit_line
+
 SAMPLE_RATE = 16_000
 RISE_SECONDS = 60.0
 LOOP_SECONDS = 20.0
@@ -108,7 +110,10 @@ def ensure_pair(preferred: Path, fallback: Path) -> tuple[Path, Path]:
 
 def main(argv: list[str] | None = None) -> int:
     """Write the pair into ``--write DIR``."""
-    parser = argparse.ArgumentParser(description="Generate the fallback ring WAVs")
+    parser = argparse.ArgumentParser(
+        description="Generate the fallback ring WAVs",
+        epilog=credit_line(),
+    )
     parser.add_argument("--write", type=Path, required=True, metavar="DIR")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     for path in write_pair(args.write):

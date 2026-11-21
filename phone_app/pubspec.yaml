@@ -45,6 +45,11 @@ dependencies:
       ref: google_account_token-v0.1.0
       path: google_account_token
   http: 1.6.0
+  kuhy_credit:
+    git:
+      url: https://github.com/kuhyx/utils
+      ref: kuhy-credit-v0.3.1
+      path: kuhy_credit/flutter
   material_ui: 1.11.1
   path: 1.9.1
   path_provider: 2.1.6

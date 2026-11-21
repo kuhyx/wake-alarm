@@ -13,13 +13,18 @@ from datetime import datetime
 import sys
 from typing import TYPE_CHECKING
 
+from kuhy_credit import credit_line
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 
 def mode_parser(description: str, act: str, act_help: str) -> argparse.ArgumentParser:
     """A parser with exactly one of ``--<act>``, ``--dry-run``, ``--show``."""
-    parser = argparse.ArgumentParser(description=description)
+    parser = argparse.ArgumentParser(
+        description=description,
+        epilog=credit_line(),
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument(f"--{act}", action="store_true", help=act_help)
     mode.add_argument("--dry-run", action="store_true", help="decide, change nothing")
