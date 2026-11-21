@@ -10,7 +10,7 @@ nothing ring-related is recorded -- **unless the day keeps the alarm**.
 Since sickdays 0.2.0 a sick day carries a per-locker `keep` set (README
 "keep (0.2.0)"): a kept locker behaves exactly as on a normal day, every other
 one stands down. This app is the `alarm` locker (ring, PC fallback ring, RTC
-self-wake, missed-alarm penalty / stick, morning routine). It is **not** a free day: separate pool,
+self-wake, missed-alarm penalty / stick, morning routine; PC side: `DOCS-sick-days-pc.md`). It is **not** a free day: separate pool,
 separate RTDB node (`sickdays-sync/devices`), separate native cache, separate
 screen, and every log line and event says `sick_day`.
 

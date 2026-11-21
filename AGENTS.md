@@ -71,7 +71,7 @@ clock, and everything that is a hard crash or a silent no-ring:
 does not ring: `AlarmReceiver` checks a native cache Dart rewrites after every
 mark/release/sync. Picker, cache, fail-closed contract: **`DOCS-free-days.md`**.
 Sick days (`~/src/utils/sickdays`, never a free day): phone + pre-alarm sync
-**`DOCS-sick-days.md`**, PC **`DOCS-wake-enforcement.md`**.
+**`DOCS-sick-days.md`**, PC **`DOCS-sick-days-pc.md`**.
 
 ## Scheduling — a per-minute timer
 
