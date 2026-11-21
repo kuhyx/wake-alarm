@@ -3,9 +3,8 @@
 import subprocess
 import sys
 
-import pytest
-
 from kuhy_credit import credit_line
+import pytest
 
 MODULES_WITH_CLI = [
     "wake_alarm._audit",
@@ -17,24 +16,22 @@ MODULES_WITH_CLI = [
 
 
 def _run_help(module: str) -> str:
-    """Run `python -m <module> --help` and return stdout."""
+    """Run `python -m <module> --help` and return stdout.
+
+    Never falls back to a bare run: `_trigger` without --help could start the
+    real morning routine. argparse exits 0 on --help, so check=True holds.
+    """
     result = subprocess.run(
         [sys.executable, "-m", module, "--help"],
         capture_output=True,
         text=True,
+        check=True,
     )
-    if result.returncode != 0:
-        # Some modules need a subcommand; mode_parser is one. Try without --help.
-        result = subprocess.run(
-            [sys.executable, "-m", module],
-            capture_output=True,
-            text=True,
-        )
     return result.stdout
 
 
 @pytest.mark.parametrize("module", MODULES_WITH_CLI)
-def test_help_ends_with_credit_line(module: str):
+def test_help_ends_with_credit_line(module: str) -> None:
     """The --help output must end with credit_line()."""
     help_text = _run_help(module)
     assert help_text.endswith(credit_line() + "\n"), (
