@@ -1,6 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
-import 'package:wake_alarm_sync/main.dart';
+import 'package:wake_alarm_sync/main.dart' as app;
 import 'package:wake_alarm_sync/probe/file_driven_scheduler.dart';
 import 'package:wake_alarm_sync/probe/probe_passphrase.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
@@ -33,5 +33,22 @@ Future<void> main() async {
   await SessionTagSettings.saveTagAt(SessionTagSlot.desk, 'desk');
   final scheduler = AlarmScheduler();
   if (!await scheduler.morningLive()) await scheduler.ringNow();
-  runApp(const WakeAlarmSyncApp(newScheduler: FileDrivenScheduler.new));
+  runApp(const app.WakeAlarmSyncApp(newScheduler: FileDrivenScheduler.new));
 }
+
+// Kotlin starts the headless engines by entrypoint *name*, resolved in the
+// root library: the `-t` file. Without these the probe build's bypass,
+// ring_started and pool-sync engines failed with "Could not resolve main
+// entrypoint function" and published nothing (C6, emulator 2026-11-22).
+
+/// See `main.dart`'s [app.ringStartedMain].
+@pragma('vm:entry-point')
+Future<void> ringStartedMain() => app.ringStartedMain();
+
+/// See `main.dart`'s [app.publishNowMain].
+@pragma('vm:entry-point')
+Future<void> publishNowMain() => app.publishNowMain();
+
+/// See `main.dart`'s [app.poolSyncMain].
+@pragma('vm:entry-point')
+Future<void> poolSyncMain() => app.poolSyncMain();

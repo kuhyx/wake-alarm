@@ -102,6 +102,9 @@ debug manifest only). Release builds never set the define.
 2. Write a dummy passphrase to `files/passphrase` under the app's
    `Android/data/<pkg>/` dir; the probe moves it into the keystore on launch
    (`probe_passphrase.dart`). Without one every push is `sync locked`.
+   A probe's `-t` file must re-export the headless entrypoints
+   (`publishNowMain`, ...): Kotlin resolves them by name in the root library,
+   and without them the bypass publish never ran.
 3. After the bypass: `HOME=<scratch with .config/crdt-sync/password>
    PYTHONUSERBASE=~/.local /usr/bin/python3 scripts/emu_published.py
    http://127.0.0.1:9000 out.json`, then `_fallback --dry-run --at <instant>
