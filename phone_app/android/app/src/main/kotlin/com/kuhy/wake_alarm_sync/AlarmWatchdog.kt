@@ -54,6 +54,8 @@ object AlarmWatchdog {
     fun verify(context: Context) {
         val rearmed = AlarmScheduler.rearmFromStorage(context)
         Log.i(TAG, "daily check: rearmed=$rearmed")
+        // rearmFromStorage arms it too, but only with an alarm stored.
+        NotifAlarm.schedule(context)
         // Third net behind the exact check and boot: within a day, whatever
         // dropped the other two, today's miss is still caught here.
         StickRunner.run(context, "watchdog")

@@ -94,6 +94,21 @@
         <receiver
             android:name=".PoolSyncReceiver"
             android:exported="false"/>
+        <!-- The 21:00 notifications check (NotifAlarm.kt); not exported,
+             only this app's own PendingIntent reaches it. -->
+        <receiver
+            android:name=".NotifCheckReceiver"
+            android:exported="false"/>
+        <!-- Sent by the system to this app only: its notifications or the
+             ring channel blocked or unblocked in Settings (NotifAlarm.kt). -->
+        <receiver
+            android:name=".NotifBlockReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.app.action.APP_BLOCK_STATE_CHANGED"/>
+                <action android:name="android.app.action.NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED"/>
+            </intent-filter>
+        </receiver>
         <!-- The silent buzz before a session deadline (SessionWarn.kt). -->
         <receiver
             android:name=".SessionWarnReceiver"

@@ -43,7 +43,6 @@ object BypassRules {
  */
 object Bypass {
     private const val TAG = "WakeAlarmBypass"
-    private const val RING_CHANNEL_ID = "wake_alarm_ring"
 
     // One launch runs the checks from MainActivity and then AlarmActivity
     // (emulator, 2026-11-22: two events, two publishes for one revoke).
@@ -94,9 +93,7 @@ object Bypass {
     /** Checks the permissions the ring needs; a revoked one on a live morning is a bypass. */
     fun checkPermissions(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = manager.getNotificationChannel(RING_CHANNEL_ID)
-        val blocked = channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE
-        if (!manager.areNotificationsEnabled() || blocked) {
+        if (NotifState.off(context)) {
             record(context, BypassCause.NOTIFICATIONS_OFF)
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
             !manager.canUseFullScreenIntent()

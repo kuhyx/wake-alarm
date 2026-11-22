@@ -40,7 +40,7 @@ class AlarmService : Service() {
 
     companion object {
         private const val TAG = "AlarmService"
-        private const val CHANNEL_ID = "wake_alarm_ring"
+        private const val CHANNEL_ID = NotifState.RING_CHANNEL_ID
         private const val NOTIFICATION_ID = 42
 
         /** Vibration: 1s buzz, 1s gap, repeating from index 0. */

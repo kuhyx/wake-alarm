@@ -67,6 +67,8 @@ object AlarmScheduler {
         StickAlarm.schedule(context, LocalTime.of(hour, minute))
         // Same funnel for the pre-alarm day-pool sync (PoolSyncAlarm.kt).
         PoolSyncAlarm.schedule(context, LocalTime.of(hour, minute))
+        // And the 21:00 notifications check (NotifAlarm.kt).
+        NotifAlarm.schedule(context)
     }
 
     /** Cancels the armed alarm and forgets the stored time. */

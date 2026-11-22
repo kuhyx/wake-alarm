@@ -25,6 +25,8 @@ class BootReceiver : BroadcastReceiver() {
         // has to be re-established here or it silently stops after the first
         // restart — exactly when a watchdog is most needed.
         AlarmWatchdog.schedule(context)
+        // The 21:00 notifications check, also with no alarm stored.
+        NotifAlarm.schedule(context)
         // A phone switched off before the alarm and back on after A + 15 has
         // missed: this is the path that closes that hole (rearmFromStorage
         // above has already armed the exact check for a phone back earlier).
