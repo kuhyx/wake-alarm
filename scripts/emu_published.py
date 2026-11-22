@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export what the emulator phone published to the Firebase RTDB emulator.
+r"""Export what the emulator phone published to the Firebase RTDB emulator.
 
 The emulator live checks (a ``bypass`` reaching "the test backend") use a
 probe build that syncs to the PC's RTDB emulator instead of prod
@@ -28,13 +28,24 @@ import json
 from pathlib import Path
 import sys
 
-from crdt_sync import FirebaseSyncClient
+from crdt_sync import (
+    FirebaseSyncClient,
+    FirebaseTokenProvider,
+    MemoryCredentialStore,
+)
 
 from wake_alarm._sync_transport import _read_published
 
 
-class _OwnerToken:
-    """The emulator's admin token; the RTDB emulator accepts ``auth=owner``."""
+class _OwnerToken(FirebaseTokenProvider):
+    """The emulator's admin token; the RTDB emulator accepts ``auth=owner``.
+
+    Never signs in: no API key, an empty store, and ``id_token`` overridden.
+    """
+
+    def __init__(self) -> None:
+        """A provider with nothing to refresh."""
+        super().__init__("", MemoryCredentialStore())
 
     def id_token(self) -> str:
         """Every request's ``auth`` parameter."""
@@ -47,11 +58,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("url", help="the RTDB emulator's origin")
     parser.add_argument("out", type=Path, help="where to write the JSON list")
     args = parser.parse_args(argv)
-    client = FirebaseSyncClient(args.url, _OwnerToken())  # type: ignore[arg-type]
+    client = FirebaseSyncClient(args.url, _OwnerToken())
     published = _read_published(client)
     pairs = [[device, json.loads(raw)] for device, raw in published]
     args.out.write_text(json.dumps(pairs, indent=1), encoding="utf-8")
-    print(f"{len(pairs)} device(s): {' '.join(device for device, _ in pairs)}")
+    devices = " ".join(device for device, _ in pairs)
+    sys.stdout.write(f"{len(pairs)} device(s): {devices}\n")
     return 0 if pairs else 1
 
 
