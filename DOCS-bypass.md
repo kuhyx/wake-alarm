@@ -110,6 +110,37 @@ debug manifest only). Release builds never set the define.
    http://127.0.0.1:9000 out.json`, then `_fallback --dry-run --at <instant>
    --published out.json`.
 
+Traps on the shared AVD:
+
+- It can boot `RUNNING_LOCKED` with PIN 1234, and then `/sdcard` is missing.
+  Unlock it before you write the passphrase.
+- `dpm remove-active-admin` refuses the admin ("non-test admin"). Use
+  Settings → Device admin apps → WakeAlarm → Deactivate.
+- An active admin makes `cmd package suspend` fail, so suspend first, then
+  activate the admin.
+- The probe's `ringNow` does not mark the ring as fired, so `Bypass.record`
+  logs "no ring or session live". Set the AVD clock (`adb root`,
+  `settings put global auto_time 0`, `date`) to just before the armed
+  `AlarmReceiver` time and let the alarm fire. Afterwards set `auto_time`
+  back to 1.
+
+### Live check 2026-11-22: bypass events on the RTDB emulator
+
+C5 and C6 were checked on emulator-5556 with the `main_session_probe.dart`
+build (`WAKE_SYNC_EMULATOR`), with the clock moved to Mon 2026-11-23 07:56
+so the 07:57 alarm rang through `AlarmReceiver`. With the alarm still
+ringing: `cmd package suspend` at 07:57:34 logged `bypass: suspended`,
+and deactivating the admin in Settings at 07:58:04 logged
+`bypass: admin_removed`. Each one logged "signalling focus-owner lockdown
+through 2026-11-24". `emu_published.py` then read both from the RTDB emulator:
+`{"kind":"bypass","data":{"cause":"suspended","date":"2026-11-23"}}` and
+`{"kind":"bypass","data":{"cause":"admin_removed","date":"2026-11-23"}}`
+(a `notifications_off` bypass from 07:57:11 was also there, because the AVD
+has the app's notifications off). Then
+`_fallback --dry-run --at 2026-11-23T08:03 --published out.json` answered
+`WOULD RING: bypass` (`bypass_at=07:58:04`). focus-owner is not on that AVD:
+its unsuspend and its applied lockdown are the earlier C6 check at 83e1e15.
+
 ## The 21:00 notifications check
 
 Android lets nothing lock "All WakeAlarm notifications", and with them off
