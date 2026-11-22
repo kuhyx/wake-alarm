@@ -67,3 +67,16 @@ def test_it_waits_for_a_morning_with_no_session(done_file: Path) -> None:
 def test_a_refused_start_is_retried_next_morning(done_file: Path) -> None:
     assert _run(-3, graphical=False, started=False) == "failed"
     assert not done_file.exists()
+
+
+def test_a_skipped_morning_is_logged_once_a_day() -> None:
+    # Without it, a missing ring_probe line at 08:00 cannot tell "kuhy was
+    # logged in" from "the probe never ran".
+    with patch.object(_ring_probe, "emit_on_change") as emit:
+        assert _run(-3, graphical=True) == "waiting_for_no_session"
+    emit.assert_called_once_with(
+        "ring_probe",
+        "2026-11-23|waiting_for_no_session",
+        "waiting_for_no_session",
+        session="why",
+    )

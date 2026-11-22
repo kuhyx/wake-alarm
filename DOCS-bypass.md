@@ -191,7 +191,11 @@ silence to each monitor with IEC958 muted (restored afterwards) and logs one
 `ring_probe` line per monitor. `_ring_probe.maybe_probe` starts
 `wake-alarm-ring-probe.service` once, at `A − 5` on the first morning with no
 graphical session (the state a fallback ring meets), and writes
-`ring_probe_done`. Read it with `journalctl -u wake-alarm-ring-probe`.
+`ring_probe_done`. "No graphical session" means greeter only: lightdm is
+masked only before 05:00, when no ring can happen. A morning kuhy is already
+logged in at `A − 5` logs one `ring_probe: waiting_for_no_session` event a
+day instead. Read it with `journalctl -u wake-alarm-ring-probe` and
+`grep ring_probe ~/.local/state/wake_alarm/events.jsonl`.
 vmbox gate: `ring-alsa-monitor-sinks`, `ring-alsa-monitor-probe`
 (`scripts/vmbox/guest_cases_monitors.sh`).
 

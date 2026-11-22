@@ -16,7 +16,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from wake_alarm._constants import LOG_STATE_DIR
-from wake_alarm._events import emit
+from wake_alarm._events import emit, emit_on_change
 from wake_alarm._ring_player import _ok, graphical_session
 
 if TYPE_CHECKING:
@@ -33,8 +33,12 @@ def maybe_probe(now: datetime, alarm_at: datetime) -> str | None:
         return None
     graphical, why = graphical_session()
     if graphical:
-        # Not the state a fallback ring meets; try again tomorrow.
-        return "waiting_for_no_session"
+        # Not the state a fallback ring meets; try again tomorrow. Logged
+        # once a day, so a morning with no ring_probe line is a bug.
+        reason = "waiting_for_no_session"
+        key = f"{now.date().isoformat()}|{reason}"
+        emit_on_change("ring_probe", key, reason, session=why)
+        return reason
     started, out = _ok(["sudo", "-n", "systemctl", "start", PROBE_UNIT])
     emit("ring_probe", "started" if started else "failed", session=why, output=out)
     if not started:

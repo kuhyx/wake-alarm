@@ -54,10 +54,13 @@ went quiet after 07:43 on 11-01 is a separate phone question.
 
 **Sound.** 100 %, unmuted, a tone that rises over the first 60 s.
 - Active graphical session on seat0 → user PipeWire (`wpctl` + `pw-play`).
-- Otherwise (night lockdown: lightdm masked, nobody logged in; kuhy is not in
-  `audio`) → root system unit `wake-alarm-ring-alsa.service` playing straight
+- Otherwise (kuhy is not in `audio`) → root system unit `wake-alarm-ring-alsa.service` playing straight
   to the speakers' card (`ALC897 Analog`, card name `Generic_1`) via `aplay`.
 - Both paths also ring every connected monitor (2026-11-22, `DOCS-bypass.md`).
+- A morning ring meets the "otherwise" state: the night lockdown masks
+  lightdm 23:00-05:00 only, and from 05:00 seat0 holds lightdm's greeter
+  (an X server, but no kuhy session) until kuhy logs in. 2026-11-22: greeter
+  at 05:00, ALSA ring 07:51, kuhy's session 10:09.
 
 ### PC wakes itself (nights before Tue/Wed/Thu)
 
