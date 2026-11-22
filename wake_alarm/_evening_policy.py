@@ -24,8 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from wake_alarm._constants import FALLBACK_RING_CAP
-from wake_alarm._fallback_policy import CAP, Decision
+from wake_alarm._fallback_policy import CAP, Decision, latch_capped
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -65,13 +64,7 @@ def in_evening(now: datetime) -> bool:
 
 def is_capped(facts: EveningFacts) -> bool:
     """Whether tonight's ring has used its 30 minutes."""
-    latch = facts.latch
-    if latch is None:
-        return False
-    if latch.stop_reason == CAP:
-        return True
-    started = latch.started()
-    return started is not None and facts.now >= started + FALLBACK_RING_CAP
+    return latch_capped(facts.latch, facts.now)
 
 
 def needs_fetch(facts: EveningFacts) -> bool:

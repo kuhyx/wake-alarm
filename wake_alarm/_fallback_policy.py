@@ -135,15 +135,19 @@ def needs_facts(now: datetime, alarm_at: datetime, latch: Latch | None) -> bool:
     return alarm_at - FALLBACK_WINDOW_START <= now < alarm_at + BYPASS_WATCH
 
 
-def is_capped(facts: Facts) -> bool:
-    """Whether today's ring has used its 30 minutes."""
-    latch = facts.latch
+def latch_capped(latch: Latch | None, now: datetime) -> bool:
+    """Whether the ring this latch records has used its 30 minutes."""
     if latch is None:
         return False
     if latch.stop_reason == CAP:
         return True
     started = latch.started()
-    return started is not None and facts.now >= started + FALLBACK_RING_CAP
+    return started is not None and now >= started + FALLBACK_RING_CAP
+
+
+def is_capped(facts: Facts) -> bool:
+    """Whether today's ring has used its 30 minutes."""
+    return latch_capped(facts.latch, facts.now)
 
 
 def day_off(facts: Facts) -> str | None:
