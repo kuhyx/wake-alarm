@@ -146,6 +146,7 @@ object AlarmChannel {
             // dismiss sequence in front the moment it is looked at.
             "isRinging" -> result.success(AlarmService.running)
             "takeBypassReRing" -> result.success(BypassReRing.take(context))
+            "peekBypassReRing" -> result.success(BypassReRing.peek(context))
             "beginStepCount" -> {
                 StepCounter.markRingStart(context)
                 result.success(null)

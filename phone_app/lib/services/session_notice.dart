@@ -39,7 +39,7 @@ Future<void> pointNativeAtLeg(
 Future<String> nativeRingReason(
   AlarmScheduler scheduler,
   MorningSession session,
-) async => session.reRingReasonFor(await scheduler.takeBypassReRing());
+) async => session.reRingReasonFor(await scheduler.peekBypassReRing());
 
 /// The notification's one line: glyph + position count, with a running-clock
 /// marker when the re-ring was spent.

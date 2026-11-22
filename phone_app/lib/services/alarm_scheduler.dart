@@ -212,6 +212,11 @@ class AlarmScheduler {
   Future<String?> takeBypassReRing() =>
       _channel.invokeMethod<String>('takeBypassReRing');
 
+  /// [takeBypassReRing] without clearing it, for the session screen's tick:
+  /// two screens can tick on one ring, and only the dismiss records it.
+  Future<String?> peekBypassReRing() =>
+      _channel.invokeMethod<String>('peekBypassReRing');
+
   /// Raw presence observations: `ssid`, `bssid`, `lat`, `lon`, `accuracy`,
   /// `distanceMeters`, `reason`.
   ///

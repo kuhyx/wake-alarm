@@ -28,7 +28,7 @@ void main() {
             calls.add(call.method);
             if (call.method == 'hasNfc') return true;
             if (call.method == 'isRinging') return true;
-            if (call.method == 'takeBypassReRing') return bypassCause;
+            if (call.method == 'peekBypassReRing') return bypassCause;
             return null;
           },
         );
@@ -58,7 +58,10 @@ void main() {
   ) async {
     bypassCause = 'suspended';
     expect(await ringReasonAfterOneTick(tester), 'bypass:suspended');
-    expect(calls, contains('takeBypassReRing'));
+    // Only the dismiss takes the stamp: two screens can tick on one ring
+    // (emulator 2026-11-23), and the second must not see it gone.
+    expect(calls, contains('peekBypassReRing'));
+    expect(calls, isNot(contains('takeBypassReRing')));
   });
 
   testWidgets('a ring nothing stamped is the deadline', (tester) async {

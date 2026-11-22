@@ -19,6 +19,11 @@ object BypassReRing {
         prefs(context).edit().putString(KEY, BypassRules.encodeStamp(cause, date)).commit()
     }
 
+    /** The stamped cause, left in place: every screen ticking on this ring sees it. */
+    fun peek(context: Context): String? =
+        BypassRules.takeStamp(prefs(context).getString(KEY, null), LocalDate.now().toString())
+
+    /** The stamped cause, cleared: called once, when the re-ring is recorded. */
     fun take(context: Context): String? {
         val stored = prefs(context).getString(KEY, null) ?: return null
         prefs(context).edit().remove(KEY).commit()
