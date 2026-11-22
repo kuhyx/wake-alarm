@@ -93,6 +93,7 @@ def observe(now: datetime, *, sync: bool) -> Observation:
             escaped=view.escape_for(day) is not None,
             session_started=session is not None and session.date == day,
             ring_started=view.ring_started_on(day),
+            bypass_at=view.bypass_on(day),
         ),
         view=view,
     )

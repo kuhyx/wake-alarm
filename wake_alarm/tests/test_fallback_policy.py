@@ -20,6 +20,7 @@ from wake_alarm._fallback_policy import (
     Facts,
     alarm_instant,
     decide,
+    in_window,
     is_capped,
     needs_facts,
     stop_reason,
@@ -63,7 +64,7 @@ class TestWindow:
     def test_window_is_a_minus_5_to_a_plus_45(
         self, minutes: float, *, inside: bool
     ) -> None:
-        assert needs_facts(_at(minutes), A, None) is inside
+        assert in_window(_at(minutes), A, None) is inside
 
     def test_a_ring_already_started_is_judged_outside_the_window(self) -> None:
         assert needs_facts(_at(60), A, _latch(40))

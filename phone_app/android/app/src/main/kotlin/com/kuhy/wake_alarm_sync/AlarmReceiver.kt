@@ -49,6 +49,9 @@ class AlarmReceiver : BroadcastReceiver() {
         // After the sound is started, never before: tells the PC the phone
         // is ringing even when the ring screen never opens.
         HeadlessRingStart.start(context)
+        // Notifications or the full-screen intent switched off: the ring has
+        // no screen, so the morning counts as bypassed.
+        Bypass.checkPermissions(context)
     }
 
     private companion object {

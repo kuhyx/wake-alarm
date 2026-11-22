@@ -52,12 +52,14 @@ object EnforcementChannel {
         val isFree = { day: LocalDate -> FreeDays.isFree(context, day) }
         val isSick = { day: LocalDate -> SickDays.isSick(context, day) }
         val standsDown = { day: LocalDate -> isFree(day) || isSick(day) }
+        val bypassOn = { day: LocalDate -> RingWatch.bypassOn(context, day) }
         return mapOf(
             "today" to today.toString(),
             "alarmHour" to alarm?.hour,
             "alarmMinute" to alarm?.minute,
             "dismissedToday" to RingWatch.dismissedOn(context, today),
             "escapedToday" to StickStore.escapedOn(context, today),
+            "bypassToday" to RingWatch.bypassOn(context, today),
             "freeToday" to isFree(today),
             "freeTomorrow" to isFree(tomorrow),
             "sickToday" to isSick(today),
@@ -67,9 +69,9 @@ object EnforcementChannel {
             "lastMiss" to stick.lastMiss?.toString(),
             "updatedAt" to StickStore.updatedAt(context),
             "lockIfMissToday" to
-                StickCheck.afterMiss(today, stick, standsDown).lockedThrough?.toString(),
+                StickCheck.afterMiss(today, stick, standsDown, bypassOn).lockedThrough?.toString(),
             "lockIfMissTomorrow" to
-                StickCheck.afterMiss(tomorrow, stick, standsDown).lockedThrough?.toString(),
+                StickCheck.afterMiss(tomorrow, stick, standsDown, bypassOn).lockedThrough?.toString(),
         )
     }
 }

@@ -5,7 +5,8 @@ Documentation=https://github.com/kuhyx/wake-alarm
 [Timer]
 # 04:00-09:59 covers A-5min..A+45min for any alarm the phone can set (A is
 # clamped to <= 08:00). Outside that window a tick reads only local files.
-OnCalendar=*-*-* 04..09:*:00
+# Through 11:59: a phone bypass rings the PC up to A + 4 h (A <= 08:00).
+OnCalendar=*-*-* 04..11:*:00
 AccuracySec=1s
 # Catch up at once after the RTC resume or a boot.
 Persistent=true

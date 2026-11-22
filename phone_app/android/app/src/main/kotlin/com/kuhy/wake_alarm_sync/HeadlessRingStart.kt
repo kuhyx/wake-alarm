@@ -30,15 +30,25 @@ object HeadlessRingStart {
     private const val TAG = "WakeAlarmHeadless"
     const val CHANNEL = "com.kuhy.wake_alarm_sync/headless"
     private const val ENTRYPOINT = "ringStartedMain"
+
+    /** Publishes the enforcement fields now (a bypass); `publishNowMain` in `main.dart`. */
+    const val PUBLISH_ENTRYPOINT = "publishNowMain"
     private const val TIMEOUT_MS = 90_000L
 
     private val handler = Handler(Looper.getMainLooper())
     private var engine: FlutterEngine? = null
 
-    /** Starts the engine unless one is already running. Main thread only. */
-    fun start(context: Context) {
+    /** A publish asked for while an engine ran; started when that one stops. */
+    private var pending: Pair<Context, String>? = null
+
+    /**
+     * Starts the engine running [entrypoint] unless one is already running,
+     * in which case a publish is queued behind it. Main thread only.
+     */
+    fun start(context: Context, entrypoint: String = ENTRYPOINT) {
         if (engine != null) {
-            Log.w(TAG, "headless ring_started engine already running; start ignored")
+            if (entrypoint == PUBLISH_ENTRYPOINT) pending = context.applicationContext to entrypoint
+            Log.w(TAG, "headless engine already running; $entrypoint ${if (pending != null) "queued" else "ignored"}")
             return
         }
         try {
@@ -55,7 +65,7 @@ object HeadlessRingStart {
                 }
             val bundle = FlutterInjector.instance().flutterLoader().findAppBundlePath()
             created.dartExecutor.executeDartEntrypoint(
-                DartExecutor.DartEntrypoint(bundle, ENTRYPOINT),
+                DartExecutor.DartEntrypoint(bundle, entrypoint),
             )
             handler.postDelayed({ stop("timeout") }, TIMEOUT_MS)
             Log.i(TAG, "headless ring_started engine started")
@@ -70,5 +80,9 @@ object HeadlessRingStart {
         engine?.destroy()
         engine = null
         Log.i(TAG, "headless engine stopped: $reason")
+        pending?.let { (context, entrypoint) ->
+            pending = null
+            handler.post { start(context, entrypoint) }
+        }
     }
 }

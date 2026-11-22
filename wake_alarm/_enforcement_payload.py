@@ -35,6 +35,7 @@ from wake_alarm._enforcement_records import (
     RingStarted,
     StickState,
     escape_from,
+    parse_instant,
     phone_event_from,
     ring_started_from,
     stick_state_from,
@@ -42,6 +43,7 @@ from wake_alarm._enforcement_records import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from datetime import datetime
 
 _logger = logging.getLogger(__name__)
 
@@ -68,6 +70,29 @@ class EnforcementView:
     def escape_for(self, day: str) -> Escape | None:
         """The first honoured escape excusing ``day``, or None."""
         return next((e for e in self.honoured_escapes() if e.date == day), None)
+
+    def bypass_on(self, day: str) -> datetime | None:
+        """The newest ``bypass`` of ``day``, unless a ``dismissed`` came after it.
+
+        The PC rings for a bypass until the phone proves the full dismiss
+        sequence again, which logs ``dismissed``.
+        """
+        bypasses = [
+            at
+            for event in self.phone_events
+            if event.kind == "bypass" and event.data.get("date") == day
+            if (at := parse_instant(event.at)) is not None
+        ]
+        if not bypasses:
+            return None
+        newest = max(bypasses)
+        dismissed = any(
+            event.kind == "dismissed"
+            and (at := parse_instant(event.at)) is not None
+            and at > newest
+            for event in self.phone_events
+        )
+        return None if dismissed else newest
 
     def escaped_dates(self) -> frozenset[str]:
         """Every morning an honoured escape excuses."""

@@ -60,7 +60,7 @@ class StickCheckSickTest {
     fun aSickDayIsSkippedWhenTheStreakLooksBack() {
         // Missed Tuesday, sick Wednesday: Thursday's miss continues the chain.
         val before = StickState(streak = 1, lockedThrough = wed, lastMiss = tue)
-        val after = StickCheck.afterMiss(thu, before) { it == wed }
+        val after = StickCheck.afterMiss(thu, before, standsDown = { it == wed })
         assertEquals(2, after.streak)
     }
 

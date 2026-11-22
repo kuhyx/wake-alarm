@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
+import 'package:wake_alarm_sync/services/enforcement_publish.dart';
 import 'package:wake_alarm_sync/services/morning_session.dart';
 import 'package:wake_alarm_sync/services/session_rules.dart';
 import 'package:wake_alarm_sync/services/session_store.dart';
@@ -16,8 +19,10 @@ class SessionHandoff {
     required this.scheduler,
     SessionStore? store,
     DateTime Function()? now,
+    Future<bool> Function()? publishNow,
   }) : store = store ?? SessionStore(),
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _publishNow = publishNow ?? publishEnforcementNow;
 
   /// Platform bridge, for the NFC availability check.
   final AlarmScheduler scheduler;
@@ -26,6 +31,10 @@ class SessionHandoff {
   final SessionStore store;
 
   final DateTime Function() _now;
+
+  /// Pushes the `dismissed` event at once: the PC rings for a bypass until
+  /// it reads one newer than the bypass.
+  final Future<bool> Function() _publishNow;
 
   /// Starts or resumes today's session; false when the ring should just end.
   ///
@@ -38,6 +47,8 @@ class SessionHandoff {
     // recorded before anything else so an interrupted await below still
     // leaves the native side knowing the ring was answered.
     await scheduler.markRingDismissed();
+    // Not awaited: the session must not wait on the network.
+    unawaited(_publishNow());
     final now = _now();
     final today = SessionRules.dateKey(now);
     final current = await store.loadCurrent();

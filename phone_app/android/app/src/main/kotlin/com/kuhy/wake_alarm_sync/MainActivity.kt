@@ -20,6 +20,9 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A ring that fired, went undismissed and is not sounding was killed
+        // (force stop, a pause that got through): a bypass, which rings again.
+        Bypass.checkOnLaunch(this)
         if (resumeMorning()) return
         requestAlarmPermissions()
     }

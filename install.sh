@@ -57,6 +57,8 @@ readonly PC_DIR="$SCRIPT_DIR/scripts/pc"
 readonly WAV_DIR="/usr/local/share/wake-alarm"
 readonly RING_SCRIPT_DST="/usr/local/lib/wake-alarm/ring_alsa.sh"
 readonly ALSA_UNIT="wake-alarm-ring-alsa.service"
+# The silent monitor check (wake_alarm/_ring_probe.py starts it once).
+readonly PROBE_UNIT="wake-alarm-ring-probe.service"
 readonly SUDOERS_FILE="/etc/sudoers.d/wake-alarm"
 readonly POWERKEY_DST="/etc/systemd/logind.conf.d/wake-alarm-powerkey.conf"
 INSTALL_USER="$(id -un)"
@@ -64,6 +66,7 @@ readonly INSTALL_USER
 readonly SUDOERS_LINES=(
     "$INSTALL_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start $ALSA_UNIT"
     "$INSTALL_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop $ALSA_UNIT"
+    "$INSTALL_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start $PROBE_UNIT"
 )
 
 TEMP_DIR=""
@@ -84,8 +87,9 @@ install_ring_audio() {
     sudo install -D -m 0755 "$PC_DIR/ring_alsa.sh" "$RING_SCRIPT_DST"
     sed "s/@USER@/$INSTALL_USER/" "$PC_DIR/$ALSA_UNIT" >"$TEMP_DIR/$ALSA_UNIT"
     sudo install -m 0644 "$TEMP_DIR/$ALSA_UNIT" "/etc/systemd/system/$ALSA_UNIT"
+    sudo install -m 0644 "$PC_DIR/$PROBE_UNIT" "/etc/systemd/system/$PROBE_UNIT"
     sudo systemctl daemon-reload
-    echo "  Ring WAVs, $RING_SCRIPT_DST and $ALSA_UNIT installed."
+    echo "  Ring WAVs, $RING_SCRIPT_DST, $ALSA_UNIT and $PROBE_UNIT installed."
 }
 
 install_sudoers() {
@@ -102,7 +106,7 @@ install_sudoers() {
     done
     sudo visudo -cf "$merged" >/dev/null
     sudo install -m 0440 -o root -g root "$merged" "$SUDOERS_FILE"
-    echo "  $SUDOERS_FILE: rtcwake + start/stop $ALSA_UNIT (validated)."
+    echo "  $SUDOERS_FILE: rtcwake, start/stop $ALSA_UNIT, start $PROBE_UNIT (validated)."
 }
 
 install_powerkey_dropin() {

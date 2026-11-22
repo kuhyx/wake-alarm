@@ -23,6 +23,7 @@ object WorkdayStick {
 
     private const val ACTION_LOCKDOWN = "com.kuhy.focus_owner.action.LOCKDOWN_UNTIL_EOD"
     private const val ACTION_LIFT = "com.kuhy.focus_owner.action.LIFT_LOCKDOWN"
+    private const val ACTION_UNSUSPEND = "com.kuhy.focus_owner.action.UNSUSPEND"
     private const val EXTRA_UNTIL = "until"
     private const val PERMISSION_SIGNAL = "com.kuhy.focus_owner.permission.SIGNAL_LOCKDOWN"
     private const val FOCUS_OWNER_PACKAGE = "com.kuhy.focus_owner"
@@ -45,6 +46,15 @@ object WorkdayStick {
         Log.i(TAG, "signalling focus-owner lift")
         context.sendBroadcast(
             Intent(ACTION_LIFT).setPackage(FOCUS_OWNER_PACKAGE),
+            PERMISSION_SIGNAL,
+        )
+    }
+
+    /** Asks focus-owner for a pass now, which lifts a suspension of this app. */
+    fun sendUnsuspend(context: Context) {
+        Log.i(TAG, "signalling focus-owner unsuspend")
+        context.sendBroadcast(
+            Intent(ACTION_UNSUSPEND).setPackage(FOCUS_OWNER_PACKAGE),
             PERMISSION_SIGNAL,
         )
     }

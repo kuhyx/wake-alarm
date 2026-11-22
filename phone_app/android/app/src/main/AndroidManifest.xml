@@ -98,6 +98,28 @@
         <receiver
             android:name=".SessionWarnReceiver"
             android:exported="false"/>
+        <!-- An active device admin cannot be paused from the launcher;
+             removing it is a bypass (Bypass.kt). Activated over adb. -->
+        <receiver
+            android:name=".WakeAdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/wake_admin"/>
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/>
+            </intent-filter>
+        </receiver>
+        <!-- Sent by the system to this app only; a pause is a bypass. -->
+        <receiver
+            android:name=".SuspendReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_SUSPENDED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_UNSUSPENDED"/>
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

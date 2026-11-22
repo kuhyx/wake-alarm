@@ -47,6 +47,8 @@ class AlarmActivity : FlutterActivity() {
         // an unlock first, every leg.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         dismissKeyguard()
+        // A revoke or a killed ring, seen on a relaunch into this screen.
+        Bypass.checkOnLaunch(this)
     }
 
     /**

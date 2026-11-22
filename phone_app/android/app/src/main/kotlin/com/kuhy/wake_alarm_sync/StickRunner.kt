@@ -36,6 +36,7 @@ object StickRunner {
                 state = before,
                 checkedThrough = StickStore.checkedThrough(context),
                 ringSkippedOn = { RingWatch.skippedOn(context, it) },
+                bypassOn = { RingWatch.bypassOn(context, it) },
             ),
         )
         for ((day, verdict) in run.verdicts) {

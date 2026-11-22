@@ -52,6 +52,13 @@ def _no_process(cmd: list[str]) -> object:
     raise AssertionError(msg)
 
 
+def _probe_done(tmp_path: Path) -> Path:
+    """An already-run probe, so a tick at A - 5 never reaches loginctl."""
+    path = tmp_path / "ring_probe_done"
+    path.write_text("test", encoding="utf-8")
+    return path
+
+
 class FakeClock:
     """A monotonic clock that only moves when ``sleep`` is called.
 
@@ -166,6 +173,10 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             tmp_path / "morning_session.json",
         ),
         patch("wake_alarm._session_strip._popen", _no_process),
+        # The silent monitor probe sudo-starts a root unit: never from a test
+        # unless that test patches its own done file and process seam.
+        patch("wake_alarm._ring_probe._ok", _no_process),
+        patch("wake_alarm._ring_probe.PROBE_DONE_FILE", _probe_done(tmp_path)),
         patch("wake_alarm._session_strip._once", _session_strip._Once()),
         patch(
             "wake_alarm._workday_penalty.WORKDAY_PENALTY_FILE",
@@ -199,6 +210,7 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
         patch("wake_alarm._rtc_hw.RTC_ARMED_FILE", tmp_path / "rtc_armed.json"),
         patch("wake_alarm._ring_player._run", _no_process),
         patch("wake_alarm._ring_player._popen", _no_process),
+        patch("wake_alarm._ring_monitors._spawn", _no_process),
         patch("wake_alarm._rtc_hw._run", _no_process),
         patch("wake_alarm._audit_sources._run", _no_process),
         # The shared free-day pool lives under ~/.local/share, outside every

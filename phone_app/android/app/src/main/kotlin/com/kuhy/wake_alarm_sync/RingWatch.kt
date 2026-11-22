@@ -33,9 +33,18 @@ object RingWatch {
     private const val KEY_DISMISSED_DATE = "dismissed_date"
     private const val KEY_DISMISSED_DATES = "dismissed_dates"
     private const val KEY_SKIPPED_PREFIX = "skipped_dates_"
+    private const val KEY_BYPASS_DATES = "bypass_dates"
+
+    // Written only by builds that have [Bypass], next to KEY_FIRED_DATE. A
+    // ring fired by an older build (11-22: paused, never dismissed) must not
+    // read as a killed ring the first time the new build launches.
+    private const val KEY_WATCHED_FIRED_DATE = "watched_fired_date"
 
     fun markFired(context: Context) {
-        prefs(context).edit().putString(KEY_FIRED_DATE, today()).apply()
+        prefs(context).edit()
+            .putString(KEY_FIRED_DATE, today())
+            .putString(KEY_WATCHED_FIRED_DATE, today())
+            .apply()
     }
 
     fun markDismissed(context: Context) {
@@ -51,6 +60,19 @@ object RingWatch {
     fun markSkipped(context: Context, skip: RingSkip) {
         DateHistory.add(prefs(context), KEY_SKIPPED_PREFIX + skip.wire, LocalDate.now())
     }
+
+    /** Whether today's fresh ring fired under a build with [Bypass]; [Bypass] asks it. */
+    fun firedToday(context: Context): Boolean =
+        prefs(context).getString(KEY_WATCHED_FIRED_DATE, null) == today()
+
+    /** Latches a bypass ([Bypass]) on [day]; the stick reads it as a miss. */
+    fun markBypass(context: Context, day: LocalDate) {
+        DateHistory.add(prefs(context), KEY_BYPASS_DATES, day)
+    }
+
+    /** Whether a bypass was recorded on [day]. */
+    fun bypassOn(context: Context, day: LocalDate): Boolean =
+        DateHistory.contains(prefs(context), KEY_BYPASS_DATES, day)
 
     /** Why the ring stood down on [day], or null when it was not skipped. */
     fun skippedOn(context: Context, day: LocalDate): RingSkip? =

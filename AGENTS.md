@@ -16,6 +16,11 @@ temporary escape hatch (until 2026-10-15). All of it, and the data contract
 the phone, PC and focus-owner share: **`DOCS-wake-enforcement.md`**. Anything
 else from the old PC alarm still needs a reason the phone can't do it.
 
+**Bypasses** (the launcher "Pause app" silenced the ring on 11-20 and
+11-22): focus-owner pins the enforcement apps, WakeAlarm is a device admin,
+and a pause, admin removal, revoked permission or killed ring that gets
+through is a miss plus an immediate PC ring: **`DOCS-bypass.md`**.
+
 ## The dismiss sequence (phone)
 
 ```

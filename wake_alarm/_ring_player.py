@@ -4,7 +4,8 @@ Two backends, chosen per ring by :func:`select_backend`:
 
 * **PipeWire** -- an active graphical session on seat0 belongs to this user,
   so its PipeWire is reachable: unmute and max the default sink with
-  ``wpctl`` and play with ``pw-play``.
+  ``wpctl`` and play with ``pw-play``; the monitors ring beside it
+  (:mod:`wake_alarm._ring_monitors`).
 * **ALSA unit** -- anything else (the night lockdown: lightdm masked, nobody
   logged in, and the user is not in ``audio``): start the root system unit
   ``wake-alarm-ring-alsa.service`` through its NOPASSWD sudoers entry. The
@@ -20,6 +21,8 @@ import logging
 import os
 import subprocess
 from typing import TYPE_CHECKING, Protocol
+
+from wake_alarm._ring_monitors import MonitorLoops
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -111,6 +114,7 @@ class PipeWireBackend:
         """Play ``rise`` once, then ``loop`` forever."""
         self._rise, self._loop = rise, loop
         self._proc: subprocess.Popen[bytes] | None = None
+        self._monitors: MonitorLoops | None = None
 
     def _play(self, path: Path) -> None:
         """Start ``pw-play`` on ``path`` at full stream volume."""
@@ -129,6 +133,7 @@ class PipeWireBackend:
             self._play(self._rise)
         except OSError as exc:
             return False, f"pw-play failed: {exc}"
+        self._monitors = MonitorLoops.start(self._rise, self._loop)
         return True, "pw-play started"
 
     def pump(self) -> bool:
@@ -148,7 +153,10 @@ class PipeWireBackend:
         return True
 
     def stop(self) -> None:
-        """Terminate the current ``pw-play``."""
+        """Terminate the current ``pw-play`` and the monitor loops."""
+        monitors, self._monitors = self._monitors, None
+        if monitors is not None:
+            monitors.stop()
         proc, self._proc = self._proc, None
         if proc is None or proc.poll() is not None:
             return

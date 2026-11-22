@@ -18,6 +18,8 @@ readonly WAKEALARM=/sys/class/rtc/rtc0/wakealarm
 # (~/wake-alarm, or ~/wt from a worktree), so derive it, never hard-code it.
 GUEST_REPO="$(readlink -f "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../..")"
 readonly GUEST_REPO
+# shellcheck source=guest_cases_monitors.sh source-path=SCRIPTDIR
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/guest_cases_monitors.sh"
 
 # A timer present but disabled fails silently every morning.
 case_v2_timers() {
@@ -236,6 +238,7 @@ run_v2_cases() {
     case_ring_script_plays
     case_ring_busy_fallback
     case_ring_busy_fails_loudly
+    run_monitor_cases
     case_sudoers
     case_powerkey_dropin
     case_rtc_arm

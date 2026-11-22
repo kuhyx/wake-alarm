@@ -24,8 +24,10 @@ readonly SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 # Enforcement v2 (DOCS-wake-enforcement.md): user units, then root pieces.
 readonly V2_UNITS=(wake-alarm-fallback wake-alarm-rtc wake-alarm-audit)
 readonly ALSA_UNIT="wake-alarm-ring-alsa.service"
+readonly PROBE_UNIT="wake-alarm-ring-probe.service"
 readonly ROOT_FILES=(
     "/etc/systemd/system/$ALSA_UNIT"
+    "/etc/systemd/system/$PROBE_UNIT"
     "/usr/local/lib/wake-alarm/ring_alsa.sh"
     "/usr/local/share/wake-alarm/ring.wav"
     "/usr/local/share/wake-alarm/ring_loop.wav"
@@ -105,7 +107,7 @@ remove_enforcement() {
     done
     echo "  Fallback, RTC and audit timers removed"
 
-    sudo systemctl stop "$ALSA_UNIT" >/dev/null 2>&1 || true
+    sudo systemctl stop "$ALSA_UNIT" "$PROBE_UNIT" >/dev/null 2>&1 || true
     for path in "${ROOT_FILES[@]}"; do
         sudo rm -f "$path"
     done

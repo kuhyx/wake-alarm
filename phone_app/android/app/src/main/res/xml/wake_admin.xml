@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No policies: the admin exists only so Android refuses to pause the app. -->
+<device-admin>
+    <uses-policies />
+</device-admin>

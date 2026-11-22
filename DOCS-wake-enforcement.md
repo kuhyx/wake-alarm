@@ -30,6 +30,10 @@ trigger). Not on a free day, not on a sick day (below). Per-minute tick, `A-5min
 | `now ≥ A + 2 min` and no `ring_started` for today | ring — `phone_silent` |
 | `now ≥ A + 15 min` (`SESSION_NONE_GRACE`) | ring — `no_session` |
 
+A **bypass** (the app paused, its admin removed, a permission revoked, the
+ring killed) rings before this table, outside the window, until a newer
+dismiss or 30 min: **`DOCS-bypass.md`**.
+
 A ring stops on: session start, escape, or the 30-min cap. Firebase
 unreachable counts as "no ping, no session" (fail toward ringing) and is
 logged as `firebase_unreachable`. While ringing, stop conditions are polled
@@ -53,6 +57,7 @@ went quiet after 07:43 on 11-01 is a separate phone question.
 - Otherwise (night lockdown: lightdm masked, nobody logged in; kuhy is not in
   `audio`) → root system unit `wake-alarm-ring-alsa.service` playing straight
   to the speakers' card (`ALC897 Analog`, card name `Generic_1`) via `aplay`.
+- Both paths also ring every connected monitor (2026-11-22, `DOCS-bypass.md`).
 
 ### PC wakes itself (nights before Tue/Wed/Thu)
 
@@ -132,6 +137,7 @@ shown comes from Dart constants mirrored against the Python ones by
 - `com.kuhy.focus_owner.action.LOCKDOWN_UNTIL_EOD` — extra `until`
   (`YYYY-MM-DD`, inclusive). Missing extra = today (old senders keep working).
 - `com.kuhy.focus_owner.action.LIFT_LOCKDOWN` — clears any lockdown now.
+- `com.kuhy.focus_owner.action.UNSUSPEND` — run a pass now (lifts a pause).
 
 ### PC files (`~/.local/state/wake_alarm/`)
 
@@ -148,7 +154,8 @@ Phone (`phone_events.kind`): `alarm_fired` (data: `reason` =
 `daily`|`rering`|`free_day`|`sick_day` — only `daily` is the morning's ring),
 `ring_screen_opened`, `ring_started_published` (data: `date`, `source` =
 `alarm`|`ring_screen`), `dismissed`, `stick_check` (data: `trigger` =
-`exact`|`boot`|`watchdog`, `date` judged, `verdict`, incl. `free_day`|`sick_day`), `lockdown_sent` (data:
+`exact`|`boot`|`watchdog`, `date` judged, `verdict`, incl. `free_day`|`sick_day`), `bypass` (data: `cause`, `date`, `session`; `DOCS-bypass.md`),
+`bypass_ignored`, `unsuspended`, `lockdown_sent` (data:
 `until`, `streak`), `lift_sent`, `escape_used`, `boot`.
 
 `ring_started` is published twice over: a headless Dart engine started by

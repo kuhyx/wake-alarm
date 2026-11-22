@@ -1,4 +1,4 @@
-"""The PC fallback alarm: one per-minute tick, 04:00-09:59.
+"""The PC fallback alarm: one per-minute tick, 04:00-11:59.
 
 ``wake-alarm-fallback.timer`` runs ``--tick`` every minute. Outside
 ``A - 5 min .. A + 45 min`` (or on a free or sick day) a tick decides from local
@@ -35,14 +35,17 @@ from wake_alarm._fallback_observe import (
     settled_reason,
 )
 from wake_alarm._fallback_policy import (
+    BYPASS,
     Decision,
     Facts,
     alarm_instant,
+    bypass_stop_reason,
     decide,
     stop_reason,
 )
 from wake_alarm._fallback_ring import ring
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._ring_probe import maybe_probe
 from wake_alarm._ring_wav import SYSTEM_WAV_DIR, USER_WAV_DIR, ensure_pair
 from wake_alarm._sick import alarm_stands_down
 from wake_alarm._sync import get_alarm
@@ -80,6 +83,41 @@ def _poll(day: str) -> str | None:
     return reason
 
 
+def _poll_bypass(bypass_at: datetime | None) -> str | None:
+    """Re-observe while ringing for a bypass; the reason to stop, or None.
+
+    An unreachable Firebase keeps the bypass it started with: fail toward
+    ringing, never toward silence.
+    """
+    seen = observe(_now(), sync=True)
+    record(seen)
+    facts = seen.facts if seen.reachable else replace(seen.facts, bypass_at=bypass_at)
+    return bypass_stop_reason(facts)
+
+
+def ring_bypass(facts: Facts) -> str:
+    """Ring for a bypass until it is cleared or capped; returns the stop reason.
+
+    Never touches the daily latch: a bypass has its own 30 minutes, measured
+    from the phone's event, whatever the day's own ring already used.
+    """
+    bypass_at = facts.bypass_at
+    emit(
+        "fallback_ring_start",
+        BYPASS,
+        reason=BYPASS,
+        bypass_at=bypass_at.isoformat() if bypass_at else None,
+        alarm=facts.alarm_at.isoformat(),
+    )
+    stopped = TERMINATED
+    try:
+        rise, loop = ensure_pair(SYSTEM_WAV_DIR, USER_WAV_DIR)
+        stopped = ring(lambda: _poll_bypass(bypass_at), rise=rise, loop=loop)
+    finally:
+        emit("fallback_ring_stop", stopped, stop_reason=stopped, reason=BYPASS)
+    return stopped
+
+
 def ring_now(facts: Facts, reason: str) -> str:
     """Latch, ring until a stop condition, unlatch; returns the stop reason."""
     day = facts.now.date().isoformat()
@@ -109,6 +147,8 @@ def tick(now: datetime) -> Decision:
     seen = observe(now, sync=True)
     record(seen)
     facts, day = seen.facts, now.date().isoformat()
+    # Before any ring can start: the probe needs the monitors free.
+    maybe_probe(now, facts.alarm_at)
     decision = decide(facts)
     emit_on_change(
         "fallback_tick",
@@ -121,7 +161,9 @@ def tick(now: datetime) -> Decision:
     )
     remember_final(day, decision.reason)
     latch = facts.latch
-    if decision.ring:
+    if decision.ring and decision.reason == BYPASS:
+        ring_bypass(facts)
+    elif decision.ring:
         ring_now(facts, decision.reason)
     elif latch is not None and latch.started_at and not latch.stopped_at:
         _close(latch, decision.reason)
@@ -138,7 +180,8 @@ def describe(seen: Observation, decision: Decision) -> str:
         f"sick_day={facts.sick_day} "
         f"firebase={'ok' if seen.reachable else 'UNREACHABLE'}\n"
         f"  escaped={facts.escaped} session_started={facts.session_started} "
-        f"ring_started={facts.ring_started} settled={facts.settled}\n"
+        f"ring_started={facts.ring_started} settled={facts.settled} "
+        f"bypass_at={facts.bypass_at}\n"
         f"  latch={facts.latch}\n"
     )
 

@@ -29,6 +29,8 @@ class BootReceiver : BroadcastReceiver() {
         // missed: this is the path that closes that hole (rearmFromStorage
         // above has already armed the exact check for a phone back earlier).
         StickRunner.run(context, "boot")
+        // Switched off mid-ring and back on the same day: the ring was killed.
+        Bypass.checkRingKilled(context)
     }
 
     private companion object {

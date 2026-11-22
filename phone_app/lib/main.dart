@@ -11,6 +11,7 @@ import 'package:wake_alarm_sync/screens/session_screen.dart';
 import 'package:wake_alarm_sync/services/alarm_policy.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/day_pool_refresh.dart';
+import 'package:wake_alarm_sync/services/enforcement_publish.dart';
 import 'package:wake_alarm_sync/services/headless_ring_start.dart';
 import 'package:wake_alarm_sync/ui/app_name.dart';
 import 'package:wake_alarm_sync/ui/theme.dart';
@@ -44,6 +45,10 @@ Future<void> main() async {
 /// by name from Kotlin; `vm:entry-point` keeps release tree-shaking off it.
 @pragma('vm:entry-point')
 Future<void> ringStartedMain() => runHeadlessRingStart();
+
+/// Headless entry point: `Bypass.kt` starts it to push a bypass at once.
+@pragma('vm:entry-point')
+Future<void> publishNowMain() => runHeadlessPublish();
 
 /// Headless entry point: `PoolSyncReceiver.kt` starts it in the evening and
 /// shortly before the alarm, so a free or sick day marked on the PC reaches

@@ -46,6 +46,12 @@ data class StickInputs(
      * (2026-11-11).
      */
     val ringSkippedOn: (LocalDate) -> RingSkip? = { null },
+    /**
+     * Whether a bypass ([Bypass]) was recorded on a day: the app paused,
+     * its admin removed, a permission revoked, the ring killed. A miss on
+     * any ringing day, stick day or not (2026-11-22).
+     */
+    val bypassOn: (LocalDate) -> Boolean = { false },
 )
 
 /** One day's verdict within a run. */
@@ -66,6 +72,9 @@ data class StickRun(
 /**
  * The stick's decision, as pure functions -- no Context, no clock, no I/O,
  * so every rule here is checkable in isolation.
+ *
+ * A **bypass** ([StickInputs.bypassOn]) is a miss on any day that is neither
+ * free nor sick, at once and whatever the dismiss did afterwards.
  *
  * A **miss** is a stick day (Tue/Wed/Thu, [WorkdayStick.STICK_DAYS]) that is
  * neither a free day nor a sick day (now, or when its ring stood down), whose alarm passed by at least [Stakes.STICK_GRACE_MINUTES]
@@ -124,7 +133,7 @@ object StickCheck {
         state: StickState,
     ): Pair<StickVerdict, StickState> {
         val alarm = inputs.alarm ?: return StickVerdict.NO_ALARM to state
-        if (!isStickDay(day)) return StickVerdict.NOT_STICK_DAY to state
+        if (!isStickDay(day) && !inputs.bypassOn(day)) return StickVerdict.NOT_STICK_DAY to state
         if (inputs.isFree(day)) return StickVerdict.FREE_DAY to state
         // A sick day stands the stick down like a free day: no miss, no
         // streak change, no lockdown -- and nothing carried to tomorrow.
@@ -138,10 +147,14 @@ object StickCheck {
         // shown and synced drops to 0 (a lockdown already sent stays).
         if (inputs.escapedOn(day)) return StickVerdict.ESCAPED to state.copy(streak = 0)
         if (state.lastMiss == day) return StickVerdict.ALREADY_PENALISED to state
+        // A bypass is a miss at once, and a later dismiss does not undo it.
+        if (inputs.bypassOn(day)) {
+            return StickVerdict.MISS to afterMiss(day, state, inputs.standsDown, inputs.bypassOn)
+        }
         if (inputs.dismissedOn(day)) return StickVerdict.DISMISSED to state.copy(streak = 0)
         val due = day.atTime(alarm).plusMinutes(Stakes.STICK_GRACE_MINUTES)
         if (now.isBefore(due)) return StickVerdict.TOO_EARLY to state
-        return StickVerdict.MISS to afterMiss(day, state, inputs.standsDown)
+        return StickVerdict.MISS to afterMiss(day, state, inputs.standsDown, inputs.bypassOn)
     }
 
     /**
@@ -151,20 +164,31 @@ object StickCheck {
      * lockdown already in force: a chain restarting at 1 must not report
      * an earlier end than the one focus-owner was already sent.
      */
-    fun afterMiss(day: LocalDate, state: StickState, standsDown: (LocalDate) -> Boolean): StickState {
-        val streak = streakAfterMiss(day, state, standsDown)
+    fun afterMiss(
+        day: LocalDate,
+        state: StickState,
+        standsDown: (LocalDate) -> Boolean,
+        bypassOn: (LocalDate) -> Boolean = { false },
+    ): StickState {
+        val streak = streakAfterMiss(day, state, standsDown, bypassOn)
         val computed = lockedThrough(day, streak)
         val locked = state.lockedThrough?.let { maxOf(it, computed) } ?: computed
         return StickState(streak = streak, lockedThrough = locked, lastMiss = day)
     }
 
     /**
-     * Consecutive stick-day misses including one on [day]: the chain
-     * continues only when the previous stick day (free and sick days
-     * skipped, per [standsDown]) is exactly the last miss.
+     * Consecutive misses including one on [day]: the chain continues only
+     * when the previous penalty day -- a stick day, or any day with a
+     * bypass; free and sick days skipped, per [standsDown] -- is exactly
+     * the last miss.
      */
-    fun streakAfterMiss(day: LocalDate, state: StickState, standsDown: (LocalDate) -> Boolean): Int {
-        val previous = previousStickDay(day, standsDown)
+    fun streakAfterMiss(
+        day: LocalDate,
+        state: StickState,
+        standsDown: (LocalDate) -> Boolean,
+        bypassOn: (LocalDate) -> Boolean = { false },
+    ): Int {
+        val previous = previousStickDay(day, standsDown, bypassOn)
         return if (previous != null && previous == state.lastMiss) state.streak + 1 else 1
     }
 
@@ -172,12 +196,16 @@ object StickCheck {
     fun lockedThrough(day: LocalDate, streak: Int): LocalDate =
         day.plusDays(minOf(streak, Stakes.STICK_LOCKDOWN_MAX_DAYS - 1).toLong())
 
-    /** The nearest earlier stick day that does not [standsDown], or null. */
-    fun previousStickDay(day: LocalDate, standsDown: (LocalDate) -> Boolean): LocalDate? {
+    /** The nearest earlier penalty day (stick or bypass) that does not [standsDown], or null. */
+    fun previousStickDay(
+        day: LocalDate,
+        standsDown: (LocalDate) -> Boolean,
+        bypassOn: (LocalDate) -> Boolean = { false },
+    ): LocalDate? {
         var step = day.minusDays(1)
         val floor = day.minusDays(LOOKBACK_DAYS)
         while (step.isAfter(floor)) {
-            if (isStickDay(step) && !standsDown(step)) return step
+            if ((isStickDay(step) || bypassOn(step)) && !standsDown(step)) return step
             step = step.minusDays(1)
         }
         return null

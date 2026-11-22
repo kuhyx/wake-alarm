@@ -1,0 +1,13 @@
+[Unit]
+Description=Wake Alarm silent check that the monitors can ring (ALSA, root)
+Documentation=https://github.com/kuhyx/wake-alarm
+
+[Service]
+# Started once by the user's wake-alarm-fallback.service at A - 5 on a
+# morning with no graphical session (the state the fallback rings in),
+# through `sudo -n systemctl start` (see /etc/sudoers.d/wake-alarm).
+# Plays digital silence only: `journalctl -u wake-alarm-ring-probe` shows
+# one ring_probe line per monitor.
+Type=oneshot
+ExecStart=/usr/local/lib/wake-alarm/ring_alsa.sh --probe
+TimeoutStartSec=60

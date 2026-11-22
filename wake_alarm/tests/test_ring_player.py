@@ -97,6 +97,7 @@ class TestPipeWire:
         with (
             patch.object(_ring_player, "_run", run),
             patch.object(_ring_player, "_popen", return_value=proc) as popen,
+            patch.object(_ring_player.MonitorLoops, "start"),
         ):
             assert self._backend().start() == (True, "pw-play started")
         assert [c.args[0][1] for c in run.call_args_list] == ["set-mute", "set-volume"]

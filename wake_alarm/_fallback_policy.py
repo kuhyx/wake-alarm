@@ -10,6 +10,12 @@ ring already ran 30 min today (``FALLBACK_RING_CAP``)       never again today
 ``now >= A + 15 min`` (``SESSION_NONE_GRACE``)              ring: no_session
 =========================================================  ==================
 
+A **bypass** comes before the table (2026-11-22): a ``bypass`` phone event
+today (the app paused, its admin removed, a permission revoked, the ring
+killed) with no newer ``dismissed`` rings ``bypass`` for 30 minutes from the
+event, ignoring the window, a started session, a final reason and the
+day's own cap. Only a free or sick day, or an escape, stands it down.
+
 The window gates *starting* a ring only. A ring that already started today
 and has not hit its cap is judged by the table alone, so a ringing process
 killed by a hibernate resumes after the resume instead of going quiet
@@ -53,6 +59,13 @@ CAP = "cap"
 PHONE_SILENT = "phone_silent"
 NO_SESSION = "no_session"
 WAITING = "waiting"
+BYPASS = "bypass"
+BYPASS_CLEARED = "bypass_cleared"
+
+# How long after A the tick keeps reading the phone for a bypass. The morning
+# session's last cutoff is 11:00 and A is never later than 08:00 (07:00 at
+# the end of the ramp), so A + 4 h covers every live ring and session.
+BYPASS_WATCH: timedelta = timedelta(hours=4)
 
 # Once seen, these hold for the rest of the day even if Firebase later stops
 # answering: an unreachable backend fails toward ringing, but never toward
@@ -76,6 +89,8 @@ class Facts:
     ring_started: bool = False
     latch: Latch | None = None
     settled: str | None = None
+    # The newest bypass today not followed by a dismiss; None = none live.
+    bypass_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -101,15 +116,23 @@ def _ring_started_today(latch: Latch | None) -> bool:
     return latch is not None and latch.started() is not None
 
 
-def needs_facts(now: datetime, alarm_at: datetime, latch: Latch | None) -> bool:
-    """Whether this tick must fetch the phone's state at all.
-
-    Outside the window with nothing rung today the answer is already
-    ``outside_window``, so the per-minute tick stays off the network.
-    """
+def in_window(now: datetime, alarm_at: datetime, latch: Latch | None) -> bool:
+    """Whether the table's rows may start (or resume) a ring now."""
     if _ring_started_today(latch):
         return True
     return alarm_at - FALLBACK_WINDOW_START <= now < alarm_at + FALLBACK_WINDOW_END
+
+
+def needs_facts(now: datetime, alarm_at: datetime, latch: Latch | None) -> bool:
+    """Whether this tick must fetch the phone's state at all.
+
+    The window, or the bypass watch after it (``BYPASS_WATCH``). Outside
+    both the answer is already ``outside_window``, so the per-minute tick
+    stays off the network.
+    """
+    if in_window(now, alarm_at, latch):
+        return True
+    return alarm_at - FALLBACK_WINDOW_START <= now < alarm_at + BYPASS_WATCH
 
 
 def is_capped(facts: Facts) -> bool:
@@ -154,12 +177,33 @@ def stop_reason(facts: Facts) -> str | None:
     return None
 
 
+def bypass_stop_reason(facts: Facts) -> str | None:
+    """Why a bypass ring must stop now, or None while the bypass stands."""
+    off = day_off(facts)
+    if off is not None:
+        return off
+    if facts.escaped:
+        return ESCAPE
+    if facts.bypass_at is None:
+        return BYPASS_CLEARED
+    if facts.now >= facts.bypass_at + FALLBACK_RING_CAP:
+        return CAP
+    return None
+
+
 def decide(facts: Facts) -> Decision:
-    """The table above; first match wins."""
+    """A live bypass first, then the table above; first match wins."""
     off = day_off(facts)
     if off is not None:
         return Decision(ring=False, reason=off)
-    if not needs_facts(facts.now, facts.alarm_at, facts.latch):
+    if facts.bypass_at is not None and bypass_stop_reason(facts) is None:
+        return Decision(ring=True, reason=BYPASS)
+    return _decide_table(facts)
+
+
+def _decide_table(facts: Facts) -> Decision:
+    """The table's rows, on a day that is neither off nor bypassed."""
+    if not in_window(facts.now, facts.alarm_at, facts.latch):
         return Decision(ring=False, reason=OUTSIDE_WINDOW)
     stop = stop_reason(facts)
     if stop is not None:
