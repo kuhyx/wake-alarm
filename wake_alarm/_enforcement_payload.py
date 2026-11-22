@@ -94,6 +94,26 @@ class EnforcementView:
         )
         return None if dismissed else newest
 
+    def notifications_off_since(self, day: str) -> datetime | None:
+        """The newest ``notifications`` event of local ``day``, if it says off.
+
+        None when ``day`` has none or the newest says on. An entry whose
+        ``enabled`` is not a real bool is skipped, so a malformed event can
+        neither start the 21:00 ring nor silence it.
+        """
+        seen = [
+            (at, enabled)
+            for event in self.phone_events
+            if event.kind == "notifications"
+            if isinstance(enabled := event.data.get("enabled"), bool)
+            if (at := parse_instant(event.at)) is not None
+            if at.date().isoformat() == day
+        ]
+        if not seen:
+            return None
+        at, enabled = max(seen)
+        return None if enabled else at
+
     def escaped_dates(self) -> frozenset[str]:
         """Every morning an honoured escape excuses."""
         return frozenset(e.date for e in self.honoured_escapes())

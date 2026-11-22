@@ -71,3 +71,13 @@ def test_garbage_fields_read_as_none() -> None:
         json.dumps({"date": DAY, "started_at": None, "stopped_at": 5, "reason": ""})
     )
     assert read_latch(DAY) == Latch(date=DAY)
+
+
+def test_another_file_keeps_its_own_latch(tmp_path: Path) -> None:
+    other = tmp_path / "evening_ring.json"
+    latch = mark_started(None, day=DAY, now=NOW, reason="x", file=other)
+    assert read_latch(DAY, other) == latch
+    assert read_latch(DAY) is None
+    stopped = mark_stopped(latch, now=NOW, stop_reason="cap", file=other)
+    assert read_latch(DAY, other) == stopped
+    assert not _fallback_latch.FALLBACK_RING_FILE.exists()
