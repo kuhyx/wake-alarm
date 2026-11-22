@@ -8,7 +8,9 @@ and the day's own cap, until a newer ``dismissed`` arrives.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -38,10 +40,22 @@ def _at(minutes: float) -> datetime:
     return A + timedelta(minutes=minutes)
 
 
-def _facts(minutes: float, bypass_minutes: float | None, **overrides: object) -> Facts:
+class _Overrides(TypedDict, total=False):
+    free_day: bool
+    sick_day: bool
+    escaped: bool
+    session_started: bool
+    ring_started: bool
+    latch: Latch | None
+    settled: str | None
+
+
+def _facts(
+    minutes: float, bypass_minutes: float | None, **overrides: Unpack[_Overrides]
+) -> Facts:
     bypass_at = None if bypass_minutes is None else _at(bypass_minutes)
-    fields: dict[str, object] = {"free_day": False, **overrides}
-    return Facts(now=_at(minutes), alarm_at=A, bypass_at=bypass_at, **fields)  # type: ignore[arg-type]
+    base = Facts(now=_at(minutes), alarm_at=A, free_day=False, bypass_at=bypass_at)
+    return replace(base, **overrides)
 
 
 def _capped_latch() -> Latch:
@@ -82,7 +96,7 @@ class TestDecide:
         [({"free_day": True}, FREE_DAY), ({"sick_day": True}, SICK_DAY)],
     )
     def test_free_and_sick_days_never_ring(
-        self, overrides: dict[str, object], reason: str
+        self, overrides: _Overrides, reason: str
     ) -> None:
         decision = decide(_facts(50, 45, **overrides))
         assert not decision.ring

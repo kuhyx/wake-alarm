@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 A = datetime(2026, 11, 23, 7, 0).astimezone()
+# The argv lists the last ``_run`` handed to ``_ok``, newest run only.
+CALLS: list[object] = []
 
 
 @pytest.fixture(autouse=True)
@@ -30,13 +32,13 @@ def _run(minutes: float, *, graphical: bool, started: bool = True) -> str | None
         patch.object(_ring_probe, "_ok", return_value=(started, "out")) as ok,
     ):
         result = _ring_probe.maybe_probe(A + timedelta(minutes=minutes), A)
-    _run.calls = ok.call_args_list  # type: ignore[attr-defined]
+    CALLS[:] = [call.args[0] for call in ok.call_args_list]
     return result
 
 
 def test_it_starts_the_unit_at_a_minus_five_with_no_session(done_file: Path) -> None:
     assert _run(-5, graphical=False) == "started"
-    assert _run.calls[0].args[0] == [  # type: ignore[attr-defined]
+    assert CALLS[0] == [
         "sudo",
         "-n",
         "systemctl",

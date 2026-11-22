@@ -15,11 +15,10 @@ two pieces came back, because the phone **cannot** ring while powered off: a
 temporary escape hatch (until 2026-10-15). All of it, and the data contract
 the phone, PC and focus-owner share: **`DOCS-wake-enforcement.md`**. Anything
 else from the old PC alarm still needs a reason the phone can't do it.
-
-**Bypasses** (the launcher "Pause app" silenced the ring on 11-20 and
-11-22): focus-owner pins the enforcement apps, WakeAlarm is a device admin,
-and a pause, admin removal, revoked permission or killed ring that gets
-through is a miss plus an immediate PC ring: **`DOCS-bypass.md`**.
+**Bypasses** (launcher "Pause app" silenced the ring 11-20 and 11-22):
+focus-owner pins the enforcement apps, WakeAlarm is a device admin, and a
+pause, admin removal, revoked permission or killed ring that gets through is a
+miss plus an immediate PC ring: **`DOCS-bypass.md`**.
 
 ## The dismiss sequence (phone)
 
@@ -202,16 +201,13 @@ old `/usr/local/bin/shutdown` wrapper wherever one survives. `install.sh` calls
 installing** — renaming or deleting it breaks a fresh install. That call is
 non-fatal and gated on `sudo -n`: the cleanup needs root, and a hard failure
 would abort an install that had already placed the package and the timer.
-
-**`/etc/sudoers.d/wake-alarm` is deliberately left in place** even by a full
-uninstall. Since 2026-10-01 it is live again: the RTC self-wake's `rtcwake`
-and the root ring unit's `systemctl start|stop` lines live there.
+**`/etc/sudoers.d/wake-alarm` stays even after a full uninstall:** the RTC
+self-wake's `rtcwake` and the root ring unit's `systemctl` lines live there.
 
 ## Operational gotchas
 
-- **`wake_state.json` is runtime state, not tracked.** It holds the
-  HMAC-signed once-per-day latch. It was accidentally committed in the
-  monorepo and must stay gitignored here.
+- **`wake_state.json` is runtime state, not tracked** (the HMAC-signed
+  once-per-day latch). It was once committed in the monorepo; keep it ignored.
 - **`WAKE_STATE_FILE` is redirected in `tests/conftest.py`, not per-file.** A
   per-file redirect gets forgotten when a new writer appears (`_trigger` was
   one), and the failure is silent: a green suite that stamped the live file.
@@ -244,8 +240,7 @@ alarm). The dev venv lacks `gatelock`: anything importing `_state` (incl.
 - Don't point the trigger at anything but `morning-routine.service` (or the
   workout lock never runs), don't remove its once-per-day latch, and don't
   raise the log level of `_sync`'s degraded-read paths.
-- Don't let the bypass skip the walk, and don't add a challenge kind that
-  hides its own prompt.
+- Don't let the bypass skip the walk or add a challenge that hides its prompt.
 - Don't close the ring screen on dismiss when a session should follow, don't
   add a re-ring cancel beyond the session's own `finishSession`, and don't
   restore a re-ring instant that has passed (BOOT_COMPLETED replays on launch).
