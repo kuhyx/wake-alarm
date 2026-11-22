@@ -201,6 +201,12 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
             "wake_alarm._fallback_latch.FALLBACK_RING_FILE",
             tmp_path / "fallback_ring.json",
         ),
+        patch(
+            "wake_alarm._fallback_evening.EVENING_RING_FILE",
+            tmp_path / "evening_ring.json",
+        ),
+        patch("wake_alarm._fallback_evening.SYSTEM_WAV_DIR", tmp_path / "wav-system"),
+        patch("wake_alarm._fallback_evening.USER_WAV_DIR", tmp_path / "wav-user"),
         patch("wake_alarm._pc_wake_mode.PC_WAKE_CONFIG", tmp_path / "pc_wake.json"),
         patch("wake_alarm._audit.INCIDENTS_DIR", tmp_path / "incidents"),
         patch("wake_alarm._audit_sources.LOG_JSONL_FILE", tmp_path / "audit.jsonl"),

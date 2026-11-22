@@ -1,4 +1,7 @@
-"""The PC fallback alarm: one per-minute tick, 04:00-11:59.
+"""The PC fallback alarm: one per-minute tick, 04:00-11:59 and 21:00-21:59.
+
+The 21:xx ticks are the notifications check (``_fallback_evening``),
+dispatched before any morning code runs.
 
 ``wake-alarm-fallback.timer`` runs ``--tick`` every minute. Outside
 ``A - 5 min .. A + 45 min`` (or on a free or sick day) a tick decides from local
@@ -25,7 +28,9 @@ from typing import TYPE_CHECKING
 import freedays
 
 from wake_alarm._cli_modes import mode_parser, parse_with_now
+from wake_alarm._evening_policy import in_evening
 from wake_alarm._events import emit, emit_on_change, last_value
+from wake_alarm._fallback_evening import evening_dry_run, evening_tick
 from wake_alarm._fallback_latch import Latch, mark_started, mark_stopped, read_latch
 from wake_alarm._fallback_observe import (
     Observation,
@@ -144,6 +149,8 @@ def ring_now(facts: Facts, reason: str) -> str:
 
 def tick(now: datetime) -> Decision:
     """One timer tick: observe, log a changed decision, ring if due."""
+    if in_evening(now):
+        return evening_tick(now)
     seen = observe(now, sync=True)
     record(seen)
     facts, day = seen.facts, now.date().isoformat()
@@ -211,6 +218,8 @@ def main(argv: list[str] | None = None) -> int:
     args, now = parse_with_now(parser, argv, _now)
     if args.show:
         sys.stdout.write(show(now))
+    elif args.dry_run and in_evening(now):
+        sys.stdout.write(evening_dry_run(now))
     elif args.dry_run:
         seen = observe(now, sync=False)
         sys.stdout.write(describe(seen, decide(seen.facts)))

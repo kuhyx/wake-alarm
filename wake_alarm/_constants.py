@@ -201,6 +201,8 @@ ESCAPE_REASON_MIN_CHARS: int = 40
 # Today's fallback-ring latch: {"date", "started_at", "stopped_at", "reason",
 # "stop_reason"}.
 FALLBACK_RING_FILE: Path = LOG_STATE_DIR / "fallback_ring.json"
+# The 21:00 notifications ring's own latch, same shape; never the morning's.
+EVENING_RING_FILE: Path = LOG_STATE_DIR / "evening_ring.json"
 
 # {"mode": "hibernate" | "poweroff"}; how the PC goes down for the night.
 PC_WAKE_CONFIG: Path = Path.home() / ".config" / "wake_alarm" / "pc_wake.json"

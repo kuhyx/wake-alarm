@@ -1,5 +1,5 @@
 [Unit]
-Description=Wake Alarm PC fallback alarm, once a minute through the morning
+Description=Wake Alarm PC fallback alarm, once a minute mornings and 21:00-21:59
 Documentation=https://github.com/kuhyx/wake-alarm
 
 [Timer]
@@ -7,6 +7,8 @@ Documentation=https://github.com/kuhyx/wake-alarm
 # clamped to <= 08:00). Outside that window a tick reads only local files.
 # Through 11:59: a phone bypass rings the PC up to A + 4 h (A <= 08:00).
 OnCalendar=*-*-* 04..11:*:00
+# 21:00-21:59: the notifications check (DOCS-bypass.md); fetches only then.
+OnCalendar=*-*-* 21:*:00
 AccuracySec=1s
 # Catch up at once after the RTC resume or a boot.
 Persistent=true
