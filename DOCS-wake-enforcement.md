@@ -155,7 +155,8 @@ Phone (`phone_events.kind`): `alarm_fired` (data: `reason` =
 `ring_screen_opened`, `ring_started_published` (data: `date`, `source` =
 `alarm`|`ring_screen`), `dismissed`, `stick_check` (data: `trigger` =
 `exact`|`boot`|`watchdog`, `date` judged, `verdict`, incl. `free_day`|`sick_day`), `bypass` (data: `cause`, `date`, `session`; `DOCS-bypass.md`),
-`bypass_ignored`, `unsuspended`, `lockdown_sent` (data:
+`bypass_ignored`, `notifications` (data: `enabled`, `trigger` =
+`evening`|`app_block`|`channel_block`; `DOCS-bypass.md`), `unsuspended`, `lockdown_sent` (data:
 `until`, `streak`), `lift_sent`, `escape_used`, `boot`.
 
 `ring_started` is published twice over: a headless Dart engine started by
@@ -166,7 +167,8 @@ The A+15 check uses `setExactAndAllowWhileIdle` (falls back to
 system's next alarm. Boot/watchdog catch up on up to 5 unchecked past days.
 
 PC (`events.jsonl` `event`): `fallback_tick` (only on decision change),
-`fallback_ring_start`, `fallback_ring_stop`, `ring_backend`, `rtc_armed`,
+`fallback_ring_start`, `fallback_ring_stop`, `evening_tick`,
+`evening_ring_start`, `evening_ring_stop`, `ring_backend`, `rtc_armed`,
 `rtc_skip`, `firebase_unreachable`, `escape_seen`, `penalty_written`,
 `penalty_cancelled` (field `cause`: `escape` | `sick_day`), `audit_written`.
 

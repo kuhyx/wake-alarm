@@ -72,7 +72,36 @@ a minute is recorded once (both activities run the launch check).
   and after the day's own ring was used. It stops on a `dismissed` newer
   than the bypass, which the phone also pushes at once. Free and sick days
   and an escape stand it down. The tick reads the phone until `A + 4 h`
-  (`BYPASS_WATCH`); the fallback timer ticks all day.
+  (`BYPASS_WATCH`); the fallback timer ticks 04:00-11:59 (and 21:xx, below).
+
+## The 21:00 notifications check
+
+Android lets nothing lock "All WakeAlarm notifications", and with them off
+the ring has no screen. The ring-time check above still counts it as a
+bypass; this one catches it the evening before, while kuhy can still fix it.
+
+- **Phone.** `NotifState` (the same rule `Bypass.checkPermissions` uses: app
+  notifications off, or the ring channel at `IMPORTANCE_NONE`) logs a
+  `notifications` event, data `enabled` (bool) and `trigger`, and pushes it
+  at once through `publishNowMain`. Triggers: an exact alarm at 21:00
+  (`NotifAlarm`, request code 1007, `evening`; re-armed by its receiver, by
+  every `AlarmScheduler.schedule`, boot and the watchdog, always the next
+  future 21:00) and `NotifBlockReceiver` on `APP_BLOCK_STATE_CHANGED` /
+  `NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED` for the ring channel
+  (`app_block`, `channel_block`). Both receivers hold the broadcast 25 s so
+  the headless engine is not frozen mid-push.
+- **PC** (`_fallback_evening`, rule in `_evening_policy`). The fallback
+  timer also ticks 21:00-21:59; those ticks skip the morning code. When
+  today's newest `notifications` event says off, the PC rings
+  (`notifications_off`) until a newer one says on, or 30 min
+  (`FALLBACK_RING_CAP`) from the evening's first ring. The cap has its own
+  latch, `evening_ring.json`, so it never eats the morning's or a bypass's.
+  The hour gates only *starting*; a ring started at 21:50 runs its 30 min.
+- **No ring** when tomorrow is a free or sick day (`free_tomorrow`,
+  `sick_tomorrow`), when no event was published today (phone off), or when
+  Firebase does not answer at the tick. An unreachable poll mid-ring keeps
+  ringing. Events: `evening_tick`, `evening_ring_start`, `evening_ring_stop`
+  (never the morning's names, so the audit does not count them).
 
 ## The monitors ring too
 
