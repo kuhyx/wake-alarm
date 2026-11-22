@@ -184,3 +184,24 @@ leg and during a ring. `flutter build apk --debug --target`
 produced an APK that ran `main.dart` instead; `flutter run -t` did not.
 The phone remains the only test of the AlarmManager deadline with the
 screen off and the app swiped away.
+
+A clean-tree `flutter build apk --debug -t lib/main_session_probe.dart`
+held a build slot for 62 s (board build, load ~18). Measured back to back
+on 2026-11-22 at load ~12: 54.5 s at the old HEAD, 41.5 s and 35.7 s with
+these three changes (59.4 s before them at load ~18):
+
+- `org.gradle.caching=true` (`android/gradle.properties`): a fresh worktree
+  pulls plugin, Kotlin and dex outputs from `~/.gradle/caches/build-cache-1`.
+- `app/build.gradle.kts` runs `compileFlutterBuild<Variant>` (the ~20 s Dart
+  kernel compile) before `pre<Variant>Build`. Gradle runs one task per
+  project at a time without the configuration cache, which FlutterTask does
+  not support; the compile used to start 8 s late and block Kotlin, dex and
+  manifests behind it.
+- Debug APKs drop `lib/armeabi-v7a`, `lib/x86` and the engine's Vulkan
+  validation layer: debug installs only reach the arm64 Pixel and the
+  x86_64 emulator. The APK shrinks from 182 MB to 134 MB, and merging and
+  zipping it gets faster. Release keeps every ABI.
+
+What stays fixed: ~20 s of Gradle start and configuration (`~/.gradle`
+sets `daemon=false`, so every build pays a cold JVM) and the Dart compile
+of a 106 MB `app.dill`.

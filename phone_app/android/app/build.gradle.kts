@@ -84,3 +84,30 @@ dependencies {
     // that needs a Context stays out of them.
     testImplementation("junit:junit:4.13.2")
 }
+
+// Start the Dart compile first. Without the configuration cache (Flutter's
+// FlutterTask does not support it) Gradle runs one :app task at a time, and
+// `compileFlutterBuild<Variant>` sat ~190th in the plan: on a clean tree it
+// started ~8 s in, after :app had idled waiting on plugin resources, then
+// held :app for ~20 s while Kotlin, dex and manifests queued behind it.
+// Running it before pre<Variant>Build overlaps it with the plugin projects.
+// mustRunAfter only orders; it pulls the compile into no task graph.
+tasks.matching { it.name.matches(Regex("pre\\w+Build")) }.configureEach {
+    val variant = name.removePrefix("pre").removeSuffix("Build")
+    mustRunAfter(tasks.matching { it.name == "compileFlutterBuild$variant" })
+}
+
+// Debug APKs only reach the Pixel 6a (arm64-v8a) and the x86_64 emulator.
+// Flutter packs three ABIs into every debug APK (182 MB), and merging,
+// stripping and zipping libraries no debug install loads cost the clean
+// probe build seconds it does not have: the 32-bit ABIs, and the engine's
+// 15 MB Vulkan validation layer, loaded only when the manifest sets
+// io.flutter.embedding.android.EnableVulkanValidation (it does not).
+// Release keeps every ABI.
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.packaging.jniLibs.excludes.addAll(
+            listOf("lib/armeabi-v7a/**", "lib/x86/**", "**/libVkLayer_khronos_validation.so"),
+        )
+    }
+}
