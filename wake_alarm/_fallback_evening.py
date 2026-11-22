@@ -57,8 +57,10 @@ def _tomorrow_off(now: datetime, *, sync: bool) -> str | None:
     return SICK_TOMORROW if sick(tomorrow) else None
 
 
-def observe_evening(now: datetime, *, sync: bool) -> EveningFacts:
-    """Gather the evening's facts; Firebase only when it can change them."""
+def observe_evening(
+    now: datetime, *, sync: bool, planted: list[tuple[str, str]] | None = None
+) -> EveningFacts:
+    """Gather the evening's facts; Firebase (or ``planted``) only when needed."""
     day = now.date().isoformat()
     facts = EveningFacts(
         now=now,
@@ -67,7 +69,7 @@ def observe_evening(now: datetime, *, sync: bool) -> EveningFacts:
     )
     if not needs_fetch(facts):
         return facts
-    published = fetch_firebase_logs()
+    published = fetch_firebase_logs() if planted is None else planted
     if published is None:
         return replace(facts, reachable=False)
     return replace(
@@ -152,9 +154,9 @@ def evening_tick(now: datetime) -> Decision:
     return decision
 
 
-def evening_dry_run(now: datetime) -> str:
+def evening_dry_run(now: datetime, planted: list[tuple[str, str]] | None = None) -> str:
     """The ``--dry-run`` report for a 21:xx instant; writes nothing."""
-    facts = observe_evening(now, sync=False)
+    facts = observe_evening(now, sync=False, planted=planted)
     decision = decide(facts)
     verdict = "WOULD RING" if decision.ring else "quiet"
     return (

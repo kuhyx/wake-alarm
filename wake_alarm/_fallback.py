@@ -15,6 +15,7 @@ no session, no escape": fail toward ringing.
     python -m wake_alarm._fallback --tick      # what the timer runs
     python -m wake_alarm._fallback --dry-run   # decide now, change nothing
     python -m wake_alarm._fallback --show      # latch + last decision, offline
+    python -m wake_alarm._fallback --dry-run --published F  # F replaces Firebase
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ from wake_alarm._fallback_policy import (
 )
 from wake_alarm._fallback_ring import ring
 from wake_alarm._logging_setup import configure_logging
+from wake_alarm._published_file import load_published
 from wake_alarm._ring_probe import maybe_probe
 from wake_alarm._ring_wav import SYSTEM_WAV_DIR, USER_WAV_DIR, ensure_pair
 from wake_alarm._sick import alarm_stands_down
@@ -215,13 +217,22 @@ def _terminate(signum: int, _frame: FrameType | None) -> None:
 def main(argv: list[str] | None = None) -> int:
     """Entry point."""
     parser = mode_parser("PC fallback alarm tick", "tick", "decide and act")
+    parser.add_argument("--published", help="with --dry-run: phone logs file")
     args, now = parse_with_now(parser, argv, _now)
+    planted = None
+    if args.published is not None:
+        if not args.dry_run:
+            parser.error("--published only goes with --dry-run")
+        try:
+            planted = load_published(args.published)
+        except (OSError, TypeError, ValueError) as exc:
+            parser.error(f"--published {args.published}: {exc}")
     if args.show:
         sys.stdout.write(show(now))
     elif args.dry_run and in_evening(now):
-        sys.stdout.write(evening_dry_run(now))
+        sys.stdout.write(evening_dry_run(now, planted))
     elif args.dry_run:
-        seen = observe(now, sync=False)
+        seen = observe(now, sync=False, planted=planted)
         sys.stdout.write(describe(seen, decide(seen.facts)))
     else:
         configure_logging(component="fallback")

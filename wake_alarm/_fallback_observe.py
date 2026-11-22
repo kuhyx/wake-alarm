@@ -62,11 +62,14 @@ def _sick_today(now: datetime, *, online: bool, sync: bool) -> bool:
     return alarm_stands_down(now.date())
 
 
-def observe(now: datetime, *, sync: bool) -> Observation:
+def observe(
+    now: datetime, *, sync: bool, planted: list[tuple[str, str]] | None = None
+) -> Observation:
     """Gather the facts; the network only when the decision needs it.
 
     ``sync`` is False for ``--dry-run``: pulling the sick-day pool rewrites
-    its local file, and a dry run writes nothing.
+    its local file, and a dry run writes nothing. ``planted`` (``--dry-run
+    --published``) stands in for the Firebase fetch.
     """
     day = now.date().isoformat()
     latch = read_latch(day)
@@ -82,7 +85,7 @@ def observe(now: datetime, *, sync: bool) -> Observation:
     )
     if facts.free_day or facts.sick_day or not online:
         return Observation(facts)
-    published = fetch_firebase_logs()
+    published = fetch_firebase_logs() if planted is None else planted
     if published is None:
         return Observation(facts, reachable=False)
     view = enforcement_view(published)

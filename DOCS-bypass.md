@@ -77,6 +77,9 @@ a minute is recorded once (both activities run the launch check).
   than the bypass, which the phone also pushes at once. Free and sick days
   and an escape stand it down. The tick reads the phone until `A + 4 h`
   (`BYPASS_WATCH`); the fallback timer ticks 04:00-11:59 (and 21:xx, below).
+  To see these answers without a backend, `_fallback --dry-run --at <instant>
+  --published <file>` reads the phone's logs from a JSON list of
+  `[device_id, alarm.json]` pairs instead of Firebase (`_published_file`).
 
 ## The 21:00 notifications check
 
