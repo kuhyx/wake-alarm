@@ -145,6 +145,7 @@ object AlarmChannel {
             // a deadline that rang while it sat in the background puts the
             // dismiss sequence in front the moment it is looked at.
             "isRinging" -> result.success(AlarmService.running)
+            "takeBypassReRing" -> result.success(BypassReRing.take(context))
             "beginStepCount" -> {
                 StepCounter.markRingStart(context)
                 result.success(null)

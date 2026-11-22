@@ -68,7 +68,14 @@ a minute is recorded once (both activities run the launch check).
   Owner) still lands.
 - **The phone rings again** (`Bypass.ringAgain`). During a session it is a
   re-ring: only the full dismiss sequence silences it and `re_rings` goes up
-  by one when it does (`SessionHandoff.afterDismiss`).
+  by one when it does (`SessionHandoff.afterDismiss`). It is recorded as
+  `bypass:<cause>` in `re_ring_reasons` (`bypass:fsi_revoked`,
+  `bypass:suspended`, ...): `Bypass.record` stamps the cause
+  (`BypassReRing`, dated) before it restarts the ring, and the session takes
+  it once over `takeBypassReRing`, on the screen's tick or on the dismiss. A
+  bypass while a deadline re-ring already sounds stamps nothing: one sound,
+  one re-ring, reason `deadline:<leg>`; the `bypass` event, its publish and
+  the lockdown still happen.
 - **The PC rings** (`_fallback_policy`, reason `bypass`). The phone pushes
   the event at once through the headless `publishNowMain` engine. The PC
   rings from the bypass for up to 30 min (`FALLBACK_RING_CAP` from the
@@ -80,6 +87,25 @@ a minute is recorded once (both activities run the launch check).
   To see these answers without a backend, `_fallback --dry-run --at <instant>
   --published <file>` reads the phone's logs from a JSON list of
   `[device_id, alarm.json]` pairs instead of Firebase (`_published_file`).
+
+## Testing against a backend: the RTDB emulator
+
+The AVD never signs in to prod. A probe build with
+`--dart-define=WAKE_SYNC_EMULATOR=http://10.0.2.2:9000` syncs to the
+Firebase RTDB emulator on the PC instead of prod Firebase *and* the GitHub
+mirror (`sync_emulator.dart`; plain HTTP is allowed to `10.0.2.2` in the
+debug manifest only). Release builds never set the define.
+
+1. `systemd-run --user --collect --unit=wa-rtdb-emu /usr/bin/java -jar
+   ~/.cache/firebase/emulators/firebase-database-emulator-v4.11.2.jar --host
+   127.0.0.1 --port 9000` (one default namespace; `auth=owner` is admin).
+2. Write a dummy passphrase to `files/passphrase` under the app's
+   `Android/data/<pkg>/` dir; the probe moves it into the keystore on launch
+   (`probe_passphrase.dart`). Without one every push is `sync locked`.
+3. After the bypass: `HOME=<scratch with .config/crdt-sync/password>
+   PYTHONUSERBASE=~/.local /usr/bin/python3 scripts/emu_published.py
+   http://127.0.0.1:9000 out.json`, then `_fallback --dry-run --at <instant>
+   --published out.json`.
 
 ## The 21:00 notifications check
 

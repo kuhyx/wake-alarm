@@ -188,6 +188,23 @@ void main() {
       },
     );
 
+    test('a bypass re-ring is named for its cause and counted once', () {
+      final s = fresh()
+        ..markReRing('deadline:bathroomIn', t0)
+        ..adoptBypassReRing('fsi_revoked')
+        ..recordReRing(t0.add(const Duration(minutes: 3)));
+      expect(s.reRings, 1);
+      expect(s.reRingReasons, <String>['bypass:fsi_revoked']);
+    });
+
+    test('no bypass stamped keeps the deadline reason', () {
+      final s = fresh()
+        ..markReRing('deadline:bathroomIn', t0)
+        ..adoptBypassReRing(null)
+        ..recordReRing(t0.add(const Duration(minutes: 3)));
+      expect(s.reRingReasons, <String>['deadline:bathroomIn']);
+    });
+
     test('a miss with no re-rings left fails the session', () {
       final s = fresh()..reRings = MorningSession.maxReRings;
       expect(s.nextDeadline(), isNull);

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: plain HTTP to the PC's Firebase RTDB emulator, which
+     the AVD reaches as 10.0.2.2 (lib/services/sync_emulator.dart). Every
+     other host keeps the platform default (HTTPS only). -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

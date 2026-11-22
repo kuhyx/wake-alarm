@@ -54,7 +54,9 @@ class SessionHandoff {
     final current = await store.loadCurrent();
     if (current != null && current.date == today) {
       if (!current.isActive) return false;
-      current.recordReRing(now);
+      current
+        ..adoptBypassReRing(await scheduler.takeBypassReRing())
+        ..recordReRing(now);
       await store.save(current);
       return true;
     }

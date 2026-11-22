@@ -34,6 +34,13 @@ Future<void> pointNativeAtLeg(
   );
 }
 
+/// Why the sound the session screen just found is ringing: the bypass
+/// `Bypass.kt` stamped for it, else the live leg's deadline.
+Future<String> nativeRingReason(
+  AlarmScheduler scheduler,
+  MorningSession session,
+) async => session.reRingReasonFor(await scheduler.takeBypassReRing());
+
 /// The notification's one line: glyph + position count, with a running-clock
 /// marker when the re-ring was spent.
 String noticeLabel(MorningSession session) {

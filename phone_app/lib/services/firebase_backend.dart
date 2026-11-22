@@ -17,6 +17,7 @@ import 'package:crdt_sync/crdt_sync.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:wake_alarm_sync/services/google_sign_in_backend.dart';
+import 'package:wake_alarm_sync/services/sync_emulator.dart';
 
 /// The shared `kuhy-syncs` project.
 ///
@@ -48,6 +49,7 @@ SecureCredentialStore credentialStore() => SecureCredentialStore(
 
 /// Reads the per-device account, or null when sync has not been set up.
 Future<FirebaseAccount?> loadAccount() async {
+  if (syncEmulatorOn) return emulatorAccount;
   try {
     return FirebaseAccount.tryParse(
       await _secure.read(key: kFirebaseAccountKey),
@@ -82,6 +84,7 @@ Future<void> clearAccount() async {
 /// Signs in with the stored password only when there is no cached refresh
 /// token, so the usual path costs no authentication round trip.
 Future<FirebaseRestClient?> openFirebase() async {
+  if (syncEmulatorOn) return emulatorClient();
   final account = await loadAccount();
   if (account == null) {
     // A stored refresh token IS a signed-in device, even with no account
@@ -113,6 +116,7 @@ Future<FirebaseRestClient?> openFirebase() async {
 /// a working device "not connected", which is exactly how a phone that was in
 /// fact syncing looked broken.
 Future<bool> isFirebaseConfigured() async {
+  if (syncEmulatorOn) return true;
   try {
     final auth = FirebaseTokenProvider(
       apiKey: kProject.apiKey,
@@ -214,6 +218,8 @@ Future<FirebaseRestClient?> _clientFromStoredSession() async {
 /// (`_fetch_firebase_alarm() or _fetch_github_alarm()`), so a phone that has
 /// not moved yet still reaches it.
 Future<RemoteStore> syncBackend(RemoteStore github) async {
+  // The emulator alone: a mirror beside it would write prod GitHub.
+  if (syncEmulatorOn) return emulatorClient();
   final firebase = await openFirebase();
   return firebase == null
       ? github

@@ -207,6 +207,11 @@ class AlarmScheduler {
   Future<bool> isRinging() async =>
       await _channel.invokeMethod<bool>('isRinging') ?? false;
 
+  /// The cause of a bypass that started today's ring during a live session,
+  /// or null; taking it clears it, so one bypass names one re-ring.
+  Future<String?> takeBypassReRing() =>
+      _channel.invokeMethod<String>('takeBypassReRing');
+
   /// Raw presence observations: `ssid`, `bssid`, `lat`, `lon`, `accuracy`,
   /// `distanceMeters`, `reason`.
   ///

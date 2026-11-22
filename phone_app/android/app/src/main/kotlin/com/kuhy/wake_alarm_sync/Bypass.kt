@@ -28,6 +28,21 @@ object BypassRules {
     /** Today's ring fired, was never dismissed, and nothing is ringing now. */
     fun ringKilled(firedToday: Boolean, dismissedToday: Boolean, ringing: Boolean): Boolean =
         firedToday && !dismissedToday && !ringing
+
+    /**
+     * Whether this bypass's ring is a new session re-ring to name for it.
+     * One already sounding (a leg's deadline) stays that re-ring: one sound,
+     * one re-ring, its reason the one that started it.
+     */
+    fun stampReRing(sessionLive: Boolean, ringing: Boolean): Boolean = sessionLive && !ringing
+
+    fun encodeStamp(cause: String, date: String): String = "$date|$cause"
+
+    /** The cause in [stored] if it was stamped on [today]; a stale one is dropped. */
+    fun takeStamp(stored: String?, today: String): String? {
+        val parts = stored?.split("|", limit = 2) ?: return null
+        return if (parts.size == 2 && parts[0] == today) parts[1] else null
+    }
 }
 
 /**
@@ -75,6 +90,9 @@ object Bypass {
         )
         if (cause == BypassCause.SUSPENDED) WorkdayStick.sendUnsuspend(context)
         StickRunner.run(context, "bypass")
+        if (BypassRules.stampReRing(sessionLive, AlarmService.running)) {
+            BypassReRing.stamp(context, cause.wire, today.toString())
+        }
         ringAgain(context)
         HeadlessRingStart.start(context, HeadlessRingStart.PUBLISH_ENTRYPOINT)
         return true

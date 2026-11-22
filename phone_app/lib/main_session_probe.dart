@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:wake_alarm_sync/main.dart';
 import 'package:wake_alarm_sync/probe/file_driven_scheduler.dart';
+import 'package:wake_alarm_sync/probe/probe_passphrase.dart';
 import 'package:wake_alarm_sync/services/alarm_scheduler.dart';
 import 'package:wake_alarm_sync/services/room_proof_settings.dart';
 import 'package:wake_alarm_sync/services/session_tag_settings.dart';
@@ -24,6 +25,7 @@ import 'package:wake_alarm_sync/services/session_tag_settings.dart';
 /// Not part of the shipped app: `flutter build apk` uses `lib/main.dart`.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await plantProbePassphrase();
   await RoomProofSettings.saveNfcTagAt(0, 'ring1');
   await RoomProofSettings.saveNfcTagAt(1, 'ring2');
   await SessionTagSettings.saveTagAt(SessionTagSlot.bathroom, 'bath');

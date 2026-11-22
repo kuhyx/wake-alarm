@@ -13,10 +13,12 @@ void main() {
 
   final now = DateTime(2026, 9, 17, 8, 4);
   var hasNfc = true;
+  String? bypassCause;
   late List<String> calls;
 
   setUp(() {
     hasNfc = true;
+    bypassCause = null;
     calls = <String>[];
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -24,6 +26,7 @@ void main() {
           const MethodChannel(AlarmScheduler.channelName),
           (call) async {
             calls.add(call.method);
+            if (call.method == 'takeBypassReRing') return bypassCause;
             return call.method == 'hasNfc' ? hasNfc : null;
           },
         );
@@ -62,6 +65,23 @@ void main() {
       expect(calls, contains('markRingDismissed'));
     },
   );
+
+  test('a bypass that rang during a live session names the re-ring', () async {
+    final store = SessionStore();
+    await store.save(
+      SessionRules.start(
+        now: now.subtract(const Duration(minutes: 2)),
+        tags: const SessionTagSettings(tagIds: <String>['b', 'w', 'd']),
+        nfcAvailable: true,
+      ),
+    );
+    bypassCause = 'fsi_revoked';
+    expect(await handoff().afterDismiss(away: false), isTrue);
+    final session = (await store.loadCurrent())!;
+    expect(session.reRings, 1);
+    expect(session.reRingReasons, <String>['bypass:fsi_revoked']);
+    expect(calls, contains('takeBypassReRing'));
+  });
 
   test('a dismiss during a live session is a re-ring', () async {
     final store = SessionStore();

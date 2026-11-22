@@ -61,7 +61,9 @@ the first leg by itself — there is nothing to walk to.
   of recreating it.
 - **Silencing a re-ring is the full dismiss sequence**: tag 1, the walk,
   tag 2, three questions. The ring screen's `_finishDismiss` sees a live
-  session for today and resumes it with `reRings + 1`.
+  session for today and resumes it with `reRings + 1`. `re_ring_reasons`
+  says why: `deadline:<leg>`, or `bypass:<cause>` when a bypass restarted
+  the ring (`DOCS-bypass.md`).
 - **A silent buzz 3 min before each deadline** (`SessionWarn.kt`, request
   code 1004), armed and cleared only with the re-ring.
 - **One re-ring per leg.** After a deadline re-ring is dismissed the leg is

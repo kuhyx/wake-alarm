@@ -162,6 +162,18 @@ extension SessionRules on MorningSession {
     updatedAt = now;
   }
 
+  /// Names the re-ring a bypass started natively (`Bypass.kt` stamps
+  /// [cause] only when nothing was ringing yet), overriding a deadline mark:
+  /// the screen saw the sound before it saw why. Null leaves the mark.
+  void adoptBypassReRing(String? cause) {
+    if (cause != null) pendingReRingReason = reRingReasonFor(cause);
+  }
+
+  /// `bypass:<cause>` for a bypass's re-ring, else the live leg's deadline.
+  String reRingReasonFor(String? cause) => cause == null
+      ? 'deadline:${currentLeg?.name ?? 'none'}'
+      : 'bypass:$cause';
+
   /// Records that a re-ring was dismissed; the session resumes here.
   ///
   /// A leg whose deadline has already passed is marked as rung whatever the
@@ -170,7 +182,7 @@ extension SessionRules on MorningSession {
   void recordReRing(DateTime now) {
     final leg = currentLeg;
     reRings++;
-    reRingReasons.add(pendingReRingReason ?? 'deadline:${leg?.name ?? 'none'}');
+    reRingReasons.add(pendingReRingReason ?? reRingReasonFor(null));
     pendingReRingReason = null;
     if (leg != null && !now.isBefore(deadline(leg))) deadlineRung.add(leg);
     updatedAt = now;

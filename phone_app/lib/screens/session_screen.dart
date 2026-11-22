@@ -176,7 +176,7 @@ class _SessionScreenState extends State<SessionScreen> {
     // The native deadline already rang (see [AlarmScheduler.isRinging]):
     // the dismiss sequence belongs in front now, not after the 20 s grace.
     if (session.isActive && await _scheduler.isRinging()) {
-      await _ring('deadline:${session.currentLeg!.name}', now);
+      await _ring(await nativeRingReason(_scheduler, session), now);
       return;
     }
     if (!mounted) return;
