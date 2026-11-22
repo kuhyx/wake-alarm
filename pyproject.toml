@@ -8,16 +8,16 @@ version = "1.0.0"
 description = "Trigger that starts the morning routine at the phone's alarm time"
 requires-python = ">=3.14"
 dependencies = [
-    "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.16.0#subdirectory=gatelock",
+    "gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.16.1#subdirectory=gatelock",
     # Firebase transport for the alarm read. _sync.py imports it lazily and
     # falls back to its stdlib GitHub path if the import fails, so a broken
     # install degrades the read instead of killing the per-minute trigger.
     "crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.11.1#subdirectory=crdt-sync",
-    "freedays @ git+https://github.com/kuhyx/utils@freedays-v0.4.3#subdirectory=freedays",
+    "freedays @ git+https://github.com/kuhyx/utils@freedays-v0.4.4#subdirectory=freedays",
     # Sick days stand the PC's enforcement down (_sick.py). Imported behind
     # a guard: missing means "not sick", never a crashed tick.
-    "sickdays @ git+https://github.com/kuhyx/utils@sickdays-v0.5.6#subdirectory=sickdays",
-    "kuhy-credit @ git+https://github.com/kuhyx/utils@kuhy-credit-v0.3.1#subdirectory=kuhy_credit",
+    "sickdays @ git+https://github.com/kuhyx/utils@sickdays-v0.5.9#subdirectory=sickdays",
+    "kuhy-credit @ git+https://github.com/kuhyx/utils@kuhy-credit-v0.3.2#subdirectory=kuhy_credit",
 ]
 
 # Package discovery must be explicit: phone_app/ is a Flutter app, not a Python

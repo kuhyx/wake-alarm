@@ -159,11 +159,11 @@ packages:
     dependency: "direct main"
     description:
       path: data_transfer_flutter
-      ref: "data_transfer_flutter-v0.2.3"
-      resolved-ref: bb2f92f459283a29ad4864cf37704cc5f749cc6d
+      ref: "data_transfer_flutter-v0.2.4"
+      resolved-ref: "5c2effe7d1148830c9e273e47a272791dc17509e"
       url: "https://github.com/kuhyx/utils"
     source: git
-    version: "0.2.3"
+    version: "0.2.4"
   dbus:
     dependency: transitive
     description:
@@ -208,10 +208,10 @@ packages:
     dependency: transitive
     description:
       name: file_picker
-      sha256: c3780977700b8962c3b9b6a9aa4e2c988956893d70d4a4fa2d7adf4ec9b9eaee
+      sha256: "5b99250437a4d34ee2cdc0686924452103540eaa1c248094b63f07f9d7216f6c"
       url: "https://pub.dev"
     source: hosted
-    version: "13.4.0"
+    version: "13.4.1"
   file_picker_darwin:
     dependency: transitive
     description:
@@ -224,10 +224,10 @@ packages:
     dependency: transitive
     description:
       name: file_picker_linux
-      sha256: "9215ee8c672508cdd9a325202669f849e1baac883658626b3abed5d7777e6a4b"
+      sha256: cf3889644e8e54551f5c3a4f98b6b6ef5f0ef85c07d2a0c1a969538983be2f9b
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.4"
+    version: "2.0.5"
   file_picker_platform_interface:
     dependency: transitive
     description:
@@ -478,11 +478,11 @@ packages:
     dependency: "direct main"
     description:
       path: "kuhy_credit/flutter"
-      ref: "kuhy-credit-v0.3.1"
-      resolved-ref: "2352c177232a4b4594573a3b1126697ef32851f7"
+      ref: "kuhy-credit-v0.3.2"
+      resolved-ref: adeb40f68e1d6c701da43e396fc46bffa3ef10c7
       url: "https://github.com/kuhyx/utils"
     source: git
-    version: "0.3.1"
+    version: "0.3.2"
   leak_tracker:
     dependency: transitive
     description:
@@ -812,11 +812,11 @@ packages:
     dependency: "direct main"
     description:
       path: sync_settings_ui
-      ref: "sync_settings_ui-v0.8.4"
-      resolved-ref: "15ef5b44f186cea0ab163cc88cb8743c51d58247"
+      ref: "sync_settings_ui-v0.8.5"
+      resolved-ref: abfb596d7ce2f28acfefbd55e7b3227257325261
       url: "https://github.com/kuhyx/utils"
     source: git
-    version: "0.8.4"
+    version: "0.8.5"
   term_glyph:
     dependency: transitive
     description:
