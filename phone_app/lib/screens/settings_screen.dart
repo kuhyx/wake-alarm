@@ -93,20 +93,26 @@ class SettingsScreen extends StatelessWidget {
               locked: locked,
             ),
           ),
-          IconButton(
-            key: const Key('settings-export'),
-            icon: const Icon(Icons.upload_file, semanticLabel: 'Export data'),
-            onPressed: () => _run(context, () async {
-              await (onExport ?? () => saveExport(alarm: alarmService))();
-              return true;
-            }),
+          Tooltip(
+            message: 'Export',
+            child: IconButton(
+              key: const Key('settings-export'),
+              icon: const Icon(Icons.upload_file, semanticLabel: 'Export data'),
+              onPressed: () => _run(context, () async {
+                await (onExport ?? () => saveExport(alarm: alarmService))();
+                return true;
+              }),
+            ),
           ),
-          IconButton(
-            key: const Key('settings-import'),
-            icon: const Icon(Icons.download, semanticLabel: 'Import data'),
-            onPressed: () => _run(
-              context,
-              onImport ?? () => pickAndImport(alarm: alarmService),
+          Tooltip(
+            message: 'Import',
+            child: IconButton(
+              key: const Key('settings-import'),
+              icon: const Icon(Icons.download, semanticLabel: 'Import data'),
+              onPressed: () => _run(
+                context,
+                onImport ?? () => pickAndImport(alarm: alarmService),
+              ),
             ),
           ),
         ],

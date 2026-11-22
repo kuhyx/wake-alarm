@@ -77,11 +77,14 @@ class HomeBody extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.alarm_on,
-                    size: 32,
-                    color: theme.colorScheme.primary,
-                    semanticLabel: 'Alarm is armed for',
+                  Tooltip(
+                    message: 'Armed',
+                    child: Icon(
+                      Icons.alarm_on,
+                      size: 32,
+                      color: theme.colorScheme.primary,
+                      semanticLabel: 'Alarm is armed for',
+                    ),
                   ),
                   HomePresenceLine(key: ValueKey<int>(syncEpoch)),
                   const SizedBox(height: 16),
@@ -96,22 +99,28 @@ class HomeBody extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.restore,
-                          size: 18,
-                          semanticLabel:
-                              'One-shot early start, back to $baseline '
-                              'after it rings',
+                        Tooltip(
+                          message: 'Oneshot',
+                          child: Icon(
+                            Icons.restore,
+                            size: 18,
+                            semanticLabel:
+                                'One-shot early start, back to $baseline '
+                                'after it rings',
+                          ),
                         ),
                         Text(baseline),
                       ],
                     )
                   else
-                    Icon(
-                      Icons.all_inclusive,
-                      size: 18,
-                      color: theme.colorScheme.onSurfaceVariant,
-                      semanticLabel: 'Every day. It cannot be turned off.',
+                    Tooltip(
+                      message: 'Daily',
+                      child: Icon(
+                        Icons.all_inclusive,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
+                        semanticLabel: 'Every day. It cannot be turned off.',
+                      ),
                     ),
                   const SizedBox(height: 32),
                   SizedBox(
@@ -139,11 +148,14 @@ class HomeBody extends StatelessWidget {
                   ),
                   if (!configured) ...[
                     const SizedBox(height: 16),
-                    Icon(
-                      Icons.cloud_off,
-                      size: 28,
-                      color: theme.extension<AppStatusColors>()!.warning,
-                      semanticLabel: 'Open Settings to connect Firebase',
+                    Tooltip(
+                      message: 'Offline',
+                      child: Icon(
+                        Icons.cloud_off,
+                        size: 28,
+                        color: theme.extension<AppStatusColors>()!.warning,
+                        semanticLabel: 'Open Settings to connect Firebase',
+                      ),
                     ),
                   ],
                 ],

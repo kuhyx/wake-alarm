@@ -183,6 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               semanticLabel: 'Free days',
             ),
+            tooltip: 'Free-days',
             onPressed: () => Navigator.push<void>(
               context,
               appRoute<void>(context, (_) => const FreeDaysScreen()),
@@ -194,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               semanticLabel: 'Sick days',
             ),
+            tooltip: 'Sick-days',
             onPressed: () => Navigator.push<void>(
               context,
               appRoute<void>(context, (_) => const SickDaysScreen()),

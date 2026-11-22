@@ -9,14 +9,17 @@ import 'package:wake_alarm_sync/services/sync_emulator.dart';
 class _Github extends Fake implements RemoteStore {}
 
 void main() {
-  test('a build without the define syncs to prod, never the emulator', () async {
-    expect(kSyncEmulatorUrl, isEmpty);
-    expect(syncEmulatorOn, isFalse);
-    expect(kProject.databaseUrl, contains('kuhy-syncs'));
-    final github = _Github();
-    // No Firebase session in tests: prod's rollback path, GitHub alone.
-    expect(await syncBackend(github), same(github));
-  });
+  test(
+    'a build without the define syncs to prod, never the emulator',
+    () async {
+      expect(kSyncEmulatorUrl, isEmpty);
+      expect(syncEmulatorOn, isFalse);
+      expect(kProject.databaseUrl, contains('kuhy-syncs'));
+      final github = _Github();
+      // No Firebase session in tests: prod's rollback path, GitHub alone.
+      expect(await syncBackend(github), same(github));
+    },
+  );
 
   test('the emulator client signs as owner against the given origin', () async {
     final seen = <Uri>[];

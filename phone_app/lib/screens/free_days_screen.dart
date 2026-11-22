@@ -176,9 +176,12 @@ class _FreeDaysScreenState extends State<FreeDaysScreen> {
       appBar: AppBar(
         // title removed
         actions: [
-          IconButton(
-            icon: const Icon(Icons.sync, semanticLabel: 'Sync now'),
-            onPressed: _busy ? null : () => unawaited(_sync()),
+          Tooltip(
+            message: 'Sync',
+            child: IconButton(
+              icon: const Icon(Icons.sync, semanticLabel: 'Sync now'),
+              onPressed: _busy ? null : () => unawaited(_sync()),
+            ),
           ),
         ],
       ),

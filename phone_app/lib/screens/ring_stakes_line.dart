@@ -62,13 +62,19 @@ class _RingStakesLineState extends State<RingStakesLine> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.gavel_outlined, color: warningColor),
+            Tooltip(
+              message: 'Deadline',
+              child: Icon(Icons.gavel_outlined, color: warningColor),
+            ),
             const SizedBox(width: 4),
             Text(hhmm(stakes.by), style: TextStyle(color: warningColor)),
             const SizedBox(width: 4),
             const Icon(Icons.arrow_forward, size: 16),
             const SizedBox(width: 4),
-            Icon(Icons.lock_outline, color: warningColor),
+            Tooltip(
+              message: 'Lock',
+              child: Icon(Icons.lock_outline, color: warningColor),
+            ),
             const SizedBox(width: 4),
             Text(
               _formatLockDate(stakes.lockThrough),

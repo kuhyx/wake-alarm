@@ -94,33 +94,42 @@ class _GitHubMirrorScreenState extends State<GitHubMirrorScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                isConnected ? Icons.link : Icons.link_off,
-                color: isConnected
-                    ? Theme.of(context).colorScheme.tertiary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                size: 32,
-                semanticLabel: isConnected
-                    ? 'Connected to GitHub.'
-                    : 'Not connected to GitHub.',
+              Tooltip(
+                message: isConnected ? 'Connected' : 'Disconnected',
+                child: Icon(
+                  isConnected ? Icons.link : Icons.link_off,
+                  color: isConnected
+                      ? Theme.of(context).colorScheme.tertiary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 32,
+                  semanticLabel: isConnected
+                      ? 'Connected to GitHub.'
+                      : 'Not connected to GitHub.',
+                ),
               ),
               const SizedBox(height: 12),
               if (!isConnected)
-                ElevatedButton(
-                  key: const ValueKey<String>('github-connect'),
-                  onPressed: _busy ? null : _connectGitHub,
-                  child: const Icon(
-                    Icons.link,
-                    semanticLabel: 'Connect GitHub',
+                Tooltip(
+                  message: 'Connect',
+                  child: ElevatedButton(
+                    key: const ValueKey<String>('github-connect'),
+                    onPressed: _busy ? null : _connectGitHub,
+                    child: const Icon(
+                      Icons.link,
+                      semanticLabel: 'Connect GitHub',
+                    ),
                   ),
                 )
               else
-                OutlinedButton(
-                  key: const ValueKey<String>('github-disconnect'),
-                  onPressed: _busy ? null : _disconnect,
-                  child: const Icon(
-                    Icons.link_off,
-                    semanticLabel: 'Disconnect GitHub',
+                Tooltip(
+                  message: 'Disconnect',
+                  child: OutlinedButton(
+                    key: const ValueKey<String>('github-disconnect'),
+                    onPressed: _busy ? null : _disconnect,
+                    child: const Icon(
+                      Icons.link_off,
+                      semanticLabel: 'Disconnect GitHub',
+                    ),
                   ),
                 ),
               const SizedBox(height: 16),

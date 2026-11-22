@@ -51,7 +51,14 @@ void _collectSubtree(Element element, Set<Element> out) {
 void expectNoWords(WidgetTester tester, String screen) {
   final words = wordsOnScreen(tester);
   expect(words, isEmpty, reason: 'words on $screen: $words');
-  expect(find.byType(Tooltip), findsNothing, reason: 'tooltip on $screen');
+  final tooltips = tester.widgetList<Tooltip>(find.byType(Tooltip));
+  for (final tooltip in tooltips) {
+    expect(
+      tooltip.message,
+      matches(RegExp(r'^[^\s.!?,;:]{1,20}$')),
+      reason: 'tooltip on $screen: ${tooltip.message}',
+    );
+  }
 }
 
 /// Pixel 6a portrait: 1080x2400 physical at 2.625.

@@ -32,7 +32,10 @@ class StakesMarks extends StatelessWidget {
     };
     final rows = <Widget>[
       _row('title', view.title, <Widget>[
-        Icon(kindIcon, color: theme.colorScheme.primary),
+        Tooltip(
+          message: 'Stakes',
+          child: Icon(kindIcon, color: theme.colorScheme.primary),
+        ),
         Icon(view.isToday ? Icons.today : Icons.event, size: 18),
         Text(_dm(view.day), style: theme.textTheme.titleMedium),
       ]),
@@ -46,34 +49,39 @@ class StakesMarks extends StatelessWidget {
     if (dismissBy != null && lock != null) {
       rows.add(
         _row('stick', words.first, <Widget>[
-          const Icon(Icons.alarm),
+          const Tooltip(message: 'Alarm', child: Icon(Icons.alarm)),
           Text(hhmm(dismissBy)),
           const Icon(Icons.arrow_forward, size: 16),
-          const Icon(Icons.lock_outline),
+          const Tooltip(message: 'Lock', child: Icon(Icons.lock_outline)),
           Text(_dm(lock)),
         ]),
       );
     } else if (finishBy != null && open != null) {
       rows.add(
         _row('carrot', words.first, <Widget>[
-          const Icon(Icons.flag_outlined),
+          const Tooltip(message: 'Finish', child: Icon(Icons.flag_outlined)),
           Text(hhmm(finishBy)),
           const Icon(Icons.arrow_forward, size: 16),
-          const Icon(Icons.computer),
+          const Tooltip(message: 'PC', child: Icon(Icons.computer)),
           Text(_hm(open.hour, open.minute)),
         ]),
       );
     } else if (view.kind != StakesDayKind.free &&
         view.kind != StakesDayKind.sick) {
       rows.add(
-        _row('unarmed', words.first, const <Widget>[Icon(Icons.alarm_off)]),
+        _row('unarmed', words.first, const <Widget>[
+          Tooltip(message: 'Off', child: Icon(Icons.alarm_off)),
+        ]),
       );
     }
     if (ring != null) {
       rows.add(
         _row('pc-ring', words.last, <Widget>[
-          const Icon(Icons.computer),
-          const Icon(Icons.notifications_active_outlined),
+          const Tooltip(message: 'PC', child: Icon(Icons.computer)),
+          const Tooltip(
+            message: 'Ring',
+            child: Icon(Icons.notifications_active_outlined),
+          ),
           Text(hhmm(ring)),
         ]),
       );
@@ -104,18 +112,30 @@ class StakesMarks extends StatelessWidget {
     return <Widget>[
       if (view.escapedToday)
         _row('escaped', next(), <Widget>[
-          Icon(Icons.bug_report_outlined, color: warning),
+          Tooltip(
+            message: 'Escaped',
+            child: Icon(Icons.bug_report_outlined, color: warning),
+          ),
           Icon(Icons.check, color: warning),
         ]),
       if (locked != null)
         _row('locked', next(), <Widget>[
-          Icon(Icons.lock_outline, color: warning),
+          Tooltip(
+            message: 'Lock',
+            child: Icon(Icons.lock_outline, color: warning),
+          ),
           Text(_dm(locked), style: style),
         ]),
       if (view.missedToday)
         _row('missed', next(), <Widget>[
-          Icon(Icons.close, color: warning),
-          Icon(Icons.computer, color: warning),
+          Tooltip(
+            message: 'Missed',
+            child: Icon(Icons.close, color: warning),
+          ),
+          Tooltip(
+            message: 'PC',
+            child: Icon(Icons.computer, color: warning),
+          ),
         ]),
     ];
   }
