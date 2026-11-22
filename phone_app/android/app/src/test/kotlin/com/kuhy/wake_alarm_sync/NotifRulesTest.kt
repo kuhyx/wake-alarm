@@ -46,6 +46,12 @@ class NotifRulesTest {
     }
 
     @Test
+    fun aForegroundBroadcastIsHeldInsideItsTenSeconds() {
+        assertTrue(NotifRules.holdMs(foreground = true) < 10_000L)
+        assertTrue(NotifRules.holdMs(foreground = false) in 10_000L until 60_000L)
+    }
+
+    @Test
     fun onlyTheAppOrTheRingChannelCounts() {
         val app = NotificationManager.ACTION_APP_BLOCK_STATE_CHANGED
         val channel = NotificationManager.ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED

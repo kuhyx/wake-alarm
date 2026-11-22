@@ -32,14 +32,6 @@ object NotifAlarm {
     private const val REQUEST_CODE = 1007
     private const val TAG = "WakeAlarmNotifAlarm"
 
-    /**
-     * How long a receiver holds its broadcast open after starting the
-     * publish: a receiver that returns lets Android freeze the headless Dart
-     * engine mid-request (see [PoolSyncReceiver]). Well inside the 60 s a
-     * background broadcast may stay open.
-     */
-    const val HOLD_MS = 25_000L
-
     fun schedule(context: Context) {
         val at = NotifRules.nextEvening(LocalDateTime.now())
         val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -67,10 +59,12 @@ object NotifAlarm {
         return "setAndAllowWhileIdle"
     }
 
-    /** Holds [receiver]'s broadcast open for [HOLD_MS], then lets it go. */
-    fun hold(receiver: BroadcastReceiver) {
+    /** Holds [receiver]'s broadcast of [intent] open for [NotifRules.holdMs], then lets it go. */
+    fun hold(receiver: BroadcastReceiver, intent: Intent) {
+        val foreground = (intent.flags and Intent.FLAG_RECEIVER_FOREGROUND) != 0
         val pending = receiver.goAsync()
-        Handler(Looper.getMainLooper()).postDelayed({ pending.finish() }, HOLD_MS)
+        Handler(Looper.getMainLooper())
+            .postDelayed({ pending.finish() }, NotifRules.holdMs(foreground))
     }
 
     private fun pendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
@@ -85,7 +79,7 @@ object NotifAlarm {
 class NotifCheckReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         NotifAlarm.schedule(context)
-        NotifAlarm.hold(this)
+        NotifAlarm.hold(this, intent)
         NotifState.report(context, "evening")
     }
 }
@@ -99,7 +93,7 @@ class NotifBlockReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val channel = intent.getStringExtra(NotificationManager.EXTRA_NOTIFICATION_CHANNEL_ID)
         val trigger = NotifRules.trigger(intent.action, channel) ?: return
-        NotifAlarm.hold(this)
+        NotifAlarm.hold(this, intent)
         NotifState.report(context, trigger)
     }
 }

@@ -88,8 +88,9 @@ bypass; this one catches it the evening before, while kuhy can still fix it.
   every `AlarmScheduler.schedule`, boot and the watchdog, always the next
   future 21:00) and `NotifBlockReceiver` on `APP_BLOCK_STATE_CHANGED` /
   `NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED` for the ring channel
-  (`app_block`, `channel_block`). Both receivers hold the broadcast 25 s so
-  the headless engine is not frozen mid-push.
+  (`app_block`, `channel_block`). Both receivers hold the broadcast open
+  (`NotifRules.holdMs`: 8 s for a foreground broadcast, whose ANR budget is
+  10 s, else 25 s) so the headless engine is not frozen mid-push.
 - **PC** (`_fallback_evening`, rule in `_evening_policy`). The fallback
   timer also ticks 21:00-21:59; those ticks skip the morning code. When
   today's newest `notifications` event says off, the PC rings

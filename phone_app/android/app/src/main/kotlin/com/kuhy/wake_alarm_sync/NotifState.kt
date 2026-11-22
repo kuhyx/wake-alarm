@@ -24,6 +24,15 @@ object NotifRules {
         return if (tonight.isAfter(now)) tonight else tonight.plusDays(1)
     }
 
+    /**
+     * How long a receiver holds its broadcast open after starting the push:
+     * a receiver that returns lets Android freeze the headless Dart engine
+     * mid-request (see [PoolSyncReceiver]). A foreground broadcast (the
+     * block-state ones are sent that way) has a 10 s budget, a background
+     * one 60 s; overrunning either is an ANR that kills the push.
+     */
+    fun holdMs(foreground: Boolean): Long = if (foreground) 8_000L else 25_000L
+
     /** The `notifications` event's data. */
     fun eventData(enabled: Boolean, trigger: String): Map<String, Any?> =
         mapOf("enabled" to enabled, "trigger" to trigger)
