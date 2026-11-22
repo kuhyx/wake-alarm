@@ -15,8 +15,8 @@ import java.time.LocalDateTime
  * alarm") and `watchdog` (the daily net). Every run also catches up on the
  * unchecked days before today ([StickCheck.run]), so a phone off for days
  * is judged day by day when it comes back. Running twice is harmless --
- * [StickVerdict.ALREADY_PENALISED] makes a second miss on one day a no-op,
- * which matters because Android replays BOOT_COMPLETED to a force-stopped
+ * [StickVerdict.ALREADY_PENALISED] makes a second miss on one day a no-op
+ * for the streak (it only re-sends the same lockdown), which matters because Android replays BOOT_COMPLETED to a force-stopped
  * app on its next launch.
  */
 object StickRunner {
@@ -50,13 +50,18 @@ object StickRunner {
         if (run.state != before) StickStore.save(context, run.state)
         StickStore.setCheckedThrough(context, run.checkedThrough)
         // A missed day whose lockdown already ended (caught up days later)
-        // still counts toward the streak, but nothing is sent for it.
+        // still counts toward the streak, but nothing is sent for it. A day
+        // already penalised sends its lockdown again ([StickRun.resend]).
         run.signalUntil?.let { until ->
             WorkdayStick.sendLockdown(context, until)
             EventLog.append(
                 context,
                 "lockdown_sent",
-                mapOf("until" to until.toString(), "streak" to run.state.streak),
+                mapOf(
+                    "until" to until.toString(),
+                    "streak" to run.state.streak,
+                    "resend" to run.resend,
+                ),
             )
         }
         return run.verdicts.last().verdict

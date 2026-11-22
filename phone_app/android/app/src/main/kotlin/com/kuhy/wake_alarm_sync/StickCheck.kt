@@ -67,6 +67,8 @@ data class StickRun(
     val state: StickState,
     val checkedThrough: LocalDate,
     val signalUntil: LocalDate?,
+    /** [signalUntil] repeats a lockdown already bought, not a new miss's. */
+    val resend: Boolean = false,
 )
 
 /**
@@ -93,6 +95,9 @@ object StickCheck {
     /**
      * Judges every unchecked day, oldest first, then today.
      *
+     * A day found [StickVerdict.ALREADY_PENALISED] re-sends the stored
+     * lockdown when it still runs through today ([StickRun.resend]).
+     *
      * Past days run from the day after [StickInputs.checkedThrough], at most
      * [BACKLOG_DAYS] back -- in order, so the streak builds exactly as if
      * each day had been checked on time. A first run (no checkedThrough)
@@ -104,6 +109,7 @@ object StickCheck {
         val verdicts = mutableListOf<DayVerdict>()
         var state = inputs.state
         var signal: LocalDate? = null
+        var resend = false
         val checked = inputs.checkedThrough
         var day = if (checked == null) {
             today
@@ -117,12 +123,22 @@ object StickCheck {
             verdicts += DayVerdict(day, verdict)
             if (verdict == StickVerdict.MISS) {
                 signal = next.lockedThrough?.takeIf { !it.isBefore(today) }
+                resend = false
+            } else if (verdict == StickVerdict.ALREADY_PENALISED) {
+                // The one signal may never have landed (focus-owner not
+                // running or not yet Device Owner, C6 2026-11-22), so a day
+                // already penalised sends the stored lockdown again. Same
+                // date, same streak: focus-owner applies it idempotently.
+                state.lockedThrough?.takeIf { !it.isBefore(today) }?.let {
+                    signal = it
+                    resend = true
+                }
             }
             state = next
             day = day.plusDays(1)
         }
         val settled = if (verdicts.last().verdict.final) today else today.minusDays(1)
-        return StickRun(verdicts, state, maxOf(settled, checked ?: settled), signal)
+        return StickRun(verdicts, state, maxOf(settled, checked ?: settled), signal, resend)
     }
 
     /** One day's verdict and the state after it; [now] is when it is judged. */

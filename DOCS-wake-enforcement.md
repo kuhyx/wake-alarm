@@ -157,7 +157,8 @@ Phone (`phone_events.kind`): `alarm_fired` (data: `reason` =
 `exact`|`boot`|`watchdog`, `date` judged, `verdict`, incl. `free_day`|`sick_day`), `bypass` (data: `cause`, `date`, `session`; `DOCS-bypass.md`),
 `bypass_ignored`, `notifications` (data: `enabled`, `trigger` =
 `evening`|`app_block`|`channel_block`; `DOCS-bypass.md`), `unsuspended`, `lockdown_sent` (data:
-`until`, `streak`), `lift_sent`, `escape_used`, `boot`.
+`until`, `streak`, `resend`: true when a day already penalised sent its
+stored lockdown again), `lift_sent`, `escape_used`, `boot`.
 
 `ring_started` is published twice over: a headless Dart engine started by
 `AlarmReceiver` at the fire (so a full-screen intent downgraded to a heads-up

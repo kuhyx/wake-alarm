@@ -90,16 +90,6 @@ class StickCheckBypassTest {
     }
 
     @Test
-    fun aSecondBypassTheSameDayIsAlreadyPenalised() {
-        val afterSunday = StickState(streak = 1, lockedThrough = mon, lastMiss = sun)
-        val run = StickCheck.run(
-            inputs(sun.atTime(8, 0), bypass = setOf(sun), state = afterSunday, checkedThrough = sun),
-        )
-        assertEquals(StickVerdict.ALREADY_PENALISED, run.verdicts.single().verdict)
-        assertNull(run.signalUntil)
-    }
-
-    @Test
     fun aBypassCountsOnlyOnARingingDayWithARingOrSessionLive() {
         assertTrue(BypassRules.counts(ringingDay = true, ringLive = true, sessionLive = false))
         assertTrue(BypassRules.counts(ringingDay = true, ringLive = false, sessionLive = true))

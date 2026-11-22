@@ -62,6 +62,10 @@ a minute is recorded once (both activities run the launch check).
   does afterwards: a lockdown through the next day, stacking. The streak
   links penalty days, stick days (Tue–Thu) plus bypass days; free and sick
   days are skipped. A plain late dismiss on Fri–Mon still changes nothing.
+  A later check or bypass on the day already penalised sends the stored
+  lockdown (`locked_through`, if today or later) again, same date and
+  streak, so a signal focus-owner missed (not running, not yet Device
+  Owner) still lands.
 - **The phone rings again** (`Bypass.ringAgain`). During a session it is a
   re-ring: only the full dismiss sequence silences it and `re_rings` goes up
   by one when it does (`SessionHandoff.afterDismiss`).
