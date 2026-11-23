@@ -21,7 +21,13 @@ import json
 import logging
 from typing import Any
 
-from wake_alarm._constants import MAX_HOUR, MAX_MINUTE, MIN_HOUR, MIN_MINUTE
+from wake_alarm._constants import (
+    FOCUS_OWNER_DEVICE_ID,
+    MAX_HOUR,
+    MAX_MINUTE,
+    MIN_HOUR,
+    MIN_MINUTE,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -188,6 +194,10 @@ def newest_alarm(
     """
     ranked: list[tuple[str, str, tuple[int, int]]] = []
     for device_id, raw in published:
+        # focus-owner publishes only its bypass events, never an alarm; parsing
+        # it would log a WARNING on every live fetch.
+        if device_id == FOCUS_OWNER_DEVICE_ID:
+            continue
         parsed = parse_log(raw)
         if parsed is None:
             _logger.info("Ignoring unusable alarm published by %r", device_id)

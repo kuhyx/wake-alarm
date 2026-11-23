@@ -215,3 +215,19 @@ class TestHlcInstant:
     def test_an_unparsable_prefix_is_undated(self) -> None:
         """Garbage before the Z must not raise out of a per-minute tick."""
         assert hlc_instant("not-a-timestampZ-0000-device") is None
+
+
+def test_newest_alarm_skips_focus_owner_without_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """focus-owner's log never carries an alarm; reading it is not a fault."""
+    hlc = "2026-11-23T06:00:00.000Z-0000-p"
+    phone = json.dumps(
+        {"alarm": {"fields": {"alarm_hour": [7, hlc], "alarm_minute": [30, hlc]}}}
+    )
+    owner = json.dumps({"alarm": {"fields": {"phone_events": [[], hlc]}}})
+    with caplog.at_level("INFO"):
+        result = newest_alarm([("focus-owner", owner), ("p", phone)])
+    assert result is not None
+    assert result[:2] == (7, 30)
+    assert not [r for r in caplog.records if r.levelname == "WARNING"]
