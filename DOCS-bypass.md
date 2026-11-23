@@ -50,6 +50,7 @@ live. Causes (`bypass` phone event, `data.cause`):
 | `notifications_off` | ring start and every launch (`Bypass.checkOnLaunch`) |
 | `fsi_revoked` | the same; uid app-op `USE_FULL_SCREEN_INTENT` denied |
 | `ring_killed` | every launch and boot: today's ring fired, was never dismissed, and is not sounding |
+| `uninstalled` | focus-owner, every pass, any day: `com.kuhy.wake_alarm_sync` not installed for user 0 (see below) |
 
 `ring_killed` reads `watched_fired_date`, a stamp only builds with `Bypass`
 write, so a ring fired by an older build (11-22, paused, never dismissed) does
@@ -87,6 +88,44 @@ a minute is recorded once (both activities run the launch check).
   To see these answers without a backend, `_fallback --dry-run --at <instant>
   --published <file>` reads the phone's logs from a JSON list of
   `[device_id, alarm.json]` pairs instead of Firebase (`_published_file`).
+
+## An uninstall that gets through (focus-owner, 2026-11-23)
+
+WakeAlarm cannot be uninstalled: focus-owner holds `setUninstallBlocked`
+and `setUserControlDisabledPackages` on it every pass. The Pixel's
+`dumpsys device_policy` shows `packageUninstallBlocked` for it (2026-11-23).
+On the AVD, `adb uninstall`, `pm uninstall --user 0` and `-k --user 0` all
+fail with `DELETE_FAILED_INTERNAL_ERROR` ("Attempted to delete protected
+package"): the user-control pin refuses it before the uninstall block is
+asked. Deploys use `adb install -r`, which both allow.
+
+If WakeAlarm is gone anyway, WakeAlarm cannot record a bypass, so
+focus-owner does (`phone-focus-mode` `focus-owner/.../UninstallLockdown.kt`,
+`UninstallEvents.kt`, `lib/sync/`):
+
+- **Missing** means not found, or found with `FLAG_INSTALLED` clear. A
+  hidden app is installed.
+- **Lockdown**, every day including free and sick days: the lockdown
+  allowlist while the app is missing and through the day after it returns.
+  Its own prefs, so wake_alarm's `LIFT_LOCKDOWN` does not clear it (a
+  reinstalled WakeAlarm would send one at once). No day cap.
+- **Event**: `bypass` with `cause: uninstalled` and the phone-local `date`,
+  under device `focus-owner`, record `alarm`, field `phone_events`. One at
+  once when the app goes missing (it rings the PC only inside a tick
+  window), then one per later day at the first pass at or after the alarm
+  time focus-owner read from the sync (08:00 if none). The PC rings every
+  morning until a full dismiss logs `dismissed`; on a free or sick day it
+  stays silent while the phone stays locked.
+- **Queue**: the lockdown never waits on the push. An unsent event is
+  retried every pass, a failure is logged once a day, nothing is dropped.
+- **Push-only**: focus-owner writes its own file and never merges a peer's
+  log into it (a pulled list would replace its events, field by field).
+  Its `phone_events` HLC is the newest event's own `at`, so a late retry
+  never out-ranks a list the reinstalled phone published.
+- `newest_push` skips device `focus-owner`: its write is not the phone's.
+- Set up once per install: Google sign-in plus the passphrase (the cloud
+  and lock icons in focus-owner's app bar). Each success pushes a harmless
+  `install_check` field that no PC policy reads.
 
 ## Testing against a backend: the RTDB emulator
 
