@@ -76,6 +76,10 @@ SYNC_LEGACY_PREFIX: str = "wake-alarm-sync/devices"
 # lists. Copied over from the plaintext prefix like everything else.
 SYNC_ALARM_PATH: str = f"{SYNC_DEVICES_PREFIX}/phone/alarm.json"
 
+# focus-owner's own device directory. It publishes ``bypass`` with cause
+# ``uninstalled`` when WakeAlarm is gone, so it is never the phone's push.
+FOCUS_OWNER_DEVICE_ID: str = "focus-owner"
+
 # The file each device publishes its alarm as, inside its own directory.
 SYNC_ALARM_FILENAME: str = "alarm.json"
 

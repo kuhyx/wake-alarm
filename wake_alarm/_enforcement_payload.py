@@ -25,6 +25,7 @@ from wake_alarm._constants import (
     ESCAPE_HATCH_LAST_DAY,
     ESCAPE_REASON_MIN_CHARS,
     ESCAPES_FIELD,
+    FOCUS_OWNER_DEVICE_ID,
     PHONE_EVENTS_FIELD,
     RING_STARTED_FIELD,
     STICK_STATE_FIELD,
@@ -204,10 +205,13 @@ def newest_push(logs: list[tuple[str, dict[str, Any]]]) -> float | None:
 
     Every phone write stamps the field it changed, so the largest instant is
     when the phone last uploaded anything. A stamp that cannot be dated is
-    skipped: None means "cannot tell", never "old".
+    skipped: None means "cannot tell", never "old". focus-owner's writes are
+    not the phone's: it publishes exactly when WakeAlarm is uninstalled.
     """
     stamps: list[float] = []
-    for _, log in logs:
+    for device_id, log in logs:
+        if device_id == FOCUS_OWNER_DEVICE_ID:
+            continue
         record = log.get("alarm")
         fields = record.get("fields") if isinstance(record, dict) else None
         for name in fields if isinstance(fields, dict) else ():

@@ -102,3 +102,11 @@ def test_last_push_is_the_newest_dated_hlc_of_any_field_on_any_device() -> None:
 def test_last_push_is_none_without_a_dated_stamp() -> None:
     assert enforcement_view([("a", _log(alarm_hour=(7, "h")))]).last_push is None
     assert enforcement_view([]).last_push is None
+
+
+def test_last_push_ignores_focus_owner_writes() -> None:
+    """focus-owner publishes ``bypass:uninstalled``; that is not a phone push."""
+    phone = _log(alarm_hour=(7, "2026-11-20T06:00:00.000Z-0000-p"))
+    owner = _log(phone_events=([], "2026-11-23T09:00:00.000Z-0000-f"))
+    view = enforcement_view([("p", phone), ("focus-owner", owner)])
+    assert view.last_push == datetime(2026, 11, 20, 6, 0, tzinfo=UTC).timestamp()
