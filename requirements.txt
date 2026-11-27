@@ -4,7 +4,7 @@
 # it is missing — but it is required here for mypy/pylint/tests.
 bandit==1.9.4
 codespell==2.4.3
-coverage==7.17.4
+coverage==7.17.5
 crdt-sync @ git+https://github.com/kuhyx/utils@crdt-sync-v0.11.1#subdirectory=crdt-sync
 freedays @ git+https://github.com/kuhyx/utils@freedays-v0.4.4#subdirectory=freedays
 gatelock @ git+https://github.com/kuhyx/utils@gatelock-v0.16.1#subdirectory=gatelock
