@@ -64,7 +64,8 @@ def latest_field[T](
     field: str, parse: Callable[[object, str], T | None], *, what: str
 ) -> T | None:
     """``newest_field`` over a live Firebase read; None when unreadable."""
-    published = fetch_firebase_logs()
+    # Offline-first: a dead network serves the last synced logs.
+    published = fetch_firebase_logs(offline_cache=True)
     if published is None:
         return None
     value = newest_field(published, field, parse)

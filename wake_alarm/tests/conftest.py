@@ -186,6 +186,12 @@ def _hermetic(tmp_path: Path) -> Generator[None]:
         # the trigger's cache. A missing Firebase config keeps fetches
         # off the network unless a test patches the fetch itself.
         patch("wake_alarm._sync.ALARM_CACHE_FILE", tmp_path / "alarm_cache.json"),
+        # The raw per-device logs (weigh-in, energy, ...) are the *details*
+        # half of offline-first; keep that cache off the live file too.
+        patch(
+            "wake_alarm._sync_log_cache.SYNC_LOGS_CACHE_FILE",
+            tmp_path / "synced_logs_cache.json",
+        ),
         patch(
             "wake_alarm._sync_transport.FIREBASE_CONFIG_FILE",
             tmp_path / "no-firebase.json",

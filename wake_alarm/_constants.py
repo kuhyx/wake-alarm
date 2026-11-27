@@ -49,6 +49,11 @@ SYNC_TOKEN_FALLBACK_FILES: tuple[Path, ...] = (
 # Where a successful read is cached, so a network blip can't cost a wake-up.
 ALARM_CACHE_FILE: Path = Path.home() / ".config" / "wake_alarm" / "alarm_cache.json"
 
+# The last successful Firebase fetch of every device's log, served offline.
+SYNC_LOGS_CACHE_FILE: Path = (
+    Path.home() / ".config" / "wake_alarm" / "synced_logs_cache.json"
+)
+
 
 # Structured logs live under XDG state, not .config: they are churning runtime
 # data, not configuration. The JSONL file is additive -- the journal keeps

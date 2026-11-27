@@ -37,6 +37,15 @@ enum CueKind {
 CueKind? cueKindOf(String status) {
   if (status.isEmpty) return null;
   if (status.endsWith('…') || status.endsWith('...')) return CueKind.busy;
+  // Checked before the error/ok keywords: an offline-first publish prefixes
+  // every line with "Armed for HH:MM." (the local half succeeded), so a
+  // pending sync must not read as a plain success, nor a dead network as a
+  // failure — the time is saved and rides the next sync.
+  if (status.contains('Saved locally') ||
+      status.contains('Connect a sync backend') ||
+      status.contains('Open Settings')) {
+    return CueKind.warning;
+  }
 
   const errorKeywords = [
     'Error',
@@ -72,10 +81,6 @@ CueKind? cueKindOf(String status) {
     if (status.contains(kw)) return CueKind.ok;
   }
 
-  if (status.contains('Connect a sync backend') ||
-      status.contains('Open Settings')) {
-    return CueKind.warning;
-  }
   return CueKind.info;
 }
 

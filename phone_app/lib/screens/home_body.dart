@@ -55,8 +55,10 @@ class HomeBody extends StatelessWidget {
   final VoidCallback? onEscaped;
 
   IconData? _statusIcon(String status) {
-    if (status.startsWith('Connect a sync backend')) return Icons.cloud_off;
-    if (status.startsWith('Sync store unavailable')) return Icons.sync_problem;
+    if (status.contains('Connect a sync backend')) return Icons.cloud_off;
+    if (status.contains('Sync store unavailable')) return Icons.sync_problem;
+    // Saved and armed offline; the push rides the next sync.
+    if (status.contains('Saved locally')) return Icons.cloud_upload;
     if (status.contains('✓')) return Icons.cloud_done;
     return null;
   }

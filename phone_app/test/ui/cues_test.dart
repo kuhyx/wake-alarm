@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:wake_alarm_sync/services/alarm_publisher.dart';
 import 'package:wake_alarm_sync/ui/cues.dart';
 
 void main() {
@@ -58,6 +59,24 @@ void main() {
         equals(CueKind.warning),
       );
       expect(cueKindOf('Open Settings to connect'), equals(CueKind.warning));
+    });
+
+    test('every offline-first publish line keeps its own cue', () {
+      // Each line is built by AlarmPublisher, so a reworded prefix that
+      // flips a pending sync to "ok" (or a dead network to "error") fails.
+      expect(
+        cueKindOf('${armedFor(8, 0)}Connect a sync backend in Settings first.'),
+        equals(CueKind.warning),
+      );
+      expect(
+        cueKindOf('${armedFor(8, 0)}Saved locally — will sync to PC. Error: x'),
+        equals(CueKind.warning),
+      );
+      expect(
+        cueKindOf('${armedFor(8, 0)}Sync store unavailable — reopen the app.'),
+        equals(CueKind.error),
+      );
+      expect(cueKindOf(syncedStatus(8, 0, inClock: false)), equals(CueKind.ok));
     });
 
     test('default info', () {

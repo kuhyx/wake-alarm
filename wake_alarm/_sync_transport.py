@@ -36,6 +36,7 @@ from wake_alarm._constants import (
     SYNC_REPO_NAME,
     SYNC_REPO_OWNER,
 )
+from wake_alarm._sync_log_cache import read_synced_logs_cache, write_synced_logs_cache
 
 if TYPE_CHECKING:
     from crdt_sync import Argon2Params, RemoteStore
@@ -122,7 +123,7 @@ def _read_published(client: RemoteStore) -> list[tuple[str, str]]:
     return published
 
 
-def fetch_firebase_logs() -> list[tuple[str, str]] | None:
+def fetch_firebase_logs(*, offline_cache: bool = False) -> list[tuple[str, str]] | None:
     """Fetch every device's decrypted ``alarm.json`` from Firebase.
 
     Shared by the alarm reader and ``_weight``: the morning session's
@@ -132,6 +133,15 @@ def fetch_firebase_logs() -> list[tuple[str, str]] | None:
     ``crdt_sync`` not being importable on this interpreter and a locked
     (no or wrong passphrase) store, so the caller can fall back to GitHub and
     then to the cache.
+
+    Every successful fetch rewrites the synced-logs cache. Only a caller that
+    passes *offline_cache* gets that cache back when the fetch fails: the
+    display readers (``_weight``, ``_energy``) want the newest known value
+    offline, while the alarm path (which has its own cache *after* the
+    GitHub fallback) and the enforcement checks must still see the failure.
+
+    Args:
+        offline_cache: Serve the last cached logs when the fetch fails.
 
     Returns:
         ``(device_id, raw_json)`` per device, or None if unconfigured,
@@ -156,10 +166,11 @@ def fetch_firebase_logs() -> list[tuple[str, str]] | None:
         E2eLockedError,
     ) as exc:
         _logger.info("Cannot fetch the alarm from Firebase: %s", exc)
-        return None
+        return read_synced_logs_cache() if offline_cache else None
     if not published:
         _logger.info("No alarm published to Firebase yet")
         return None
+    write_synced_logs_cache(published)
     return published
 
 
