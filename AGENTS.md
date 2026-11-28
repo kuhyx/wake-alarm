@@ -217,9 +217,9 @@ self-wake's `rtcwake` and the root ring unit's `systemctl` lines live there.
 - run: n/a: no single entry point; systemd timers (`install.sh`) drive it, inspect with `python -m wake_alarm._sync --show`, `python -m wake_alarm._session --show`, `python -m wake_alarm._trigger --dry-run`
 - test: `python -m pytest -q wake_alarm/tests/ && cd phone_app && flutter test --reporter=compact`
 - test-changed: `scripts/test_changed.sh`
-- lint: `pre-commit run ruff --all-files && cd phone_app && flutter analyze --fatal-infos --fatal-warnings`
-- coverage: `python -m pytest -q wake_alarm/tests/ --cov=wake_alarm --cov-branch --cov-report=xml --cov-fail-under=100`
-- coverage-gaps: `coverage-gaps coverage.xml`
+- lint: n/a: dropped (kuhy, 2026-11-27)
+- coverage: n/a: dropped (kuhy, 2026-11-27)
+- coverage-gaps: n/a: dropped (kuhy, 2026-11-27)
 - deploy: `git -C ~/src/wake-alarm pull --ff-only && ~/src/wake-alarm/scripts/deploy.sh` (editable install under /usr/bin/python3 + timers and `_trigger --dry-run` health check, then the release APK onto the Pixel via phone_deploy, health = installed base.apk equals the built one; `--build-only` for board sessions, `--check` for the health check alone; unit or root-file changes still need `bash install.sh`)
 
 Other: full lint gate `pre-commit run --all-files`; live log
