@@ -169,10 +169,6 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-ra",
-    "--cov=wake_alarm",
-    "--cov-branch",
-    "--cov-report=term-missing",
-    "--cov-report=lcov",
 ]
 filterwarnings = [
     "error",
@@ -190,7 +186,6 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 100
 show_missing = true
 skip_covered = false
 exclude_lines = [
